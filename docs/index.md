@@ -13,7 +13,7 @@ hero:
       text: View on GitHub
       link: https://github.com/PalenaAI/litellm-operator
   image:
-    src: /logo.svg
+    src: /logo.png
     alt: LiteLLM Operator
 
 features:

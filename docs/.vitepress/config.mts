@@ -1,4 +1,15 @@
 import { defineConfig } from 'vitepress'
+import { readFileSync } from 'node:fs'
+import { resolve, dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+function getLatestVersion(): string {
+  const changelog = readFileSync(resolve(__dirname, '../changelog.md'), 'utf-8')
+  const match = changelog.match(/^## \[(\d+\.\d+\.\d+)\]/m)
+  return match ? `v${match[1]}` : 'latest'
+}
 
 export default defineConfig({
   title: 'LiteLLM Operator',
@@ -8,17 +19,17 @@ export default defineConfig({
   ],
 
   head: [
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/logo.png' }],
   ],
 
   themeConfig: {
-    logo: '/logo.svg',
+    logo: '/logo.png',
 
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
       { text: 'Reference', link: '/reference/crds' },
       {
-        text: 'v0.5.0',
+        text: getLatestVersion(),
         items: [
           { text: 'Changelog', link: '/changelog' },
           { text: 'Contributing', link: '/contributing' },
