@@ -10,5 +10,8 @@
   "devDependencies": {
     "@types/node": "^25.5.2",
     "vitepress": "^1.6.4"
+  },
+  "overrides": {
+    "esbuild": ">=0.25.0"
   }
 }
