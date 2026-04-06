@@ -35,6 +35,72 @@ spec:
         release: prometheus
 ```
 
+## PrometheusRule (Alerting)
+
+Enable built-in alerting rules with runbooks:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  observability:
+    prometheusRule:
+      enabled: true
+      labels:
+        release: prometheus
+      # disabledAlerts:
+      #   - LiteLLMHighCPUUsage
+```
+
+The operator creates a `monitoring.coreos.com/v1` PrometheusRule with these default alerts:
+
+| Alert | Severity | Description |
+| --- | --- | --- |
+| `LiteLLMInstanceDown` | critical | No available replicas for 5 minutes |
+| `LiteLLMInstanceDegraded` | warning | Fewer replicas than desired for 10 minutes |
+| `LiteLLMPodRestarting` | warning | More than 3 restarts in the last hour |
+| `LiteLLMPodNotReady` | warning | Pod not ready for 10 minutes |
+| `LiteLLMHighMemoryUsage` | warning | Memory usage above 90% of limit for 15 minutes |
+| `LiteLLMHighCPUUsage` | warning | CPU usage above 90% of limit for 15 minutes |
+
+Each alert includes:
+
+- **severity** and **namespace/instance** labels for routing
+- **summary** and **description** annotations for context
+- **runbook** annotation with kubectl troubleshooting commands
+
+Individual alerts can be disabled via `spec.observability.prometheusRule.disabledAlerts`.
+
+## Grafana Dashboard
+
+Auto-provision a Grafana dashboard via the sidecar pattern:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  observability:
+    grafanaDashboard:
+      enabled: true
+      folder: "LiteLLM"
+      labels:
+        grafana_dashboard: "1"
+```
+
+The operator creates a ConfigMap with the `grafana_dashboard: "1"` label. If the Grafana sidecar is configured to watch for this label, the dashboard is automatically imported.
+
+Dashboard panels include:
+
+- Ready / desired replicas (stat)
+- Pod restarts in the last hour (stat)
+- CPU and memory usage over time (timeseries)
+- Network I/O (timeseries)
+- Deployment conditions (table)
+
 ## Callbacks
 
 LiteLLM supports callback integrations for logging and observability. Configure them via the Instance CRD:

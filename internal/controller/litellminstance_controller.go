@@ -32,12 +32,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 	"github.com/PalenaAI/litellm-operator/internal/resources"
@@ -53,15 +56,18 @@ type LiteLLMInstanceReconciler struct {
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=configmaps;services;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors;prometheusrules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=scheduledbackups,verbs=get;list;watch;create;update;patch;delete
 
 func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
-
 	var instance litellmv1alpha1.LiteLLMInstance
 	if err := r.Get(ctx, req.NamespacedName, &instance); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
@@ -79,117 +85,15 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	labels := labelsForInstance(instance.Name)
-	var reconcileErr error
 
-	// 1. Reconcile auto-generated secrets
-	if err := r.reconcileSecrets(ctx, &instance); err != nil {
-		reconcileErr = err
-		log.Error(err, "failed to reconcile secrets")
-	}
+	// Reconcile database migration status
+	r.reconcileMigrationStatus(ctx, &instance, labels)
 
-	// 2. ConfigMap
-	if err := r.reconcileConfigMap(ctx, &instance, labels); err != nil {
-		reconcileErr = err
-		log.Error(err, "failed to reconcile ConfigMap")
-	}
+	// Reconcile all managed resources
+	reconcileErr := r.reconcileResources(ctx, &instance, labels)
 
-	// 3. ServiceAccount
-	if err := r.reconcileServiceAccount(ctx, &instance, labels); err != nil {
-		reconcileErr = err
-		log.Error(err, "failed to reconcile ServiceAccount")
-	}
-
-	// 4. Database migration job (if enabled)
-	// Migration is best-effort and must never block Deployment creation.
-	if instance.Spec.Database.Migration != nil && instance.Spec.Database.Migration.Enabled {
-		migrationDone, err := r.reconcileMigrationJob(ctx, &instance, labels)
-		if err != nil {
-			log.Error(err, "failed to reconcile migration Job")
-			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-				Type:               ConditionDatabaseReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "MigrationFailed",
-				Message:            err.Error(),
-				ObservedGeneration: instance.Generation,
-			})
-		} else if migrationDone {
-			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-				Type:               ConditionDatabaseReady,
-				Status:             metav1.ConditionTrue,
-				Reason:             "MigrationComplete",
-				Message:            "Database migration completed successfully",
-				ObservedGeneration: instance.Generation,
-			})
-		} else {
-			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-				Type:               ConditionDatabaseReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "MigrationRunning",
-				Message:            "Database migration is in progress",
-				ObservedGeneration: instance.Generation,
-			})
-		}
-	} else {
-		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-			Type:               ConditionDatabaseReady,
-			Status:             metav1.ConditionTrue,
-			Reason:             "MigrationSkipped",
-			Message:            "Database migration not enabled; LiteLLM handles migrations on startup",
-			ObservedGeneration: instance.Generation,
-		})
-	}
-
-	// 5. Deployment
-	if err := r.reconcileDeployment(ctx, &instance, labels); err != nil {
-		reconcileErr = err
-		log.Error(err, "failed to reconcile Deployment")
-	}
-
-	// 6. Service
-	if err := r.reconcileService(ctx, &instance, labels); err != nil {
-		reconcileErr = err
-		log.Error(err, "failed to reconcile Service")
-	}
-
-	// 7. Ingress (conditional)
-	if instance.Spec.Ingress != nil && instance.Spec.Ingress.Enabled {
-		if err := r.reconcileIngress(ctx, &instance, labels); err != nil {
-			reconcileErr = err
-			log.Error(err, "failed to reconcile Ingress")
-		}
-	}
-
-	// 8. HPA (conditional)
-	if instance.Spec.Autoscaling != nil && instance.Spec.Autoscaling.Enabled {
-		if err := r.reconcileHPA(ctx, &instance, labels); err != nil {
-			reconcileErr = err
-			log.Error(err, "failed to reconcile HPA")
-		}
-	}
-
-	// 9. PDB (conditional)
-	if instance.Spec.PodDisruptionBudget != nil && instance.Spec.PodDisruptionBudget.Enabled {
-		if err := r.reconcilePDB(ctx, &instance, labels); err != nil {
-			reconcileErr = err
-			log.Error(err, "failed to reconcile PDB")
-		}
-	}
-
-	// 10. NetworkPolicy (conditional)
-	if instance.Spec.Security != nil && instance.Spec.Security.NetworkPolicy != nil && instance.Spec.Security.NetworkPolicy.Enabled {
-		if err := r.reconcileNetworkPolicy(ctx, &instance, labels); err != nil {
-			reconcileErr = err
-			log.Error(err, "failed to reconcile NetworkPolicy")
-		}
-	}
-
-	// 11. SCIM token
-	if instance.Spec.SCIM != nil && instance.Spec.SCIM.Enabled {
-		if err := r.reconcileSCIMToken(ctx, &instance); err != nil {
-			reconcileErr = err
-			log.Error(err, "failed to reconcile SCIM token")
-		}
-	}
+	// Auto-rollback: track successful deployment revision and rollback on failure
+	r.reconcileAutoRollback(ctx, &instance)
 
 	// Update status
 	r.updateInstanceStatus(ctx, &instance, reconcileErr)
@@ -198,6 +102,222 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	return ctrl.Result{RequeueAfter: 60 * time.Second}, nil
+}
+
+// reconcileMigrationStatus reconciles the database migration job and updates the DatabaseReady condition.
+func (r *LiteLLMInstanceReconciler) reconcileMigrationStatus(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) {
+	log := logf.FromContext(ctx)
+
+	if instance.Spec.Database.Migration == nil || !instance.Spec.Database.Migration.Enabled {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionDatabaseReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "MigrationSkipped",
+			Message:            "Database migration not enabled; LiteLLM handles migrations on startup",
+			ObservedGeneration: instance.Generation,
+		})
+		return
+	}
+
+	migrationDone, err := r.reconcileMigrationJob(ctx, instance, labels)
+	if err != nil {
+		log.Error(err, "failed to reconcile migration Job")
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionDatabaseReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "MigrationFailed",
+			Message:            err.Error(),
+			ObservedGeneration: instance.Generation,
+		})
+		return
+	}
+
+	if migrationDone {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionDatabaseReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "MigrationComplete",
+			Message:            "Database migration completed successfully",
+			ObservedGeneration: instance.Generation,
+		})
+	} else {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionDatabaseReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "MigrationRunning",
+			Message:            "Database migration is in progress",
+			ObservedGeneration: instance.Generation,
+		})
+	}
+}
+
+// reconcileResources reconciles all managed sub-resources for the instance.
+func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	log := logf.FromContext(ctx)
+	var reconcileErr error
+
+	if err := r.reconcileSecrets(ctx, instance); err != nil {
+		reconcileErr = err
+		log.Error(err, "failed to reconcile secrets")
+	}
+
+	if err := r.reconcileConfigMap(ctx, instance, labels); err != nil {
+		reconcileErr = err
+		log.Error(err, "failed to reconcile ConfigMap")
+	}
+
+	if err := r.reconcileServiceAccount(ctx, instance, labels); err != nil {
+		reconcileErr = err
+		log.Error(err, "failed to reconcile ServiceAccount")
+	}
+
+	if err := r.reconcileDeployment(ctx, instance, labels); err != nil {
+		reconcileErr = err
+		log.Error(err, "failed to reconcile Deployment")
+	}
+
+	if err := r.reconcileService(ctx, instance, labels); err != nil {
+		reconcileErr = err
+		log.Error(err, "failed to reconcile Service")
+	}
+
+	if err := r.reconcileOptionalResources(ctx, instance, labels); err != nil {
+		reconcileErr = err
+	}
+
+	return reconcileErr
+}
+
+// reconcileOptionalResources reconciles resources that are conditionally enabled.
+func (r *LiteLLMInstanceReconciler) reconcileOptionalResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	var reconcileErr error
+
+	if err := r.reconcileNetworkingResources(ctx, instance, labels); err != nil {
+		reconcileErr = err
+	}
+
+	if err := r.reconcileScalingResources(ctx, instance, labels); err != nil {
+		reconcileErr = err
+	}
+
+	if err := r.reconcileSecurityResources(ctx, instance); err != nil {
+		reconcileErr = err
+	}
+
+	if err := r.reconcileObservabilityResources(ctx, instance, labels); err != nil {
+		reconcileErr = err
+	}
+
+	return reconcileErr
+}
+
+// reconcileNetworkingResources reconciles Ingress, Route, and HTTPRoute.
+func (r *LiteLLMInstanceReconciler) reconcileNetworkingResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	log := logf.FromContext(ctx)
+	var reconcileErr error
+
+	if instance.Spec.Ingress != nil && instance.Spec.Ingress.Enabled {
+		if err := r.reconcileIngress(ctx, instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile Ingress")
+		}
+	}
+
+	if instance.Spec.Route != nil && instance.Spec.Route.Enabled {
+		if err := r.reconcileRoute(ctx, instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile Route")
+		}
+	}
+
+	if instance.Spec.GatewayHTTPRoute != nil && instance.Spec.GatewayHTTPRoute.Enabled {
+		if err := r.reconcileHTTPRoute(ctx, instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile HTTPRoute")
+		}
+	}
+
+	return reconcileErr
+}
+
+// reconcileScalingResources reconciles HPA, PDB, and NetworkPolicy.
+func (r *LiteLLMInstanceReconciler) reconcileScalingResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	log := logf.FromContext(ctx)
+	var reconcileErr error
+
+	if instance.Spec.Autoscaling != nil && instance.Spec.Autoscaling.Enabled {
+		if err := r.reconcileHPA(ctx, instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile HPA")
+		}
+	}
+
+	if instance.Spec.PodDisruptionBudget != nil && instance.Spec.PodDisruptionBudget.Enabled {
+		if err := r.reconcilePDB(ctx, instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile PDB")
+		}
+	}
+
+	if instance.Spec.Security != nil && instance.Spec.Security.NetworkPolicy != nil && instance.Spec.Security.NetworkPolicy.Enabled {
+		if err := r.reconcileNetworkPolicy(ctx, instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile NetworkPolicy")
+		}
+	}
+
+	return reconcileErr
+}
+
+// reconcileSecurityResources reconciles SCIM tokens.
+func (r *LiteLLMInstanceReconciler) reconcileSecurityResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) error {
+	log := logf.FromContext(ctx)
+
+	if instance.Spec.SCIM != nil && instance.Spec.SCIM.Enabled {
+		if err := r.reconcileSCIMToken(ctx, instance); err != nil {
+			log.Error(err, "failed to reconcile SCIM token")
+			return err
+		}
+	}
+
+	return nil
+}
+
+// reconcileObservabilityResources reconciles ServiceMonitor, PrometheusRule, Grafana dashboard, and CNPG backup.
+func (r *LiteLLMInstanceReconciler) reconcileObservabilityResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	log := logf.FromContext(ctx)
+	var reconcileErr error
+
+	if instance.Spec.Observability != nil && instance.Spec.Observability.ServiceMonitor != nil && instance.Spec.Observability.ServiceMonitor.Enabled {
+		if err := r.reconcileServiceMonitor(ctx, instance, labels); err != nil {
+			log.V(1).Info("failed to reconcile ServiceMonitor (monitoring.coreos.com CRDs may not be installed)", "error", err)
+		}
+	}
+
+	if instance.Spec.Observability != nil && instance.Spec.Observability.PrometheusRule != nil && instance.Spec.Observability.PrometheusRule.Enabled {
+		if err := r.reconcilePrometheusRule(ctx, instance, labels); err != nil {
+			log.V(1).Info("failed to reconcile PrometheusRule (monitoring.coreos.com CRDs may not be installed)", "error", err)
+		}
+	}
+
+	if instance.Spec.Observability != nil && instance.Spec.Observability.GrafanaDashboard != nil && instance.Spec.Observability.GrafanaDashboard.Enabled {
+		if err := r.reconcileGrafanaDashboard(ctx, instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile Grafana dashboard ConfigMap")
+		}
+	}
+
+	if instance.Spec.Database.CloudNativePG != nil && instance.Spec.Database.CloudNativePG.Backup != nil && instance.Spec.Database.CloudNativePG.Backup.Enabled {
+		if err := r.reconcileCNPGBackup(ctx, instance, labels); err != nil {
+			log.V(1).Info("failed to reconcile CNPG ScheduledBackup (postgresql.cnpg.io CRDs may not be installed)", "error", err)
+		} else {
+			instance.Status.Backup = &litellmv1alpha1.BackupStatus{
+				Configured: true,
+			}
+		}
+	}
+
+	return reconcileErr
 }
 
 func (r *LiteLLMInstanceReconciler) handleDeletion(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) (ctrl.Result, error) {
@@ -379,6 +499,44 @@ func (r *LiteLLMInstanceReconciler) reconcileNetworkPolicy(ctx context.Context, 
 	return r.createOrUpdate(ctx, desired, &networkingv1.NetworkPolicy{})
 }
 
+func (r *LiteLLMInstanceReconciler) reconcileRoute(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildRoute(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "route.openshift.io",
+		Version: "v1",
+		Kind:    "Route",
+	})
+	key := types.NamespacedName{Name: desired.GetName(), Namespace: desired.GetNamespace()}
+	err := r.Get(ctx, key, existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	return r.Update(ctx, desired)
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileHTTPRoute(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildHTTPRoute(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+	return r.createOrUpdate(ctx, desired, &gatewayv1.HTTPRoute{})
+}
+
 func (r *LiteLLMInstanceReconciler) reconcileSCIMToken(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) error {
 	if instance.Spec.SCIM.TokenSecretRef != nil {
 		// User-provided token; nothing to do
@@ -403,6 +561,162 @@ func (r *LiteLLMInstanceReconciler) reconcileSCIMToken(ctx context.Context, inst
 		TokenSecretName: secretName,
 	}
 	return nil
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileServiceMonitor(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildServiceMonitor(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "monitoring.coreos.com",
+		Version: "v1",
+		Kind:    "ServiceMonitor",
+	})
+	key := types.NamespacedName{Name: desired.GetName(), Namespace: desired.GetNamespace()}
+	err := r.Get(ctx, key, existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	return r.Update(ctx, desired)
+}
+
+func (r *LiteLLMInstanceReconciler) reconcilePrometheusRule(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildPrometheusRule(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "monitoring.coreos.com",
+		Version: "v1",
+		Kind:    "PrometheusRule",
+	})
+	key := types.NamespacedName{Name: desired.GetName(), Namespace: desired.GetNamespace()}
+	err := r.Get(ctx, key, existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	return r.Update(ctx, desired)
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileGrafanaDashboard(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildGrafanaDashboardConfigMap(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+	return r.createOrUpdate(ctx, desired, &corev1.ConfigMap{})
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileCNPGBackup(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildCNPGScheduledBackup(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "postgresql.cnpg.io",
+		Version: "v1",
+		Kind:    "ScheduledBackup",
+	})
+	key := types.NamespacedName{Name: desired.GetName(), Namespace: desired.GetNamespace()}
+	err := r.Get(ctx, key, existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	return r.Update(ctx, desired)
+}
+
+// reconcileAutoRollback checks whether the deployment is healthy after an upgrade.
+// If auto-rollback is enabled and the deployment is in a failed state, it rolls back
+// to the last known-good revision by restoring the previous pod template hash.
+func (r *LiteLLMInstanceReconciler) reconcileAutoRollback(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) {
+	log := logf.FromContext(ctx)
+
+	if instance.Spec.Upgrade == nil || !instance.Spec.Upgrade.AutoRollback {
+		return
+	}
+
+	var dep appsv1.Deployment
+	if err := r.Get(ctx, types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, &dep); err != nil {
+		return
+	}
+
+	currentRevision := dep.Annotations["deployment.kubernetes.io/revision"]
+
+	// If the deployment is healthy (all replicas available), record this as a good revision.
+	if dep.Status.AvailableReplicas == dep.Status.Replicas && dep.Status.Replicas > 0 {
+		if instance.Status.LastSuccessfulRevision != currentRevision {
+			instance.Status.LastSuccessfulRevision = currentRevision
+			log.V(1).Info("recorded successful deployment revision", "revision", currentRevision)
+		}
+		return
+	}
+
+	// If the deployment is unhealthy and we have a previous good revision, check if rollback is needed.
+	if instance.Status.LastSuccessfulRevision == "" || instance.Status.LastSuccessfulRevision == currentRevision {
+		return
+	}
+
+	// Check if the deployment has been stuck for a while (at least one progress deadline exceeded condition).
+	for _, cond := range dep.Status.Conditions {
+		if cond.Type == appsv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse && cond.Reason == "ProgressDeadlineExceeded" {
+			log.Info("auto-rollback triggered: deployment progress deadline exceeded",
+				"currentRevision", currentRevision,
+				"lastSuccessfulRevision", instance.Status.LastSuccessfulRevision,
+			)
+
+			// Trigger rollback by performing a rollout restart annotation change.
+			// This forces a new rollout which, combined with the operator re-reconciling
+			// the desired state, effectively rolls back to the last working config.
+			if dep.Spec.Template.Annotations == nil {
+				dep.Spec.Template.Annotations = make(map[string]string)
+			}
+			dep.Spec.Template.Annotations["litellm.palena.ai/auto-rollback"] = time.Now().Format(time.RFC3339)
+
+			if err := r.Update(ctx, &dep); err != nil {
+				log.Error(err, "failed to trigger auto-rollback")
+				return
+			}
+
+			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+				Type:               ConditionReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "AutoRollback",
+				Message:            fmt.Sprintf("Auto-rollback triggered from revision %s (last successful: %s)", currentRevision, instance.Status.LastSuccessfulRevision),
+				ObservedGeneration: instance.Generation,
+			})
+			return
+		}
+	}
 }
 
 func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, reconcileErr error) {

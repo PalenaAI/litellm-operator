@@ -11,9 +11,14 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **Team member management** — three modes: `crd` (CRD authoritative), `sso` (IdP authoritative), `mixed` (additive)
 - **VirtualKey secret management** — generated API keys are stored in Kubernetes Secrets with owner references for automatic cleanup
 - **SSO/SCIM support** — configure Azure Entra ID, Okta, Google, or generic OIDC providers declaratively
+- **Flexible ingress** — Kubernetes Ingress, OpenShift Route, and Gateway API HTTPRoute support
 - **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts
 - **OpenShift / non-root support** — `spec.security.runAsNonRoot: true` automatically uses the official non-root image and applies restricted security contexts
 - **Multiple install methods** — OLM bundles (OperatorHub/OpenShift) or Helm chart
+- **CloudNativePG backup/restore** — scheduled backups via CNPG `ScheduledBackup` CRs with configurable schedule, retention, and method
+- **Auto-rollback** — automatically rolls back failed deployments when `spec.upgrade.autoRollback: true`
+- **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
+- **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
 
 ## Custom Resource Definitions
 
@@ -144,6 +149,131 @@ spec:
 
 This automatically switches to the official `litellm-non_root` image (runs as `nobody`, UID 65534) and applies a restricted pod security context compatible with OpenShift's restricted SCC.
 
+### OpenShift Route
+
+For OpenShift clusters, create a Route instead of an Ingress:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  route:
+    enabled: true
+    host: litellm.apps.example.com
+    tlsTermination: edge   # edge | passthrough | reencrypt
+  # ... rest of spec
+```
+
+### Gateway API HTTPRoute
+
+For clusters using the [Gateway API](https://gateway-api.sigs.k8s.io/) (Istio, Envoy Gateway, Cilium, etc.):
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  gatewayHTTPRoute:
+    enabled: true
+    host: litellm.example.com
+    parentRefs:
+      - name: my-gateway       # Name of the Gateway resource
+        namespace: istio-system # Optional: namespace of the Gateway
+        sectionName: https     # Optional: specific listener on the Gateway
+  # ... rest of spec
+```
+
+### Observability (Prometheus + Grafana)
+
+Enable ServiceMonitor, alerting rules, and a Grafana dashboard:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  observability:
+    serviceMonitor:
+      enabled: true
+      interval: "30s"
+    prometheusRule:
+      enabled: true
+      # disabledAlerts: ["LiteLLMHighCPUUsage"]  # optionally disable specific alerts
+    grafanaDashboard:
+      enabled: true
+      folder: "LiteLLM"
+  # ... rest of spec
+```
+
+Built-in alerts: `LiteLLMInstanceDown` (critical), `LiteLLMInstanceDegraded`, `LiteLLMPodRestarting`, `LiteLLMPodNotReady`, `LiteLLMHighMemoryUsage`, `LiteLLMHighCPUUsage`. Each alert includes a runbook annotation with troubleshooting commands.
+
+### CloudNativePG Backups
+
+When using CloudNativePG for the database, enable scheduled backups:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  database:
+    cloudnativepg:
+      clusterName: litellm-db
+      backup:
+        enabled: true
+        schedule: "0 2 * * *"   # daily at 2am
+        retention: 7
+        method: snapshot        # snapshot or barmanObjectStore
+  # ... rest of spec
+```
+
+### Auto-Rollback
+
+Automatically rollback failed deployments:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  upgrade:
+    strategy: rolling
+    autoRollback: true
+    healthCheckTimeout: "300s"
+  # ... rest of spec
+```
+
+When enabled, the operator tracks the last successful deployment revision. If a new deployment exceeds the progress deadline, the operator triggers a rollback and sets a status condition.
+
+### Namespace-Scoped Watching
+
+By default, the operator watches all namespaces. To restrict it to specific namespaces:
+
+**Helm:**
+
+```bash
+helm install litellm-operator deploy/charts/litellm-operator/ \
+  --set watchNamespaces="team-a,team-b"
+```
+
+**Flag:**
+
+```bash
+/manager --watch-namespaces=team-a,team-b
+```
+
+**Environment variable (set automatically by OLM for OwnNamespace/SingleNamespace install modes):**
+
+```bash
+WATCH_NAMESPACE=team-a,team-b
+```
+
 ### 7. Retrieve a generated API key
 
 The generated API key is stored in a Secret (default name: `{name}-key`):
@@ -164,7 +294,7 @@ make deploy        # Deploy operator
 ### OLM (OpenShift / clusters with OLM)
 
 ```sh
-operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:v0.6.0
+operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:v0.7.0
 ```
 
 ### Helm
@@ -207,7 +337,7 @@ make run           # Run operator outside the cluster
 
 Key design points:
 
-- **LiteLLMInstance** controller manages Deployment, ConfigMap, Service, Secrets, Ingress, HPA, PDB, NetworkPolicy, and migration Jobs
+- **LiteLLMInstance** controller manages Deployment, ConfigMap, Service, Secrets, Ingress, HPA, PDB, NetworkPolicy, migration Jobs, ServiceMonitor, PrometheusRule, Grafana dashboard ConfigMaps, and CNPG ScheduledBackups
 - **Secondary controllers** (Model, Team, User, VirtualKey) resolve their `instanceRef` to discover the LiteLLM API endpoint and master key, then sync state via the REST API
 - **Finalizers** ensure cleanup: deleting a CRD calls the corresponding LiteLLM API delete endpoint before removing the Kubernetes resource
 - **Spec hash annotations** (`litellm.palena.ai/sync-hash`) enable change detection to avoid unnecessary API calls

@@ -49,3 +49,7 @@ metrics:
     port: 8443
 
 installCRDs: true
+
+# Restrict the operator to watch specific namespaces (comma-separated).
+# If empty, the operator watches all namespaces.
+watchNamespaces: ""

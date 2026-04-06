@@ -62,7 +62,9 @@ The most complex controller. It manages all Kubernetes infrastructure for a Lite
 7. **HPA** — horizontal pod autoscaling based on CPU/memory
 8. **PDB** — pod disruption budget for availability
 9. **NetworkPolicy** — restrict access to the LiteLLM service
-10. **SCIM Token** — auto-generate and store SCIM bearer token
+10. **OpenShift Route** — optional Route for OpenShift clusters (TLS edge/passthrough/reencrypt)
+11. **Gateway API HTTPRoute** — optional HTTPRoute for Gateway API implementations (Istio, Envoy Gateway, Cilium, etc.)
+12. **SCIM Token** — auto-generate and store SCIM bearer token
 
 ### Secondary Controllers
 

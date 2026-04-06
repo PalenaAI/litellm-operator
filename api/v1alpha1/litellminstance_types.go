@@ -71,6 +71,10 @@ type LiteLLMInstanceSpec struct {
 	// +optional
 	Route *RouteSpec `json:"route,omitempty"`
 
+	// Gateway API HTTPRoute configuration.
+	// +optional
+	GatewayHTTPRoute *GatewayHTTPRouteSpec `json:"gatewayHTTPRoute,omitempty"`
+
 	// Security settings.
 	// +optional
 	Security *SecuritySpec `json:"security,omitempty"`
@@ -198,6 +202,35 @@ type DatabaseSpec struct {
 type CloudNativePGSpec struct {
 	// Name of the CloudNativePG Cluster CR.
 	ClusterName string `json:"clusterName"`
+
+	// Backup configuration using CloudNativePG ScheduledBackup.
+	// Requires CloudNativePG operator to be installed.
+	// +optional
+	Backup *CNPGBackupSpec `json:"backup,omitempty"`
+}
+
+// CNPGBackupSpec defines backup configuration via CloudNativePG.
+type CNPGBackupSpec struct {
+	// Enable scheduled backups.
+	Enabled bool `json:"enabled"`
+
+	// Cron schedule for backups (e.g., "0 0 * * *" for daily at midnight).
+	// +kubebuilder:default="0 0 * * *"
+	Schedule string `json:"schedule,omitempty"`
+
+	// Number of backups to retain.
+	// +kubebuilder:default=7
+	// +kubebuilder:validation:Minimum=1
+	Retention int `json:"retention,omitempty"`
+
+	// Suspend scheduled backups without deleting the schedule.
+	// +optional
+	Suspend bool `json:"suspend,omitempty"`
+
+	// Backup method: snapshot or barmanObjectStore.
+	// +kubebuilder:validation:Enum=snapshot;barmanObjectStore
+	// +kubebuilder:default="snapshot"
+	Method string `json:"method,omitempty"`
 }
 
 // ExternalDBSpec defines external database configuration.
@@ -404,6 +437,38 @@ type RouteSpec struct {
 	TLSTermination string `json:"tlsTermination,omitempty"`
 }
 
+// GatewayHTTPRouteSpec defines Gateway API HTTPRoute configuration.
+type GatewayHTTPRouteSpec struct {
+	// Enable HTTPRoute.
+	Enabled bool `json:"enabled"`
+
+	// Hostname for the HTTPRoute.
+	// +optional
+	Host string `json:"host,omitempty"`
+
+	// ParentRefs are references to the Gateway(s) to attach the route to.
+	// +kubebuilder:validation:MinItems=1
+	ParentRefs []GatewayParentRef `json:"parentRefs"`
+
+	// Annotations for the HTTPRoute.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// GatewayParentRef identifies a Gateway to attach the HTTPRoute to.
+type GatewayParentRef struct {
+	// Name of the Gateway.
+	Name string `json:"name"`
+
+	// Namespace of the Gateway. Defaults to the route's namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// SectionName is the name of a specific listener on the Gateway to attach to.
+	// +optional
+	SectionName string `json:"sectionName,omitempty"`
+}
+
 // SecuritySpec defines security settings.
 type SecuritySpec struct {
 	// NetworkPolicy configuration.
@@ -473,6 +538,14 @@ type ObservabilitySpec struct {
 	// ServiceMonitor configuration for Prometheus.
 	// +optional
 	ServiceMonitor *ServiceMonitorSpec `json:"serviceMonitor,omitempty"`
+
+	// PrometheusRule configuration for alerting.
+	// +optional
+	PrometheusRule *PrometheusRuleSpec `json:"prometheusRule,omitempty"`
+
+	// Grafana dashboard configuration.
+	// +optional
+	GrafanaDashboard *GrafanaDashboardSpec `json:"grafanaDashboard,omitempty"`
 }
 
 // ServiceMonitorSpec defines ServiceMonitor configuration.
@@ -487,6 +560,34 @@ type ServiceMonitorSpec struct {
 	// Additional labels for the ServiceMonitor.
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// PrometheusRuleSpec defines PrometheusRule configuration for alerting.
+type PrometheusRuleSpec struct {
+	// Enable PrometheusRule creation with default alerts.
+	Enabled bool `json:"enabled"`
+
+	// Additional labels for the PrometheusRule (e.g., for Prometheus rule selection).
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Disable specific default alerts by name.
+	// +optional
+	DisabledAlerts []string `json:"disabledAlerts,omitempty"`
+}
+
+// GrafanaDashboardSpec defines Grafana dashboard ConfigMap configuration.
+type GrafanaDashboardSpec struct {
+	// Enable Grafana dashboard ConfigMap creation.
+	Enabled bool `json:"enabled"`
+
+	// Additional labels for the dashboard ConfigMap.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
+
+	// Grafana folder to place the dashboard in.
+	// +kubebuilder:default="LiteLLM"
+	Folder string `json:"folder,omitempty"`
 }
 
 // UpgradeSpec defines upgrade strategy.
@@ -695,9 +796,31 @@ type LiteLLMInstanceStatus struct {
 	// +optional
 	SCIM *SCIMStatus `json:"scim,omitempty"`
 
+	// Backup status (CloudNativePG).
+	// +optional
+	Backup *BackupStatus `json:"backup,omitempty"`
+
+	// Last successful deployment revision for auto-rollback.
+	// +optional
+	LastSuccessfulRevision string `json:"lastSuccessfulRevision,omitempty"`
+
 	// Standard Kubernetes conditions.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// BackupStatus defines backup status for CNPG.
+type BackupStatus struct {
+	// Whether scheduled backups are configured.
+	Configured bool `json:"configured,omitempty"`
+
+	// Last backup time.
+	// +optional
+	LastBackupTime *metav1.Time `json:"lastBackupTime,omitempty"`
+
+	// Last backup status.
+	// +optional
+	LastBackupStatus string `json:"lastBackupStatus,omitempty"`
 }
 
 // DatabaseStatus defines database status.

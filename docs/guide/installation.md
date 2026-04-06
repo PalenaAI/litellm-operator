@@ -79,6 +79,37 @@ make build-installer IMG=ghcr.io/palenaai/litellm-operator:v0.5.0
 kubectl apply -f dist/install.yaml
 ```
 
+## Namespace-Scoped Watching
+
+By default, the operator watches all namespaces. To restrict it to specific namespaces:
+
+### Helm
+
+```bash
+helm install litellm-operator deploy/charts/litellm-operator/ \
+  --set watchNamespaces="team-a,team-b"
+```
+
+### Flag
+
+Pass `--watch-namespaces` to the manager binary:
+
+```bash
+/manager --watch-namespaces=team-a,team-b
+```
+
+### OLM
+
+When installed via OLM in `OwnNamespace` or `SingleNamespace` mode, OLM automatically sets the `WATCH_NAMESPACE` environment variable. The operator reads this variable and scopes its watches accordingly — no additional configuration needed.
+
+### Makefile (development)
+
+Set the environment variable before running:
+
+```bash
+WATCH_NAMESPACE=default make run
+```
+
 ## Verify Installation
 
 After installation, verify the operator is running:
