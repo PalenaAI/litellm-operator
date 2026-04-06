@@ -294,7 +294,7 @@ make deploy        # Deploy operator
 ### OLM (OpenShift / clusters with OLM)
 
 ```sh
-operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:v0.6.0
+operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:v0.7.0
 ```
 
 ### Helm

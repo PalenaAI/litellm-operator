@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-06
+
 ### Added
 
 - **Namespace-scoped watching** — new `--watch-namespaces` flag (comma-separated) restricts the operator to only watch and manage resources in the specified namespaces. Also supports the `WATCH_NAMESPACE` environment variable set automatically by OLM for `OwnNamespace` and `SingleNamespace` install modes. Available in the Helm chart via `watchNamespaces` value.
@@ -17,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **ServiceMonitor creation (Level 4: Deep Insights)** — `spec.observability.serviceMonitor.enabled: true` now actually creates a `monitoring.coreos.com/v1` ServiceMonitor targeting the LiteLLM proxy's HTTP port with configurable scrape interval and labels. Gracefully degrades if Prometheus Operator CRDs are not installed.
 - **PrometheusRule with default alerts (Level 4: Deep Insights)** — `spec.observability.prometheusRule.enabled: true` creates a PrometheusRule with six built-in alerts: `LiteLLMInstanceDown` (critical), `LiteLLMInstanceDegraded`, `LiteLLMPodRestarting`, `LiteLLMPodNotReady`, `LiteLLMHighMemoryUsage`, and `LiteLLMHighCPUUsage`. Each alert includes severity labels, descriptive annotations, and a runbook. Individual alerts can be disabled via `spec.observability.prometheusRule.disabledAlerts`.
 - **Grafana dashboard ConfigMap (Level 4: Deep Insights)** — `spec.observability.grafanaDashboard.enabled: true` creates a ConfigMap with the `grafana_dashboard: "1"` label for auto-discovery by the Grafana sidecar. The dashboard includes panels for ready/desired replicas, pod restarts, CPU/memory usage, network I/O, and deployment conditions. Configurable folder and labels.
+- **E2E test coverage** — comprehensive end-to-end tests for the full CRD lifecycle (LiteLLMInstance, LiteLLMModel, LiteLLMTeam, LiteLLMUser, LiteLLMVirtualKey) running against a real Kind cluster with a LiteLLM proxy.
+
+### Changed
+
+- Go version updated from 1.24 to 1.25.
+- Dockerfile and devcontainer updated to Go 1.25.
+- golangci-lint updated to v2.11.4 for Go 1.25 compatibility.
 
 ## [0.6.0] - 2026-04-04
 
@@ -65,6 +74,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows for tests, linting, and releases
 - OLM bundle and catalog manifests for OperatorHub distribution
 
-[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/PalenaAI/litellm-operator/releases/tag/v0.5.0

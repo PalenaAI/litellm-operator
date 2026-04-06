@@ -5,7 +5,7 @@ metadata:
     alm-examples: '[]'
     capabilities: Seamless Upgrades
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.6.0
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.7.0
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     repository: https://github.com/PalenaAI/litellm-operator
@@ -17,27 +17,27 @@ spec:
   customresourcedefinitions:
     owned:
     - description: LiteLLMInstance is the Schema for the litellminstances API.
-      displayName: LiteLLM Instance
+      displayName: Lite LLMInstance
       kind: LiteLLMInstance
       name: litellminstances.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMModel is the Schema for the litellmmodels API.
-      displayName: LiteLLM Model
+      displayName: Lite LLMModel
       kind: LiteLLMModel
       name: litellmmodels.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMTeam is the Schema for the litellmteams API.
-      displayName: LiteLLM Team
+      displayName: Lite LLMTeam
       kind: LiteLLMTeam
       name: litellmteams.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMUser is the Schema for the litellmusers API.
-      displayName: LiteLLM User
+      displayName: Lite LLMUser
       kind: LiteLLMUser
       name: litellmusers.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMVirtualKey is the Schema for the litellmvirtualkeys API.
-      displayName: LiteLLM Virtual Key
+      displayName: Lite LLMVirtual Key
       kind: LiteLLMVirtualKey
       name: litellmvirtualkeys.litellm.palena.ai
       version: v1alpha1
