@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -42,15 +43,179 @@ const metricsServiceName = "litellm-operator-controller-manager-metrics-service"
 // metricsRoleBindingName is the name of the RBAC that will be created to allow get the metrics data
 const metricsRoleBindingName = "litellm-operator-metrics-binding"
 
-var _ = Describe("Manager", Ordered, func() {
+// Full-stack E2E test constants
+const (
+	testNamespace    = "e2e-fullstack"
+	instanceName     = "e2e-litellm"
+	modelName        = "e2e-model"
+	teamName         = "e2e-team"
+	userName         = "e2e-user"
+	virtualKeyName   = "e2e-vk"
+	litellmTestImage = "ghcr.io/berriai/litellm:main-v1.60.0"
+)
+
+const postgresYAML = `
+apiVersion: v1
+kind: Pod
+metadata:
+  name: postgres
+  namespace: e2e-fullstack
+  labels:
+    app: postgres
+spec:
+  containers:
+  - name: postgres
+    image: postgres:16-alpine
+    env:
+    - name: POSTGRES_USER
+      value: litellm
+    - name: POSTGRES_PASSWORD
+      value: litellm
+    - name: POSTGRES_DB
+      value: litellm
+    ports:
+    - containerPort: 5432
+    readinessProbe:
+      exec:
+        command: ["pg_isready", "-U", "litellm"]
+      initialDelaySeconds: 5
+      periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: e2e-fullstack
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+`
+
+const dbSecretYAML = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: e2e-db-credentials
+  namespace: e2e-fullstack
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://litellm:litellm@postgres.e2e-fullstack.svc:5432/litellm"
+`
+
+const fakeAPIKeySecretYAML = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: e2e-fake-api-key
+  namespace: e2e-fullstack
+type: Opaque
+stringData:
+  OPENAI_API_KEY: "sk-fake-e2e-test-key-not-real"
+`
+
+const instanceYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: e2e-litellm
+  namespace: e2e-fullstack
+spec:
+  image:
+    repository: ghcr.io/berriai/litellm
+    tag: main-v1.60.0
+    pullPolicy: IfNotPresent
+  replicas: 1
+  masterKey:
+    autoGenerate: true
+  database:
+    external:
+      connectionSecretRef:
+        name: e2e-db-credentials
+        key: DATABASE_URL
+  service:
+    type: ClusterIP
+    port: 4000
+`
+
+const modelYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMModel
+metadata:
+  name: e2e-model
+  namespace: e2e-fullstack
+spec:
+  instanceRef:
+    name: e2e-litellm
+  modelName: e2e-gpt-4o
+  litellmParams:
+    model: openai/gpt-4o
+    apiKeySecretRef:
+      name: e2e-fake-api-key
+      key: OPENAI_API_KEY
+`
+
+const teamYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: e2e-team
+  namespace: e2e-fullstack
+spec:
+  instanceRef:
+    name: e2e-litellm
+  teamAlias: e2e-test-team
+  models:
+    - e2e-gpt-4o
+  memberManagement: crd
+`
+
+const userYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMUser
+metadata:
+  name: e2e-user
+  namespace: e2e-fullstack
+spec:
+  instanceRef:
+    name: e2e-litellm
+  userId: e2e-test@example.com
+  userEmail: e2e-test@example.com
+  userRole: internal_user
+`
+
+const virtualKeyYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMVirtualKey
+metadata:
+  name: e2e-vk
+  namespace: e2e-fullstack
+spec:
+  instanceRef:
+    name: e2e-litellm
+  keyAlias: e2e-test-key
+  teamRef:
+    name: e2e-team
+  models:
+    - e2e-gpt-4o
+  keySecretName: e2e-vk-api-key
+`
+
+var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 	var controllerPodName string
 
 	// Before running the tests, set up the environment by creating the namespace,
 	// enforce the restricted security policy to the namespace, installing CRDs,
 	// and deploying the controller.
 	BeforeAll(func() {
+		By("cleaning up stale cluster-scoped resources from previous runs")
+		cmd := exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found")
+		_, _ = utils.Run(cmd)
+
 		By("creating manager namespace")
-		cmd := exec.Command("kubectl", "create", "ns", namespace)
+		cmd = exec.Command("kubectl", "create", "ns", namespace)
 		_, err := utils.Run(cmd)
 		Expect(err).NotTo(HaveOccurred(), "Failed to create namespace")
 
@@ -76,6 +241,10 @@ var _ = Describe("Manager", Ordered, func() {
 	AfterAll(func() {
 		By("cleaning up the curl pod for metrics")
 		cmd := exec.Command("kubectl", "delete", "pod", "curl-metrics", "-n", namespace)
+		_, _ = utils.Run(cmd)
+
+		By("cleaning up cluster-scoped resources")
+		cmd = exec.Command("kubectl", "delete", "clusterrolebinding", metricsRoleBindingName, "--ignore-not-found")
 		_, _ = utils.Run(cmd)
 
 		By("undeploying the controller-manager")
@@ -257,17 +426,323 @@ var _ = Describe("Manager", Ordered, func() {
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
+	})
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput := getMetricsOutput()
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+	Context("Full Stack", Ordered, func() {
+		BeforeAll(func() {
+			By("creating test namespace")
+			cmd := exec.Command("kubectl", "create", "ns", testNamespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterAll(func() {
+			By("deleting test namespace")
+			cmd := exec.Command("kubectl", "delete", "ns", testNamespace, "--ignore-not-found", "--timeout=120s")
+			_, _ = utils.Run(cmd)
+		})
+
+		AfterEach(func() {
+			if CurrentSpecReport().Failed() {
+				By("Collecting debug info from test namespace")
+				cmd := exec.Command("kubectl", "logs", "-l", "app.kubernetes.io/name=litellm",
+					"-n", testNamespace, "--tail=100")
+				output, err := utils.Run(cmd)
+				if err == nil {
+					_, _ = fmt.Fprintf(GinkgoWriter, "LiteLLM pod logs:\n%s", output)
+				}
+
+				cmd = exec.Command("kubectl", "get", "events", "-n", testNamespace,
+					"--sort-by=.lastTimestamp")
+				output, err = utils.Run(cmd)
+				if err == nil {
+					_, _ = fmt.Fprintf(GinkgoWriter, "Test namespace events:\n%s", output)
+				}
+
+				for _, kind := range []string{"litellminstance", "litellmmodel", "litellmteam", "litellmuser", "litellmvirtualkey"} {
+					cmd = exec.Command("kubectl", "get", kind, "-n", testNamespace, "-o", "yaml")
+					output, err = utils.Run(cmd)
+					if err == nil {
+						_, _ = fmt.Fprintf(GinkgoWriter, "%s resources:\n%s", kind, output)
+					}
+				}
+
+				cmd = exec.Command("kubectl", "describe", "pods", "-n", testNamespace)
+				output, err = utils.Run(cmd)
+				if err == nil {
+					_, _ = fmt.Fprintf(GinkgoWriter, "Pod descriptions:\n%s", output)
+				}
+			}
+		})
+
+		It("should deploy PostgreSQL and wait for it to be ready", func() {
+			By("deploying PostgreSQL pod and service")
+			applyYAML(postgresYAML)
+
+			By("waiting for PostgreSQL to be ready")
+			cmd := exec.Command("kubectl", "wait", "--for=condition=Ready", "pod/postgres",
+				"-n", testNamespace, "--timeout=120s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred(), "PostgreSQL pod did not become ready")
+		})
+
+		It("should create database and API key secrets", func() {
+			applyYAML(dbSecretYAML)
+			applyYAML(fakeAPIKeySecretYAML)
+		})
+
+		It("should create a LiteLLMInstance and wait for it to become Ready", func() {
+			By("applying the LiteLLMInstance CR")
+			applyYAML(instanceYAML)
+
+			By("waiting for the LiteLLM deployment pod to be ready")
+			verifyDeploymentReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", instanceName,
+					"-n", testNamespace, "-o", "jsonpath={.status.readyReplicas}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.TrimSpace(output)).To(Equal("1"), "expected 1 ready replica")
+			}
+			Eventually(verifyDeploymentReady, 5*time.Minute, 10*time.Second).Should(Succeed())
+
+			By("waiting for the LiteLLMInstance Ready condition")
+			verifyInstanceReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellminstance", instanceName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyInstanceReady, 2*time.Minute, 10*time.Second).Should(Succeed())
+		})
+
+		It("should have created the expected Kubernetes resources", func() {
+			By("verifying Deployment exists")
+			cmd := exec.Command("kubectl", "get", "deployment", instanceName, "-n", testNamespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying Service exists")
+			cmd = exec.Command("kubectl", "get", "service", instanceName, "-n", testNamespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying ConfigMap exists")
+			cmd = exec.Command("kubectl", "get", "configmap", instanceName+"-config", "-n", testNamespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying auto-generated master key Secret exists")
+			cmd = exec.Command("kubectl", "get", "secret", instanceName+"-master-key", "-n", testNamespace)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should create a LiteLLMModel and wait for Synced", func() {
+			By("applying the LiteLLMModel CR")
+			applyYAML(modelYAML)
+
+			By("waiting for the model to be synced")
+			verifyModelSynced := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmmodel", modelName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyModelSynced, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the model has a LiteLLM ID")
+			cmd := exec.Command("kubectl", "get", "litellmmodel", modelName,
+				"-n", testNamespace, "-o", "jsonpath={.status.litellmModelId}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).NotTo(BeEmpty(), "litellmModelId should be set after sync")
+		})
+
+		It("should create a LiteLLMTeam and wait for Synced", func() {
+			By("applying the LiteLLMTeam CR")
+			applyYAML(teamYAML)
+
+			By("waiting for the team to be synced")
+			verifyTeamSynced := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmteam", teamName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyTeamSynced, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the team has a LiteLLM ID")
+			cmd := exec.Command("kubectl", "get", "litellmteam", teamName,
+				"-n", testNamespace, "-o", "jsonpath={.status.litellmTeamId}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).NotTo(BeEmpty(), "litellmTeamId should be set after sync")
+		})
+
+		It("should create a LiteLLMUser and wait for Synced", func() {
+			By("applying the LiteLLMUser CR")
+			applyYAML(userYAML)
+
+			By("waiting for the user to be synced")
+			verifyUserSynced := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmuser", userName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyUserSynced, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the user has a LiteLLM ID")
+			cmd := exec.Command("kubectl", "get", "litellmuser", userName,
+				"-n", testNamespace, "-o", "jsonpath={.status.litellmUserId}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).NotTo(BeEmpty(), "litellmUserId should be set after sync")
+		})
+
+		It("should create a LiteLLMVirtualKey and wait for Synced", func() {
+			By("applying the LiteLLMVirtualKey CR")
+			applyYAML(virtualKeyYAML)
+
+			By("waiting for the virtual key to be synced")
+			verifyVKSynced := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmvirtualkey", virtualKeyName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyVKSynced, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the API key Secret was created")
+			cmd := exec.Command("kubectl", "get", "secret", "e2e-vk-api-key",
+				"-n", testNamespace, "-o", "jsonpath={.data.api_key}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).NotTo(BeEmpty(), "api_key should be populated in the Secret")
+		})
+
+		It("should delete VirtualKey and verify cleanup", func() {
+			By("deleting the LiteLLMVirtualKey")
+			cmd := exec.Command("kubectl", "delete", "litellmvirtualkey", virtualKeyName,
+				"-n", testNamespace, "--timeout=60s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the VirtualKey is gone")
+			verifyVKDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmvirtualkey", virtualKeyName,
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyVKDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the owned API key Secret is garbage collected")
+			verifySecretDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "secret", "e2e-vk-api-key",
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifySecretDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should delete User and verify cleanup", func() {
+			cmd := exec.Command("kubectl", "delete", "litellmuser", userName,
+				"-n", testNamespace, "--timeout=60s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			verifyDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmuser", userName,
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should delete Team and verify cleanup", func() {
+			cmd := exec.Command("kubectl", "delete", "litellmteam", teamName,
+				"-n", testNamespace, "--timeout=60s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			verifyDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmteam", teamName,
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should delete Model and verify cleanup", func() {
+			cmd := exec.Command("kubectl", "delete", "litellmmodel", modelName,
+				"-n", testNamespace, "--timeout=60s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			verifyDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmmodel", modelName,
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should delete the LiteLLMInstance and verify owned resources are cleaned up", func() {
+			By("deleting the LiteLLMInstance")
+			cmd := exec.Command("kubectl", "delete", "litellminstance", instanceName,
+				"-n", testNamespace, "--timeout=120s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying owned resources are garbage collected")
+			verifyCleanup := func(g Gomega) {
+				// Deployment should be gone
+				cmd := exec.Command("kubectl", "get", "deployment", instanceName, "-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+
+				// Service should be gone
+				cmd = exec.Command("kubectl", "get", "service", instanceName, "-n", testNamespace)
+				_, err = utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+
+				// ConfigMap should be gone
+				cmd = exec.Command("kubectl", "get", "configmap", instanceName+"-config", "-n", testNamespace)
+				_, err = utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+
+				// Master key Secret should be gone
+				cmd = exec.Command("kubectl", "get", "secret", instanceName+"-master-key", "-n", testNamespace)
+				_, err = utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyCleanup, 2*time.Minute, 5*time.Second).Should(Succeed())
+		})
 	})
 })
+
+// applyYAML applies a YAML manifest via kubectl stdin.
+func applyYAML(yaml string) {
+	cmd := exec.Command("kubectl", "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(yaml)
+	_, err := utils.Run(cmd)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "Failed to apply YAML")
+}
 
 // serviceAccountToken returns a token for the specified service account in the given namespace.
 // It uses the Kubernetes TokenRequest API to generate a token by directly sending a request

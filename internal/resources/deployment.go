@@ -200,6 +200,8 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
 	vars := []corev1.EnvVar{
 		{Name: "LITELLM_CONFIG_DIR", Value: "/app/config"},
+		// Required for the /model/new API endpoint used by the LiteLLMModel controller
+		{Name: "STORE_MODEL_IN_DB", Value: "True"},
 	}
 
 	// Master key
