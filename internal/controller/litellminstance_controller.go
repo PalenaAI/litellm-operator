@@ -32,12 +32,15 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 	"github.com/PalenaAI/litellm-operator/internal/resources"
@@ -58,6 +61,8 @@ type LiteLLMInstanceReconciler struct {
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 
 func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -159,7 +164,23 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// 8. HPA (conditional)
+	// 8. OpenShift Route (conditional)
+	if instance.Spec.Route != nil && instance.Spec.Route.Enabled {
+		if err := r.reconcileRoute(ctx, &instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile Route")
+		}
+	}
+
+	// 9. Gateway API HTTPRoute (conditional)
+	if instance.Spec.GatewayHTTPRoute != nil && instance.Spec.GatewayHTTPRoute.Enabled {
+		if err := r.reconcileHTTPRoute(ctx, &instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile HTTPRoute")
+		}
+	}
+
+	// 10. HPA (conditional)
 	if instance.Spec.Autoscaling != nil && instance.Spec.Autoscaling.Enabled {
 		if err := r.reconcileHPA(ctx, &instance, labels); err != nil {
 			reconcileErr = err
@@ -167,7 +188,7 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// 9. PDB (conditional)
+	// 11. PDB (conditional)
 	if instance.Spec.PodDisruptionBudget != nil && instance.Spec.PodDisruptionBudget.Enabled {
 		if err := r.reconcilePDB(ctx, &instance, labels); err != nil {
 			reconcileErr = err
@@ -175,7 +196,7 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// 10. NetworkPolicy (conditional)
+	// 12. NetworkPolicy (conditional)
 	if instance.Spec.Security != nil && instance.Spec.Security.NetworkPolicy != nil && instance.Spec.Security.NetworkPolicy.Enabled {
 		if err := r.reconcileNetworkPolicy(ctx, &instance, labels); err != nil {
 			reconcileErr = err
@@ -183,7 +204,7 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	// 11. SCIM token
+	// 13. SCIM token
 	if instance.Spec.SCIM != nil && instance.Spec.SCIM.Enabled {
 		if err := r.reconcileSCIMToken(ctx, &instance); err != nil {
 			reconcileErr = err
@@ -377,6 +398,44 @@ func (r *LiteLLMInstanceReconciler) reconcileNetworkPolicy(ctx context.Context, 
 		return err
 	}
 	return r.createOrUpdate(ctx, desired, &networkingv1.NetworkPolicy{})
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileRoute(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildRoute(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "route.openshift.io",
+		Version: "v1",
+		Kind:    "Route",
+	})
+	key := types.NamespacedName{Name: desired.GetName(), Namespace: desired.GetNamespace()}
+	err := r.Get(ctx, key, existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	return r.Update(ctx, desired)
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileHTTPRoute(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildHTTPRoute(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+	return r.createOrUpdate(ctx, desired, &gatewayv1.HTTPRoute{})
 }
 
 func (r *LiteLLMInstanceReconciler) reconcileSCIMToken(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) error {

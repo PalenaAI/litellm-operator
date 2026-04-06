@@ -42,6 +42,7 @@ import (
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 	"github.com/PalenaAI/litellm-operator/internal/controller"
 	"github.com/PalenaAI/litellm-operator/internal/litellm"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -54,6 +55,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(litellmv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(gatewayv1.Install(scheme))
 	// +kubebuilder:scaffold:scheme
 }
 

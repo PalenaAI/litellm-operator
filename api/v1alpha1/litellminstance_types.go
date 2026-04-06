@@ -71,6 +71,10 @@ type LiteLLMInstanceSpec struct {
 	// +optional
 	Route *RouteSpec `json:"route,omitempty"`
 
+	// Gateway API HTTPRoute configuration.
+	// +optional
+	GatewayHTTPRoute *GatewayHTTPRouteSpec `json:"gatewayHTTPRoute,omitempty"`
+
 	// Security settings.
 	// +optional
 	Security *SecuritySpec `json:"security,omitempty"`
@@ -402,6 +406,38 @@ type RouteSpec struct {
 	// +kubebuilder:validation:Enum=edge;passthrough;reencrypt
 	// +kubebuilder:default="edge"
 	TLSTermination string `json:"tlsTermination,omitempty"`
+}
+
+// GatewayHTTPRouteSpec defines Gateway API HTTPRoute configuration.
+type GatewayHTTPRouteSpec struct {
+	// Enable HTTPRoute.
+	Enabled bool `json:"enabled"`
+
+	// Hostname for the HTTPRoute.
+	// +optional
+	Host string `json:"host,omitempty"`
+
+	// ParentRefs are references to the Gateway(s) to attach the route to.
+	// +kubebuilder:validation:MinItems=1
+	ParentRefs []GatewayParentRef `json:"parentRefs"`
+
+	// Annotations for the HTTPRoute.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// GatewayParentRef identifies a Gateway to attach the HTTPRoute to.
+type GatewayParentRef struct {
+	// Name of the Gateway.
+	Name string `json:"name"`
+
+	// Namespace of the Gateway. Defaults to the route's namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// SectionName is the name of a specific listener on the Gateway to attach to.
+	// +optional
+	SectionName string `json:"sectionName,omitempty"`
 }
 
 // SecuritySpec defines security settings.

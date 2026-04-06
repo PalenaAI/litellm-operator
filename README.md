@@ -11,6 +11,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **Team member management** — three modes: `crd` (CRD authoritative), `sso` (IdP authoritative), `mixed` (additive)
 - **VirtualKey secret management** — generated API keys are stored in Kubernetes Secrets with owner references for automatic cleanup
 - **SSO/SCIM support** — configure Azure Entra ID, Okta, Google, or generic OIDC providers declaratively
+- **Flexible ingress** — Kubernetes Ingress, OpenShift Route, and Gateway API HTTPRoute support
 - **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts
 - **OpenShift / non-root support** — `spec.security.runAsNonRoot: true` automatically uses the official non-root image and applies restricted security contexts
 - **Multiple install methods** — OLM bundles (OperatorHub/OpenShift) or Helm chart
@@ -143,6 +144,43 @@ spec:
 ```
 
 This automatically switches to the official `litellm-non_root` image (runs as `nobody`, UID 65534) and applies a restricted pod security context compatible with OpenShift's restricted SCC.
+
+### OpenShift Route
+
+For OpenShift clusters, create a Route instead of an Ingress:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  route:
+    enabled: true
+    host: litellm.apps.example.com
+    tlsTermination: edge   # edge | passthrough | reencrypt
+  # ... rest of spec
+```
+
+### Gateway API HTTPRoute
+
+For clusters using the [Gateway API](https://gateway-api.sigs.k8s.io/) (Istio, Envoy Gateway, Cilium, etc.):
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  gatewayHTTPRoute:
+    enabled: true
+    host: litellm.example.com
+    parentRefs:
+      - name: my-gateway       # Name of the Gateway resource
+        namespace: istio-system # Optional: namespace of the Gateway
+        sectionName: https     # Optional: specific listener on the Gateway
+  # ... rest of spec
+```
 
 ### Namespace-Scoped Watching
 

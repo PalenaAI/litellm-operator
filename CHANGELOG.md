@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Namespace-scoped watching** — new `--watch-namespaces` flag (comma-separated) restricts the operator to only watch and manage resources in the specified namespaces. Also supports the `WATCH_NAMESPACE` environment variable set automatically by OLM for `OwnNamespace` and `SingleNamespace` install modes. Available in the Helm chart via `watchNamespaces` value.
+- **OpenShift Route support** — new `spec.route` field on `LiteLLMInstance` creates an OpenShift Route with configurable host and TLS termination (`edge`, `passthrough`, `reencrypt`). Uses unstructured objects to avoid requiring OpenShift API dependencies.
+- **Gateway API HTTPRoute support** — new `spec.gatewayHTTPRoute` field on `LiteLLMInstance` creates a `gateway.networking.k8s.io/v1` HTTPRoute with configurable parent Gateway references, hostname, and section name. Compatible with any Gateway API implementation (Istio, Envoy Gateway, Cilium, etc.).
 
 ## [0.6.0] - 2026-04-04
 

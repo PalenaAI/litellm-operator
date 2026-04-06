@@ -478,6 +478,47 @@ spec:
                   - name
                   type: object
                 type: array
+              gatewayHTTPRoute:
+                description: Gateway API HTTPRoute configuration.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: Annotations for the HTTPRoute.
+                    type: object
+                  enabled:
+                    description: Enable HTTPRoute.
+                    type: boolean
+                  host:
+                    description: Hostname for the HTTPRoute.
+                    type: string
+                  parentRefs:
+                    description: ParentRefs are references to the Gateway(s) to attach
+                      the route to.
+                    items:
+                      description: GatewayParentRef identifies a Gateway to attach
+                        the HTTPRoute to.
+                      properties:
+                        name:
+                          description: Name of the Gateway.
+                          type: string
+                        namespace:
+                          description: Namespace of the Gateway. Defaults to the route's
+                            namespace.
+                          type: string
+                        sectionName:
+                          description: SectionName is the name of a specific listener
+                            on the Gateway to attach to.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    minItems: 1
+                    type: array
+                required:
+                - enabled
+                - parentRefs
+                type: object
               generalSettings:
                 description: General settings for the LiteLLM proxy.
                 properties:
