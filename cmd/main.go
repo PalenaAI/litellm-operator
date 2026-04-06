@@ -21,6 +21,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -30,6 +31,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -64,6 +66,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var watchNamespaces string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -82,6 +85,9 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(&watchNamespaces, "watch-namespaces", "",
+		"Comma-separated list of namespaces to watch. If empty, watches all namespaces. "+
+			"Can also be set via the WATCH_NAMESPACE environment variable.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -179,8 +185,29 @@ func main() {
 		})
 	}
 
+	// Resolve watch namespaces: flag takes precedence, then WATCH_NAMESPACE env var (set by OLM).
+	if watchNamespaces == "" {
+		watchNamespaces = os.Getenv("WATCH_NAMESPACE")
+	}
+
+	var cacheOptions cache.Options
+	if watchNamespaces != "" {
+		defaultNamespaces := make(map[string]cache.Config)
+		for _, ns := range strings.Split(watchNamespaces, ",") {
+			ns = strings.TrimSpace(ns)
+			if ns != "" {
+				defaultNamespaces[ns] = cache.Config{}
+			}
+		}
+		if len(defaultNamespaces) > 0 {
+			cacheOptions.DefaultNamespaces = defaultNamespaces
+			setupLog.Info("watching namespaces", "namespaces", watchNamespaces)
+		}
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
+		Cache:                  cacheOptions,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
 		HealthProbeBindAddress: probeAddr,

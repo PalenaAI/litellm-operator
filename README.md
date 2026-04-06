@@ -144,6 +144,29 @@ spec:
 
 This automatically switches to the official `litellm-non_root` image (runs as `nobody`, UID 65534) and applies a restricted pod security context compatible with OpenShift's restricted SCC.
 
+### Namespace-Scoped Watching
+
+By default, the operator watches all namespaces. To restrict it to specific namespaces:
+
+**Helm:**
+
+```bash
+helm install litellm-operator deploy/charts/litellm-operator/ \
+  --set watchNamespaces="team-a,team-b"
+```
+
+**Flag:**
+
+```bash
+/manager --watch-namespaces=team-a,team-b
+```
+
+**Environment variable (set automatically by OLM for OwnNamespace/SingleNamespace install modes):**
+
+```bash
+WATCH_NAMESPACE=team-a,team-b
+```
+
 ### 7. Retrieve a generated API key
 
 The generated API key is stored in a Secret (default name: `{name}-key`):
