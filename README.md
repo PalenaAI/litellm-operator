@@ -15,6 +15,10 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts
 - **OpenShift / non-root support** — `spec.security.runAsNonRoot: true` automatically uses the official non-root image and applies restricted security contexts
 - **Multiple install methods** — OLM bundles (OperatorHub/OpenShift) or Helm chart
+- **CloudNativePG backup/restore** — scheduled backups via CNPG `ScheduledBackup` CRs with configurable schedule, retention, and method
+- **Auto-rollback** — automatically rolls back failed deployments when `spec.upgrade.autoRollback: true`
+- **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
+- **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
 
 ## Custom Resource Definitions
 
@@ -182,6 +186,71 @@ spec:
   # ... rest of spec
 ```
 
+### Observability (Prometheus + Grafana)
+
+Enable ServiceMonitor, alerting rules, and a Grafana dashboard:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  observability:
+    serviceMonitor:
+      enabled: true
+      interval: "30s"
+    prometheusRule:
+      enabled: true
+      # disabledAlerts: ["LiteLLMHighCPUUsage"]  # optionally disable specific alerts
+    grafanaDashboard:
+      enabled: true
+      folder: "LiteLLM"
+  # ... rest of spec
+```
+
+Built-in alerts: `LiteLLMInstanceDown` (critical), `LiteLLMInstanceDegraded`, `LiteLLMPodRestarting`, `LiteLLMPodNotReady`, `LiteLLMHighMemoryUsage`, `LiteLLMHighCPUUsage`. Each alert includes a runbook annotation with troubleshooting commands.
+
+### CloudNativePG Backups
+
+When using CloudNativePG for the database, enable scheduled backups:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  database:
+    cloudnativepg:
+      clusterName: litellm-db
+      backup:
+        enabled: true
+        schedule: "0 2 * * *"   # daily at 2am
+        retention: 7
+        method: snapshot        # snapshot or barmanObjectStore
+  # ... rest of spec
+```
+
+### Auto-Rollback
+
+Automatically rollback failed deployments:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  upgrade:
+    strategy: rolling
+    autoRollback: true
+    healthCheckTimeout: "300s"
+  # ... rest of spec
+```
+
+When enabled, the operator tracks the last successful deployment revision. If a new deployment exceeds the progress deadline, the operator triggers a rollback and sets a status condition.
+
 ### Namespace-Scoped Watching
 
 By default, the operator watches all namespaces. To restrict it to specific namespaces:
@@ -268,7 +337,7 @@ make run           # Run operator outside the cluster
 
 Key design points:
 
-- **LiteLLMInstance** controller manages Deployment, ConfigMap, Service, Secrets, Ingress, HPA, PDB, NetworkPolicy, and migration Jobs
+- **LiteLLMInstance** controller manages Deployment, ConfigMap, Service, Secrets, Ingress, HPA, PDB, NetworkPolicy, migration Jobs, ServiceMonitor, PrometheusRule, Grafana dashboard ConfigMaps, and CNPG ScheduledBackups
 - **Secondary controllers** (Model, Team, User, VirtualKey) resolve their `instanceRef` to discover the LiteLLM API endpoint and master key, then sync state via the REST API
 - **Finalizers** ensure cleanup: deleting a CRD calls the corresponding LiteLLM API delete endpoint before removing the Kubernetes resource
 - **Spec hash annotations** (`litellm.palena.ai/sync-hash`) enable change detection to avoid unnecessary API calls

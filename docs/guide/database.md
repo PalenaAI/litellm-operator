@@ -33,6 +33,33 @@ spec:
 
 The operator reads the connection URL from the CloudNativePG Cluster's status.
 
+### Scheduled Backups (CloudNativePG)
+
+When using CloudNativePG, the operator can create a `ScheduledBackup` CR for automated backups:
+
+```yaml
+spec:
+  database:
+    cloudnativepg:
+      clusterName: litellm-pg-cluster
+      backup:
+        enabled: true
+        schedule: "0 2 * * *"   # cron schedule (daily at 2am)
+        retention: 7             # number of backups to keep
+        method: snapshot         # snapshot or barmanObjectStore
+        suspend: false           # pause scheduling without deleting
+```
+
+Backup status is reported in `.status.backup`:
+
+```bash
+kubectl get li my-gateway -o jsonpath='{.status.backup}'
+```
+
+::: info
+This requires the CloudNativePG operator to be installed and a properly configured CNPG Cluster with a backup destination (e.g., S3, Azure Blob, GCS). See the [CloudNativePG backup documentation](https://cloudnative-pg.io/documentation/current/backup/) for details.
+:::
+
 ## Operator-Managed Database
 
 For development and testing, the operator can deploy a simple single-pod PostgreSQL:

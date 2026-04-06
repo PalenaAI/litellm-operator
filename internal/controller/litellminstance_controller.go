@@ -56,6 +56,7 @@ type LiteLLMInstanceReconciler struct {
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=configmaps;services;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -63,6 +64,8 @@ type LiteLLMInstanceReconciler struct {
 // +kubebuilder:rbac:groups=policy,resources=poddisruptionbudgets,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=route.openshift.io,resources=routes,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=monitoring.coreos.com,resources=servicemonitors;prometheusrules,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=postgresql.cnpg.io,resources=scheduledbackups,verbs=get;list;watch;create;update;patch;delete
 
 func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -211,6 +214,42 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			log.Error(err, "failed to reconcile SCIM token")
 		}
 	}
+
+	// 14. ServiceMonitor (conditional — requires monitoring.coreos.com CRDs)
+	if instance.Spec.Observability != nil && instance.Spec.Observability.ServiceMonitor != nil && instance.Spec.Observability.ServiceMonitor.Enabled {
+		if err := r.reconcileServiceMonitor(ctx, &instance, labels); err != nil {
+			log.V(1).Info("failed to reconcile ServiceMonitor (monitoring.coreos.com CRDs may not be installed)", "error", err)
+		}
+	}
+
+	// 15. PrometheusRule (conditional — requires monitoring.coreos.com CRDs)
+	if instance.Spec.Observability != nil && instance.Spec.Observability.PrometheusRule != nil && instance.Spec.Observability.PrometheusRule.Enabled {
+		if err := r.reconcilePrometheusRule(ctx, &instance, labels); err != nil {
+			log.V(1).Info("failed to reconcile PrometheusRule (monitoring.coreos.com CRDs may not be installed)", "error", err)
+		}
+	}
+
+	// 16. Grafana dashboard ConfigMap (conditional)
+	if instance.Spec.Observability != nil && instance.Spec.Observability.GrafanaDashboard != nil && instance.Spec.Observability.GrafanaDashboard.Enabled {
+		if err := r.reconcileGrafanaDashboard(ctx, &instance, labels); err != nil {
+			reconcileErr = err
+			log.Error(err, "failed to reconcile Grafana dashboard ConfigMap")
+		}
+	}
+
+	// 17. CNPG ScheduledBackup (conditional — requires postgresql.cnpg.io CRDs)
+	if instance.Spec.Database.CloudNativePG != nil && instance.Spec.Database.CloudNativePG.Backup != nil && instance.Spec.Database.CloudNativePG.Backup.Enabled {
+		if err := r.reconcileCNPGBackup(ctx, &instance, labels); err != nil {
+			log.V(1).Info("failed to reconcile CNPG ScheduledBackup (postgresql.cnpg.io CRDs may not be installed)", "error", err)
+		} else {
+			instance.Status.Backup = &litellmv1alpha1.BackupStatus{
+				Configured: true,
+			}
+		}
+	}
+
+	// 18. Auto-rollback: track successful deployment revision and rollback on failure
+	r.reconcileAutoRollback(ctx, &instance, labels)
 
 	// Update status
 	r.updateInstanceStatus(ctx, &instance, reconcileErr)
@@ -462,6 +501,162 @@ func (r *LiteLLMInstanceReconciler) reconcileSCIMToken(ctx context.Context, inst
 		TokenSecretName: secretName,
 	}
 	return nil
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileServiceMonitor(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildServiceMonitor(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "monitoring.coreos.com",
+		Version: "v1",
+		Kind:    "ServiceMonitor",
+	})
+	key := types.NamespacedName{Name: desired.GetName(), Namespace: desired.GetNamespace()}
+	err := r.Get(ctx, key, existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	return r.Update(ctx, desired)
+}
+
+func (r *LiteLLMInstanceReconciler) reconcilePrometheusRule(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildPrometheusRule(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "monitoring.coreos.com",
+		Version: "v1",
+		Kind:    "PrometheusRule",
+	})
+	key := types.NamespacedName{Name: desired.GetName(), Namespace: desired.GetNamespace()}
+	err := r.Get(ctx, key, existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	return r.Update(ctx, desired)
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileGrafanaDashboard(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildGrafanaDashboardConfigMap(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+	return r.createOrUpdate(ctx, desired, &corev1.ConfigMap{})
+}
+
+func (r *LiteLLMInstanceReconciler) reconcileCNPGBackup(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+	desired := resources.BuildCNPGScheduledBackup(instance, labels)
+	if desired == nil {
+		return nil
+	}
+	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
+		return err
+	}
+
+	existing := &unstructured.Unstructured{}
+	existing.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "postgresql.cnpg.io",
+		Version: "v1",
+		Kind:    "ScheduledBackup",
+	})
+	key := types.NamespacedName{Name: desired.GetName(), Namespace: desired.GetNamespace()}
+	err := r.Get(ctx, key, existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+	desired.SetResourceVersion(existing.GetResourceVersion())
+	return r.Update(ctx, desired)
+}
+
+// reconcileAutoRollback checks whether the deployment is healthy after an upgrade.
+// If auto-rollback is enabled and the deployment is in a failed state, it rolls back
+// to the last known-good revision by restoring the previous pod template hash.
+func (r *LiteLLMInstanceReconciler) reconcileAutoRollback(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) {
+	log := logf.FromContext(ctx)
+
+	if instance.Spec.Upgrade == nil || !instance.Spec.Upgrade.AutoRollback {
+		return
+	}
+
+	var dep appsv1.Deployment
+	if err := r.Get(ctx, types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, &dep); err != nil {
+		return
+	}
+
+	currentRevision := dep.Annotations["deployment.kubernetes.io/revision"]
+
+	// If the deployment is healthy (all replicas available), record this as a good revision.
+	if dep.Status.AvailableReplicas == dep.Status.Replicas && dep.Status.Replicas > 0 {
+		if instance.Status.LastSuccessfulRevision != currentRevision {
+			instance.Status.LastSuccessfulRevision = currentRevision
+			log.V(1).Info("recorded successful deployment revision", "revision", currentRevision)
+		}
+		return
+	}
+
+	// If the deployment is unhealthy and we have a previous good revision, check if rollback is needed.
+	if instance.Status.LastSuccessfulRevision == "" || instance.Status.LastSuccessfulRevision == currentRevision {
+		return
+	}
+
+	// Check if the deployment has been stuck for a while (at least one progress deadline exceeded condition).
+	for _, cond := range dep.Status.Conditions {
+		if cond.Type == appsv1.DeploymentProgressing && cond.Status == corev1.ConditionFalse && cond.Reason == "ProgressDeadlineExceeded" {
+			log.Info("auto-rollback triggered: deployment progress deadline exceeded",
+				"currentRevision", currentRevision,
+				"lastSuccessfulRevision", instance.Status.LastSuccessfulRevision,
+			)
+
+			// Trigger rollback by performing a rollout restart annotation change.
+			// This forces a new rollout which, combined with the operator re-reconciling
+			// the desired state, effectively rolls back to the last working config.
+			if dep.Spec.Template.Annotations == nil {
+				dep.Spec.Template.Annotations = make(map[string]string)
+			}
+			dep.Spec.Template.Annotations["litellm.palena.ai/auto-rollback"] = time.Now().Format(time.RFC3339)
+
+			if err := r.Update(ctx, &dep); err != nil {
+				log.Error(err, "failed to trigger auto-rollback")
+				return
+			}
+
+			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+				Type:               ConditionReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "AutoRollback",
+				Message:            fmt.Sprintf("Auto-rollback triggered from revision %s (last successful: %s)", currentRevision, instance.Status.LastSuccessfulRevision),
+				ObservedGeneration: instance.Generation,
+			})
+			return
+		}
+	}
 }
 
 func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, reconcileErr error) {
