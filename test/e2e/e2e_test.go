@@ -459,7 +459,11 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 					_, _ = fmt.Fprintf(GinkgoWriter, "Test namespace events:\n%s", output)
 				}
 
-				for _, kind := range []string{"litellminstance", "litellmmodel", "litellmteam", "litellmuser", "litellmvirtualkey"} {
+				kinds := []string{
+					"litellminstance", "litellmmodel", "litellmteam",
+					"litellmuser", "litellmvirtualkey",
+				}
+				for _, kind := range kinds {
 					cmd = exec.Command("kubectl", "get", kind, "-n", testNamespace, "-o", "yaml")
 					output, err = utils.Run(cmd)
 					if err == nil {

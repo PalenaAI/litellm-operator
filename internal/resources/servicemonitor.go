@@ -42,11 +42,6 @@ func BuildServiceMonitor(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 		smLabels[k] = v
 	}
 
-	port := instance.Spec.Service.Port
-	if port == 0 {
-		port = 4000
-	}
-
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "monitoring.coreos.com/v1",

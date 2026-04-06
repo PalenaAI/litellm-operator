@@ -114,7 +114,7 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 		},
 	}
 
-	var rules []interface{}
+	rules := make([]interface{}, 0, len(alerts))
 	for _, a := range alerts {
 		if disabledSet[a.name] {
 			continue
