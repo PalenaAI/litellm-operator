@@ -796,6 +796,10 @@ type LiteLLMInstanceStatus struct {
 	// +optional
 	SCIM *SCIMStatus `json:"scim,omitempty"`
 
+	// License activation status.
+	// +optional
+	License *LicenseStatus `json:"license,omitempty"`
+
 	// Backup status (CloudNativePG).
 	// +optional
 	Backup *BackupStatus `json:"backup,omitempty"`
@@ -807,6 +811,16 @@ type LiteLLMInstanceStatus struct {
 	// Standard Kubernetes conditions.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// LicenseStatus reflects license Secret detection.
+type LicenseStatus struct {
+	// Whether a license Secret was detected.
+	Active bool `json:"active"`
+
+	// Name of the Secret providing the license.
+	// +optional
+	SecretName string `json:"secretName,omitempty"`
 }
 
 // BackupStatus defines backup status for CNPG.

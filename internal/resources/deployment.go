@@ -48,7 +48,9 @@ func podSecurityContext(nonRoot bool) *corev1.PodSecurityContext {
 }
 
 // BuildDeployment creates the LiteLLM Deployment.
-func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) *appsv1.Deployment {
+// licenseSecretName is the name of the Secret containing the enterprise license key.
+// Pass empty string when no license Secret is detected.
+func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string) *appsv1.Deployment {
 	replicas := instance.Spec.Replicas
 	if replicas == 0 {
 		replicas = 1
@@ -73,7 +75,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 		pullPolicy = corev1.PullIfNotPresent
 	}
 
-	envVars := buildEnvVars(instance)
+	envVars := buildEnvVars(instance, licenseSecretName)
 	envVars = append(envVars, instance.Spec.ExtraEnvVars...)
 
 	container := corev1.Container{
@@ -197,7 +199,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 	return dep
 }
 
-func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
+func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName string) []corev1.EnvVar {
 	vars := []corev1.EnvVar{
 		{Name: "LITELLM_CONFIG_DIR", Value: "/app/config"},
 		// Required for the /model/new API endpoint used by the LiteLLMModel controller
@@ -356,6 +358,21 @@ func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
 	// Callbacks env vars
 	if instance.Spec.Callbacks != nil {
 		vars = append(vars, instance.Spec.Callbacks.EnvVars...)
+	}
+
+	// Enterprise license
+	if licenseSecretName != "" {
+		vars = append(vars, corev1.EnvVar{
+			Name: "LITELLM_LICENSE",
+			ValueFrom: &corev1.EnvVarSource{
+				SecretKeyRef: &corev1.SecretKeySelector{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: licenseSecretName,
+					},
+					Key: "license-key",
+				},
+			},
+		})
 	}
 
 	return vars

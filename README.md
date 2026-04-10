@@ -16,6 +16,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **OpenShift / non-root support** — `spec.security.runAsNonRoot: true` automatically uses the official non-root image and applies restricted security contexts
 - **Multiple install methods** — OLM bundles (OperatorHub/OpenShift) or Helm chart
 - **CloudNativePG backup/restore** — scheduled backups via CNPG `ScheduledBackup` CRs with configurable schedule, retention, and method
+- **Enterprise license activation** — convention-based license Secret detection (`{instance}-license` or `litellm-license`) with automatic `LITELLM_LICENSE` env var injection
 - **Auto-rollback** — automatically rolls back failed deployments when `spec.upgrade.autoRollback: true`
 - **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
 - **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
@@ -250,6 +251,33 @@ spec:
 ```
 
 When enabled, the operator tracks the last successful deployment revision. If a new deployment exceeds the progress deadline, the operator triggers a rollback and sets a status condition.
+
+### Enterprise License
+
+To activate LiteLLM Enterprise features, create a Secret with your license key. The operator detects it automatically and injects the `LITELLM_LICENSE` environment variable into the proxy Deployment.
+
+**Per-instance license** (takes precedence):
+
+```sh
+kubectl create secret generic my-gateway-license \
+  --from-literal=license-key='your-litellm-enterprise-license-key'
+```
+
+**Namespace-wide license** (fallback for all instances in the namespace):
+
+```sh
+kubectl create secret generic litellm-license \
+  --from-literal=license-key='your-litellm-enterprise-license-key'
+```
+
+The operator checks for `{instance-name}-license` first, then falls back to `litellm-license`. License status is reported in `.status.license`:
+
+```sh
+kubectl get litellminstance my-gateway -o jsonpath='{.status.license}'
+# {"active":true,"secretName":"my-gateway-license"}
+```
+
+If a downstream resource (Model, Team, User, VirtualKey) requires an enterprise feature and no license is present, the operator sets `Reason: EnterpriseLicenseRequired` on the resource's status condition without retrying.
 
 ### Namespace-Scoped Watching
 

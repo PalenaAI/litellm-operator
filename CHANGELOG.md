@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Enterprise license management** — convention-based LiteLLM Enterprise license activation. The operator detects a well-known Secret (`{instance-name}-license` per-instance, or `litellm-license` namespace-wide fallback) and injects the `LITELLM_LICENSE` environment variable into the Deployment via `secretKeyRef` (the license value is never read into operator memory). License status is reflected in `.status.license`. The controller watches license Secrets and triggers reconciliation on create/update/delete. All downstream controllers (Model, Team, User, VirtualKey) detect enterprise-only API errors (403 + "enterprise") and set `Reason: EnterpriseLicenseRequired` without requeueing.
+
 ## [0.7.0] - 2026-04-06
 
 ### Added

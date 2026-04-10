@@ -76,6 +76,17 @@ func (r *LiteLLMUserReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	result, err := r.reconcileUser(ctx, &user, resolved)
 	if err != nil {
+		if isEnterpriseLicenseError(err) {
+			meta.SetStatusCondition(&user.Status.Conditions, metav1.Condition{
+				Type:               ConditionSynced,
+				Status:             metav1.ConditionFalse,
+				Reason:             "EnterpriseLicenseRequired",
+				Message:            "This feature requires a LiteLLM Enterprise license. Create a license Secret to activate.",
+				ObservedGeneration: user.Generation,
+			})
+			_ = r.Status().Update(ctx, &user)
+			return ctrl.Result{}, nil
+		}
 		log.Error(err, "failed to reconcile user")
 		meta.SetStatusCondition(&user.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "SyncFailed", Message: err.Error(),

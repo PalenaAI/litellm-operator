@@ -1480,6 +1480,18 @@ spec:
               lastSuccessfulRevision:
                 description: Last successful deployment revision for auto-rollback.
                 type: string
+              license:
+                description: License activation status.
+                properties:
+                  active:
+                    description: Whether a license Secret was detected.
+                    type: boolean
+                  secretName:
+                    description: Name of the Secret providing the license.
+                    type: string
+                required:
+                - active
+                type: object
               ready:
                 description: Whether the instance is fully ready.
                 type: boolean

@@ -214,6 +214,7 @@ spec:
 | `database` | DatabaseStatus | Database connection status |
 | `redis` | *RedisStatus | Redis connection status |
 | `configSync` | *ConfigSyncStatus | Config sync status and counts |
+| `license` | *LicenseStatus | License activation status (`active`, `secretName`) |
 | `sso` | *SSOStatus | SSO configuration status |
 | `scim` | *SCIMStatus | SCIM configuration status |
 | `conditions` | []Condition | Standard Kubernetes conditions |

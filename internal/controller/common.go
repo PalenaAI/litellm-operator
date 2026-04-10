@@ -21,13 +21,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
+	"github.com/PalenaAI/litellm-operator/internal/litellm"
 )
 
 const (
@@ -141,4 +144,14 @@ func labelsForInstance(instanceName string) map[string]string {
 		LabelManagedBy:    "litellm-operator",
 		LabelInstanceName: instanceName,
 	}
+}
+
+// isEnterpriseLicenseError checks if an API error indicates a missing enterprise license.
+func isEnterpriseLicenseError(err error) bool {
+	var apiErr *litellm.APIError
+	if errors.As(err, &apiErr) {
+		return apiErr.StatusCode == 403 &&
+			strings.Contains(strings.ToLower(apiErr.Message), "enterprise")
+	}
+	return false
 }

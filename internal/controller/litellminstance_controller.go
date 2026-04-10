@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -37,9 +38,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
@@ -86,11 +91,14 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	labels := labelsForInstance(instance.Name)
 
+	// Detect license Secret
+	licenseSecretName := r.reconcileLicense(ctx, &instance)
+
 	// Reconcile database migration status
 	r.reconcileMigrationStatus(ctx, &instance, labels)
 
 	// Reconcile all managed resources
-	reconcileErr := r.reconcileResources(ctx, &instance, labels)
+	reconcileErr := r.reconcileResources(ctx, &instance, labels, licenseSecretName)
 
 	// Auto-rollback: track successful deployment revision and rollback on failure
 	r.reconcileAutoRollback(ctx, &instance)
@@ -152,7 +160,7 @@ func (r *LiteLLMInstanceReconciler) reconcileMigrationStatus(ctx context.Context
 }
 
 // reconcileResources reconciles all managed sub-resources for the instance.
-func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
+func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string) error {
 	log := logf.FromContext(ctx)
 	var reconcileErr error
 
@@ -171,7 +179,7 @@ func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, inst
 		log.Error(err, "failed to reconcile ServiceAccount")
 	}
 
-	if err := r.reconcileDeployment(ctx, instance, labels); err != nil {
+	if err := r.reconcileDeployment(ctx, instance, labels, licenseSecretName); err != nil {
 		reconcileErr = err
 		log.Error(err, "failed to reconcile Deployment")
 	}
@@ -320,6 +328,88 @@ func (r *LiteLLMInstanceReconciler) reconcileObservabilityResources(ctx context.
 	return reconcileErr
 }
 
+// reconcileLicense detects a license Secret for the instance.
+// Returns the Secret name if found, or empty string if not.
+func (r *LiteLLMInstanceReconciler) reconcileLicense(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) string {
+	log := logf.FromContext(ctx)
+
+	// Try per-instance Secret first, then namespace-wide fallback
+	secretNames := []string{
+		instance.Name + "-license",
+		"litellm-license",
+	}
+
+	for _, name := range secretNames {
+		var secret corev1.Secret
+		err := r.Get(ctx, client.ObjectKey{
+			Namespace: instance.Namespace,
+			Name:      name,
+		}, &secret)
+
+		if err == nil {
+			if _, ok := secret.Data["license-key"]; ok {
+				log.V(1).Info("license Secret found", "secret", name)
+				instance.Status.License = &litellmv1alpha1.LicenseStatus{
+					Active:     true,
+					SecretName: name,
+				}
+				return name
+			}
+			log.Info("license Secret found but missing 'license-key' key", "secret", name)
+			continue
+		}
+
+		if !apierrors.IsNotFound(err) {
+			log.Error(err, "failed to check license Secret", "secret", name)
+		}
+	}
+
+	log.V(1).Info("no license Secret found, running in open-source mode")
+	instance.Status.License = &litellmv1alpha1.LicenseStatus{
+		Active: false,
+	}
+	return ""
+}
+
+// findInstanceForLicenseSecret maps a Secret event to the LiteLLMInstance(s) that should be reconciled.
+func (r *LiteLLMInstanceReconciler) findInstanceForLicenseSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+
+	// Namespace-wide license Secret — reconcile all instances in this namespace
+	if secret.Name == "litellm-license" {
+		var instances litellmv1alpha1.LiteLLMInstanceList
+		if err := r.List(ctx, &instances, client.InNamespace(secret.Namespace)); err != nil {
+			return nil
+		}
+		requests := make([]reconcile.Request, 0, len(instances.Items))
+		for _, inst := range instances.Items {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name:      inst.Name,
+					Namespace: inst.Namespace,
+				},
+			})
+		}
+		return requests
+	}
+
+	// Per-instance license Secret ({name}-license)
+	if !strings.HasSuffix(secret.Name, "-license") {
+		return nil
+	}
+	instanceName := strings.TrimSuffix(secret.Name, "-license")
+
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      instanceName,
+			Namespace: secret.Namespace,
+		},
+	}}
+}
+
 func (r *LiteLLMInstanceReconciler) handleDeletion(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) (ctrl.Result, error) {
 	if !controllerutil.ContainsFinalizer(instance, FinalizerName) {
 		return ctrl.Result{}, nil
@@ -425,8 +515,8 @@ func (r *LiteLLMInstanceReconciler) reconcileMigrationJob(ctx context.Context, i
 	return false, nil // still running
 }
 
-func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
-	desired := resources.BuildDeployment(instance, labels)
+func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string) error {
+	desired := resources.BuildDeployment(instance, labels, licenseSecretName)
 	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
 		return err
 	}
@@ -812,6 +902,12 @@ func (r *LiteLLMInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Secret{}).
 		Owns(&batchv1.Job{}).
+		// Watch license Secrets (not owned, so use Watches instead of Owns)
+		Watches(
+			&corev1.Secret{},
+			handler.EnqueueRequestsFromMapFunc(r.findInstanceForLicenseSecret),
+			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
 		Named("litellminstance").
 		Complete(r)
 }

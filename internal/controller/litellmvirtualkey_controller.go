@@ -78,6 +78,17 @@ func (r *LiteLLMVirtualKeyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	result, err := r.reconcileKey(ctx, &vk, resolved)
 	if err != nil {
+		if isEnterpriseLicenseError(err) {
+			meta.SetStatusCondition(&vk.Status.Conditions, metav1.Condition{
+				Type:               ConditionSynced,
+				Status:             metav1.ConditionFalse,
+				Reason:             "EnterpriseLicenseRequired",
+				Message:            "This feature requires a LiteLLM Enterprise license. Create a license Secret to activate.",
+				ObservedGeneration: vk.Generation,
+			})
+			_ = r.Status().Update(ctx, &vk)
+			return ctrl.Result{}, nil
+		}
 		log.Error(err, "failed to reconcile virtual key")
 		meta.SetStatusCondition(&vk.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "SyncFailed", Message: err.Error(),
