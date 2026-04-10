@@ -144,6 +144,26 @@ spec:
       - model: gpt-4
         fallbacks: ["gpt-4-32k", "claude-3-sonnet"]
     maxFallbacks: 3
+
+  passThroughEndpoints:
+    - path: /bria
+      target: https://engine.prod.bria-api.com
+      headers:
+        content-type: application/json
+      headerSecrets:
+        - headerName: Authorization
+          prefix: "Bearer "
+          secretRef:
+            name: bria-credentials
+            key: api-key
+    - path: /langfuse
+      target: https://us.cloud.langfuse.com
+      auth: true
+      forwardHeaders: true
+      includeSubpath: true
+      methods: ["GET", "POST"]
+      defaultQueryParams:
+        version: "2"
 ```
 
 ## Spec Fields
@@ -306,6 +326,32 @@ Response caching configuration. See the [Caching guide](/guide/caching) for deta
 | `url` | string | Qdrant server URL (required) |
 | `apiKeySecretRef` | *SecretKeyRef | Qdrant API key Secret reference |
 | `collectionName` | string | Collection name for cached embeddings |
+
+### `passThroughEndpoints`
+
+Configure pass-through endpoints to proxy arbitrary API requests to upstream services through LiteLLM. Useful for provider-specific APIs (image generation, fine-tuning, embeddings) that aren't covered by the standard chat/completion routing.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `path` | string | — | Route path on the LiteLLM proxy (e.g., `/bria`) (required) |
+| `target` | string | — | Target URL to forward requests to (required) |
+| `auth` | *bool | — | Enable LiteLLM authentication for this endpoint (enterprise) |
+| `forwardHeaders` | *bool | — | Forward incoming client headers to the target |
+| `includeSubpath` | *bool | — | Forward requests to sub-paths (e.g., `/path/sub` → `target/sub`) |
+| `methods` | []string | — | HTTP methods to allow. If empty, all methods are allowed |
+| `headers` | map[string]string | — | Static headers to add to forwarded requests |
+| `headerSecrets` | []HeaderSecretRef | — | Headers sourced from Kubernetes Secrets |
+| `defaultQueryParams` | map[string]string | — | Default query parameters added to all forwarded requests |
+
+**HeaderSecretRef:**
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `headerName` | string | — | HTTP header name (e.g., `Authorization`) (required) |
+| `prefix` | string | — | Prefix prepended to the secret value (e.g., "Bearer ") |
+| `secretRef` | SecretKeyRef | — | Reference to Secret containing the header value (required) |
+
+Secret-backed headers are injected as environment variables named `PASSTHROUGH_{PATH}_{HEADER}` (uppercase, special characters replaced with `_`). In the generated config, they appear as `os.environ/PASSTHROUGH_...` references that LiteLLM resolves at runtime.
 
 ### `security`
 

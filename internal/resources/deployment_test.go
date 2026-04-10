@@ -185,6 +185,113 @@ func TestBuildDeployment_CachingS3Credentials(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_PassThroughSecretEnvVars(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:   "/bria",
+			Target: "https://engine.prod.bria-api.com",
+			HeaderSecrets: []litellmv1alpha1.HeaderSecretRef{
+				{
+					HeaderName: "Authorization",
+					Prefix:     "Bearer ",
+					SecretRef: litellmv1alpha1.SecretKeyRef{
+						Name: "bria-secret",
+						Key:  "api-key",
+					},
+				},
+			},
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "")
+
+	found := false
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "PASSTHROUGH_BRIA_AUTHORIZATION" {
+			found = true
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				t.Fatal("expected secretKeyRef")
+			}
+			if env.ValueFrom.SecretKeyRef.Name != "bria-secret" {
+				t.Errorf("expected secret name 'bria-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
+			}
+			if env.ValueFrom.SecretKeyRef.Key != "api-key" {
+				t.Errorf("expected secret key 'api-key', got %q", env.ValueFrom.SecretKeyRef.Key)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("PASSTHROUGH_BRIA_AUTHORIZATION env var not found in deployment")
+	}
+}
+
+func TestBuildDeployment_PassThroughNoSecrets(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:   "/bria",
+			Target: "https://engine.prod.bria-api.com",
+			Headers: map[string]string{
+				"content-type": "application/json",
+			},
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "")
+
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "PASSTHROUGH_BRIA_CONTENT_TYPE" {
+			t.Error("should not inject env vars for static headers")
+		}
+	}
+}
+
+func TestBuildDeployment_PassThroughMultipleEndpoints(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:   "/bria",
+			Target: "https://bria.example.com",
+			HeaderSecrets: []litellmv1alpha1.HeaderSecretRef{
+				{
+					HeaderName: "Authorization",
+					SecretRef:  litellmv1alpha1.SecretKeyRef{Name: "bria-secret", Key: "key"},
+				},
+			},
+		},
+		{
+			Path:   "/langfuse",
+			Target: "https://langfuse.example.com",
+			HeaderSecrets: []litellmv1alpha1.HeaderSecretRef{
+				{
+					HeaderName: "X-API-Key",
+					SecretRef:  litellmv1alpha1.SecretKeyRef{Name: "langfuse-secret", Key: "api-key"},
+				},
+			},
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "")
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+			envMap[env.Name] = env.ValueFrom.SecretKeyRef.Name
+		}
+	}
+	if envMap["PASSTHROUGH_BRIA_AUTHORIZATION"] != "bria-secret" {
+		t.Error("PASSTHROUGH_BRIA_AUTHORIZATION not found or wrong secret")
+	}
+	if envMap["PASSTHROUGH_LANGFUSE_X_API_KEY"] != "langfuse-secret" {
+		t.Error("PASSTHROUGH_LANGFUSE_X_API_KEY not found or wrong secret")
+	}
+}
+
 func TestBuildDeployment_CachingQdrantAPIKey(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{

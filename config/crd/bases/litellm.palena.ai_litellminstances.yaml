@@ -945,6 +945,88 @@ spec:
                     - enabled
                     type: object
                 type: object
+              passThroughEndpoints:
+                description: |-
+                  Pass-through endpoint definitions.
+                  Allows proxying arbitrary API requests to upstream services through LiteLLM.
+                items:
+                  description: PassThroughEndpoint defines a pass-through endpoint
+                    that proxies requests to an upstream service.
+                  properties:
+                    auth:
+                      description: Enable LiteLLM authentication for this endpoint
+                        (enterprise).
+                      type: boolean
+                    defaultQueryParams:
+                      additionalProperties:
+                        type: string
+                      description: Default query parameters added to all forwarded
+                        requests.
+                      type: object
+                    forwardHeaders:
+                      description: Forward incoming client headers to the target.
+                      type: boolean
+                    headerSecrets:
+                      description: Headers sourced from Kubernetes Secrets.
+                      items:
+                        description: HeaderSecretRef references a Secret value to
+                          use as an HTTP header.
+                        properties:
+                          headerName:
+                            description: HTTP header name (e.g., "Authorization").
+                            type: string
+                          prefix:
+                            description: Prefix prepended to the secret value (e.g.,
+                              "Bearer ").
+                            type: string
+                          secretRef:
+                            description: Reference to Secret containing the header
+                              value.
+                            properties:
+                              key:
+                                description: Key within the Secret.
+                                type: string
+                              name:
+                                description: Name of the Secret.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - headerName
+                        - secretRef
+                        type: object
+                      type: array
+                    headers:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        Custom headers to add to forwarded requests.
+                        For headers containing secrets, use headerSecrets instead.
+                      type: object
+                    includeSubpath:
+                      description: Forward requests to sub-paths (e.g., /path/sub/route
+                        → target/sub/route).
+                      type: boolean
+                    methods:
+                      description: HTTP methods to allow. If empty, all methods are
+                        allowed.
+                      items:
+                        type: string
+                      type: array
+                    path:
+                      description: Route path on the LiteLLM proxy (e.g., "/bria",
+                        "/api/v1/custom").
+                      type: string
+                    target:
+                      description: Target URL to forward requests to.
+                      type: string
+                  required:
+                  - path
+                  - target
+                  type: object
+                type: array
               podDisruptionBudget:
                 description: Pod disruption budget configuration.
                 properties:

@@ -635,6 +635,230 @@ func TestGenerateProxyConfig_IPAllowlistWithExistingGeneralSettings(t *testing.T
 	}
 }
 
+func TestGenerateProxyConfig_PassThroughEndpoints_Basic(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:   "/bria",
+			Target: "https://engine.prod.bria-api.com",
+			Headers: map[string]string{
+				"content-type": "application/json",
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	endpoints, ok := gs["pass_through_endpoints"].([]map[string]interface{})
+	if !ok {
+		t.Fatal("expected pass_through_endpoints to be []map[string]interface{}")
+	}
+	if len(endpoints) != 1 {
+		t.Fatalf("expected 1 endpoint, got %d", len(endpoints))
+	}
+	ep := endpoints[0]
+	if ep["path"] != "/bria" {
+		t.Errorf("expected path=/bria, got %v", ep["path"])
+	}
+	if ep["target"] != "https://engine.prod.bria-api.com" {
+		t.Errorf("expected target URL, got %v", ep["target"])
+	}
+	headers, ok := ep["headers"].(map[string]string)
+	if !ok {
+		t.Fatal("expected headers to be map[string]string")
+	}
+	if headers["content-type"] != "application/json" {
+		t.Errorf("expected content-type header, got %v", headers["content-type"])
+	}
+}
+
+func TestGenerateProxyConfig_PassThroughEndpoints_AllFields(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:           "/langfuse",
+			Target:         "https://us.cloud.langfuse.com",
+			Auth:           boolPtr(true),
+			ForwardHeaders: boolPtr(true),
+			IncludeSubpath: boolPtr(true),
+			Methods:        []string{"GET", "POST"},
+			DefaultQueryParams: map[string]string{
+				"version": "2",
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
+	ep := endpoints[0]
+
+	if ep["auth"] != true {
+		t.Errorf("expected auth=true, got %v", ep["auth"])
+	}
+	if ep["forward_headers"] != true {
+		t.Errorf("expected forward_headers=true, got %v", ep["forward_headers"])
+	}
+	if ep["include_subpath"] != true {
+		t.Errorf("expected include_subpath=true, got %v", ep["include_subpath"])
+	}
+	methods, ok := ep["methods"].([]string)
+	if !ok || len(methods) != 2 || methods[0] != "GET" || methods[1] != "POST" {
+		t.Errorf("unexpected methods: %v", ep["methods"])
+	}
+	qp, ok := ep["default_query_params"].(map[string]string)
+	if !ok || qp["version"] != "2" {
+		t.Errorf("unexpected default_query_params: %v", ep["default_query_params"])
+	}
+}
+
+func TestGenerateProxyConfig_PassThroughEndpoints_SecretHeaders(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:   "/bria",
+			Target: "https://engine.prod.bria-api.com",
+			HeaderSecrets: []litellmv1alpha1.HeaderSecretRef{
+				{
+					HeaderName: "Authorization",
+					Prefix:     "Bearer ",
+					SecretRef: litellmv1alpha1.SecretKeyRef{
+						Name: "bria-secret",
+						Key:  "api-key",
+					},
+				},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
+	headers := endpoints[0]["headers"].(map[string]string)
+
+	expected := "Bearer os.environ/PASSTHROUGH_BRIA_AUTHORIZATION"
+	if headers["Authorization"] != expected {
+		t.Errorf("expected %q, got %q", expected, headers["Authorization"])
+	}
+}
+
+func TestGenerateProxyConfig_PassThroughEndpoints_MixedHeaders(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:   "/custom",
+			Target: "https://api.example.com",
+			Headers: map[string]string{
+				"content-type": "application/json",
+			},
+			HeaderSecrets: []litellmv1alpha1.HeaderSecretRef{
+				{
+					HeaderName: "X-API-Key",
+					SecretRef: litellmv1alpha1.SecretKeyRef{
+						Name: "custom-secret",
+						Key:  "key",
+					},
+				},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
+	headers := endpoints[0]["headers"].(map[string]string)
+
+	if headers["content-type"] != "application/json" {
+		t.Errorf("expected static header, got %v", headers["content-type"])
+	}
+	if headers["X-API-Key"] != "os.environ/PASSTHROUGH_CUSTOM_X_API_KEY" {
+		t.Errorf("expected secret header env ref, got %v", headers["X-API-Key"])
+	}
+}
+
+func TestGenerateProxyConfig_PassThroughEndpoints_WithExistingGeneralSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		ProxyBatchWriteAt: 10,
+	}
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:   "/test",
+			Target: "https://example.com",
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["proxy_batch_write_at"] != 10 {
+		t.Errorf("expected proxy_batch_write_at=10, got %v", gs["proxy_batch_write_at"])
+	}
+	endpoints, ok := gs["pass_through_endpoints"].([]map[string]interface{})
+	if !ok || len(endpoints) != 1 {
+		t.Fatalf("expected 1 pass_through_endpoint, got %v", gs["pass_through_endpoints"])
+	}
+}
+
+func TestGenerateProxyConfig_PassThroughEndpoints_OmitsOptionalFields(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PassThroughEndpoints = []litellmv1alpha1.PassThroughEndpoint{
+		{
+			Path:   "/minimal",
+			Target: "https://example.com",
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
+	ep := endpoints[0]
+
+	if _, ok := ep["auth"]; ok {
+		t.Error("auth should not be present when not set")
+	}
+	if _, ok := ep["forward_headers"]; ok {
+		t.Error("forward_headers should not be present when not set")
+	}
+	if _, ok := ep["include_subpath"]; ok {
+		t.Error("include_subpath should not be present when not set")
+	}
+	if _, ok := ep["methods"]; ok {
+		t.Error("methods should not be present when empty")
+	}
+	if _, ok := ep["headers"]; ok {
+		t.Error("headers should not be present when empty")
+	}
+	if _, ok := ep["default_query_params"]; ok {
+		t.Error("default_query_params should not be present when empty")
+	}
+}
+
+func TestPassThroughEnvVarName(t *testing.T) {
+	tests := []struct {
+		path, header, expected string
+	}{
+		{"/bria", "Authorization", "PASSTHROUGH_BRIA_AUTHORIZATION"},
+		{"/api/v1/custom", "X-API-Key", "PASSTHROUGH_API_V1_CUSTOM_X_API_KEY"},
+		{"/langfuse", "content-type", "PASSTHROUGH_LANGFUSE_CONTENT_TYPE"},
+		{"custom", "Auth", "PASSTHROUGH_CUSTOM_AUTH"},
+	}
+	for _, tc := range tests {
+		got := PassThroughEnvVarName(tc.path, tc.header)
+		if got != tc.expected {
+			t.Errorf("PassThroughEnvVarName(%q, %q) = %q, want %q", tc.path, tc.header, got, tc.expected)
+		}
+	}
+}
+
 func TestGenerateProxyConfig_CachingWithExistingSettings(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Callbacks = &litellmv1alpha1.CallbacksSpec{

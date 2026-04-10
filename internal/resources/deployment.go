@@ -358,6 +358,9 @@ func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName s
 	// Caching env vars
 	vars = append(vars, cachingEnvVars(instance)...)
 
+	// Pass-through endpoint header secret env vars
+	vars = append(vars, passThroughEnvVars(instance)...)
+
 	// Callbacks env vars
 	if instance.Spec.Callbacks != nil {
 		vars = append(vars, instance.Spec.Callbacks.EnvVars...)
@@ -542,6 +545,25 @@ func startupFailureThreshold(instance *litellmv1alpha1.LiteLLMInstance) int32 {
 		return instance.Spec.HealthCheck.StartupFailureThreshold
 	}
 	return 30
+}
+
+func passThroughEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
+	var vars []corev1.EnvVar
+	for _, ep := range instance.Spec.PassThroughEndpoints {
+		for _, hs := range ep.HeaderSecrets {
+			envName := PassThroughEnvVarName(ep.Path, hs.HeaderName)
+			vars = append(vars, corev1.EnvVar{
+				Name: envName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: hs.SecretRef.Name},
+						Key:                  hs.SecretRef.Key,
+					},
+				},
+			})
+		}
+	}
+	return vars
 }
 
 func cachingEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {

@@ -18,6 +18,9 @@ package resources
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -160,6 +163,11 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		buildIPAllowlistConfig(instance.Spec.Security.IPAllowlist, config)
 	}
 
+	// Pass-through endpoints
+	if len(instance.Spec.PassThroughEndpoints) > 0 {
+		buildPassThroughEndpointsConfig(instance.Spec.PassThroughEndpoints, config)
+	}
+
 	return config
 }
 
@@ -182,6 +190,71 @@ func buildIPAllowlistConfig(ipAllowlist *litellmv1alpha1.IPAllowlistSpec, config
 	if ipAllowlist.MaxResponseSizeMB != nil {
 		gs["max_response_size_mb"] = *ipAllowlist.MaxResponseSizeMB
 	}
+}
+
+// buildPassThroughEndpointsConfig writes pass_through_endpoints into general_settings.
+func buildPassThroughEndpointsConfig(endpoints []litellmv1alpha1.PassThroughEndpoint, config map[string]interface{}) {
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		gs = map[string]interface{}{}
+		config["general_settings"] = gs
+	}
+
+	entries := make([]map[string]interface{}, 0, len(endpoints))
+	for _, ep := range endpoints {
+		entry := map[string]interface{}{
+			"path":   ep.Path,
+			"target": ep.Target,
+		}
+		if ep.Auth != nil {
+			entry["auth"] = *ep.Auth
+		}
+		if ep.ForwardHeaders != nil {
+			entry["forward_headers"] = *ep.ForwardHeaders
+		}
+		if ep.IncludeSubpath != nil {
+			entry["include_subpath"] = *ep.IncludeSubpath
+		}
+		if len(ep.Methods) > 0 {
+			entry["methods"] = ep.Methods
+		}
+		if len(ep.DefaultQueryParams) > 0 {
+			entry["default_query_params"] = ep.DefaultQueryParams
+		}
+
+		// Merge static headers and secret-backed headers
+		headers := map[string]string{}
+		for k, v := range ep.Headers {
+			headers[k] = v
+		}
+		for _, hs := range ep.HeaderSecrets {
+			envVar := PassThroughEnvVarName(ep.Path, hs.HeaderName)
+			ref := fmt.Sprintf("os.environ/%s", envVar)
+			if hs.Prefix != "" {
+				ref = hs.Prefix + ref
+			}
+			headers[hs.HeaderName] = ref
+		}
+		if len(headers) > 0 {
+			entry["headers"] = headers
+		}
+
+		entries = append(entries, entry)
+	}
+
+	gs["pass_through_endpoints"] = entries
+}
+
+// sanitizeEnvVarSegment is a regex that matches non-alphanumeric characters.
+var sanitizeEnvVarSegment = regexp.MustCompile(`[^A-Za-z0-9]`)
+
+// PassThroughEnvVarName generates a deterministic env var name for a secret-backed
+// pass-through header. Format: PASSTHROUGH_{SANITIZED_PATH}_{SANITIZED_HEADER}.
+func PassThroughEnvVarName(path, headerName string) string {
+	p := strings.TrimLeft(path, "/")
+	p = sanitizeEnvVarSegment.ReplaceAllString(p, "_")
+	h := sanitizeEnvVarSegment.ReplaceAllString(headerName, "_")
+	return strings.ToUpper(fmt.Sprintf("PASSTHROUGH_%s_%s", p, h))
 }
 
 // buildCachingConfig writes cache settings into litellm_settings.

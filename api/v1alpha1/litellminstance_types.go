@@ -130,6 +130,11 @@ type LiteLLMInstanceSpec struct {
 	// Response caching configuration.
 	// +optional
 	Caching *CachingSpec `json:"caching,omitempty"`
+
+	// Pass-through endpoint definitions.
+	// Allows proxying arbitrary API requests to upstream services through LiteLLM.
+	// +optional
+	PassThroughEndpoints []PassThroughEndpoint `json:"passThroughEndpoints,omitempty"`
 }
 
 // ImageSpec defines the container image for LiteLLM.
@@ -937,6 +942,57 @@ type CacheQdrantSpec struct {
 	// Collection name for cached embeddings.
 	// +optional
 	CollectionName string `json:"collectionName,omitempty"`
+}
+
+// PassThroughEndpoint defines a pass-through endpoint that proxies requests to an upstream service.
+type PassThroughEndpoint struct {
+	// Route path on the LiteLLM proxy (e.g., "/bria", "/api/v1/custom").
+	Path string `json:"path"`
+
+	// Target URL to forward requests to.
+	Target string `json:"target"`
+
+	// Enable LiteLLM authentication for this endpoint (enterprise).
+	// +optional
+	Auth *bool `json:"auth,omitempty"`
+
+	// Forward incoming client headers to the target.
+	// +optional
+	ForwardHeaders *bool `json:"forwardHeaders,omitempty"`
+
+	// Forward requests to sub-paths (e.g., /path/sub/route → target/sub/route).
+	// +optional
+	IncludeSubpath *bool `json:"includeSubpath,omitempty"`
+
+	// HTTP methods to allow. If empty, all methods are allowed.
+	// +optional
+	Methods []string `json:"methods,omitempty"`
+
+	// Custom headers to add to forwarded requests.
+	// For headers containing secrets, use headerSecrets instead.
+	// +optional
+	Headers map[string]string `json:"headers,omitempty"`
+
+	// Headers sourced from Kubernetes Secrets.
+	// +optional
+	HeaderSecrets []HeaderSecretRef `json:"headerSecrets,omitempty"`
+
+	// Default query parameters added to all forwarded requests.
+	// +optional
+	DefaultQueryParams map[string]string `json:"defaultQueryParams,omitempty"`
+}
+
+// HeaderSecretRef references a Secret value to use as an HTTP header.
+type HeaderSecretRef struct {
+	// HTTP header name (e.g., "Authorization").
+	HeaderName string `json:"headerName"`
+
+	// Prefix prepended to the secret value (e.g., "Bearer ").
+	// +optional
+	Prefix string `json:"prefix,omitempty"`
+
+	// Reference to Secret containing the header value.
+	SecretRef SecretKeyRef `json:"secretRef"`
 }
 
 // SCIMSpec defines SCIM v2 provisioning configuration.
