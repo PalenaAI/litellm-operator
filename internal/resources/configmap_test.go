@@ -524,6 +524,117 @@ func TestGenerateProxyConfig_TagFilteringDisabled(t *testing.T) {
 	}
 }
 
+func TestGenerateProxyConfig_IPAllowlist(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{
+		IPAllowlist: &litellmv1alpha1.IPAllowlistSpec{
+			Enabled:    true,
+			AllowedIPs: []string{"192.168.1.0/24", "10.0.0.1"},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	ips, ok := gs["allowed_ips"].([]string)
+	if !ok {
+		t.Fatal("expected allowed_ips to be []string")
+	}
+	if len(ips) != 2 || ips[0] != "192.168.1.0/24" || ips[1] != "10.0.0.1" {
+		t.Errorf("unexpected allowed_ips: %v", ips)
+	}
+	if _, ok := gs["use_x_forwarded_for"]; ok {
+		t.Error("use_x_forwarded_for should not be present when not set")
+	}
+}
+
+func TestGenerateProxyConfig_IPAllowlistWithXForwardedFor(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{
+		IPAllowlist: &litellmv1alpha1.IPAllowlistSpec{
+			Enabled:          true,
+			AllowedIPs:       []string{"10.0.0.0/8"},
+			UseXForwardedFor: boolPtr(true),
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["use_x_forwarded_for"] != true {
+		t.Errorf("expected use_x_forwarded_for=true, got %v", gs["use_x_forwarded_for"])
+	}
+}
+
+func TestGenerateProxyConfig_IPAllowlistWithMaxSizes(t *testing.T) {
+	instance := newTestInstance()
+	reqSize := 10
+	respSize := 25
+	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{
+		IPAllowlist: &litellmv1alpha1.IPAllowlistSpec{
+			Enabled:           true,
+			AllowedIPs:        []string{"0.0.0.0/0"},
+			MaxRequestSizeMB:  &reqSize,
+			MaxResponseSizeMB: &respSize,
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["max_request_size_mb"] != 10 {
+		t.Errorf("expected max_request_size_mb=10, got %v", gs["max_request_size_mb"])
+	}
+	if gs["max_response_size_mb"] != 25 {
+		t.Errorf("expected max_response_size_mb=25, got %v", gs["max_response_size_mb"])
+	}
+}
+
+func TestGenerateProxyConfig_IPAllowlistDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{
+		IPAllowlist: &litellmv1alpha1.IPAllowlistSpec{
+			Enabled:    false,
+			AllowedIPs: []string{"10.0.0.1"},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
+		if _, ok := gs["allowed_ips"]; ok {
+			t.Error("allowed_ips should not be present when IP allowlist is disabled")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_IPAllowlistWithExistingGeneralSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		ProxyBatchWriteAt: 10,
+	}
+	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{
+		IPAllowlist: &litellmv1alpha1.IPAllowlistSpec{
+			Enabled:    true,
+			AllowedIPs: []string{"10.0.0.1"},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["proxy_batch_write_at"] != 10 {
+		t.Errorf("expected proxy_batch_write_at=10, got %v", gs["proxy_batch_write_at"])
+	}
+	ips, ok := gs["allowed_ips"].([]string)
+	if !ok || len(ips) != 1 || ips[0] != "10.0.0.1" {
+		t.Errorf("expected allowed_ips=[10.0.0.1], got %v", gs["allowed_ips"])
+	}
+}
+
 func TestGenerateProxyConfig_CachingWithExistingSettings(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Callbacks = &litellmv1alpha1.CallbacksSpec{

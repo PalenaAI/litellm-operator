@@ -155,7 +155,33 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		buildCachingConfig(instance, config)
 	}
 
+	// IP allowlist (enterprise)
+	if instance.Spec.Security != nil && instance.Spec.Security.IPAllowlist != nil && instance.Spec.Security.IPAllowlist.Enabled {
+		buildIPAllowlistConfig(instance.Spec.Security.IPAllowlist, config)
+	}
+
 	return config
+}
+
+// buildIPAllowlistConfig writes IP allowlist settings into general_settings.
+func buildIPAllowlistConfig(ipAllowlist *litellmv1alpha1.IPAllowlistSpec, config map[string]interface{}) {
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		gs = map[string]interface{}{}
+		config["general_settings"] = gs
+	}
+
+	gs["allowed_ips"] = ipAllowlist.AllowedIPs
+
+	if ipAllowlist.UseXForwardedFor != nil && *ipAllowlist.UseXForwardedFor {
+		gs["use_x_forwarded_for"] = true
+	}
+	if ipAllowlist.MaxRequestSizeMB != nil {
+		gs["max_request_size_mb"] = *ipAllowlist.MaxRequestSizeMB
+	}
+	if ipAllowlist.MaxResponseSizeMB != nil {
+		gs["max_response_size_mb"] = *ipAllowlist.MaxResponseSizeMB
+	}
 }
 
 // buildCachingConfig writes cache settings into litellm_settings.

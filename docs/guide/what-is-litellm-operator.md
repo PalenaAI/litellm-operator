@@ -58,7 +58,7 @@ The Instance controller manages the full production stack:
 - ConfigMap with `proxy_server_config.yaml`
 - Service, Ingress, and OpenShift Route
 - HPA and PDB for availability
-- NetworkPolicy for security
+- NetworkPolicy and IP allowlisting for security
 - Database migration Jobs
 - SSO and SCIM configuration
 

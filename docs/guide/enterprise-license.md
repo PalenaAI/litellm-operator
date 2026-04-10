@@ -89,6 +89,13 @@ status:
 
 The operator does **not** requeue the resource in this case — the condition persists until the user creates a license Secret, which triggers reconciliation of the `LiteLLMInstance` and eventually the downstream resources.
 
+## Enterprise Features Supported by the Operator
+
+The following CRD fields configure LiteLLM Enterprise features and require an active license:
+
+- **IP allowlisting** — `spec.security.ipAllowlist` restricts API access to specific IPs/CIDRs
+- **Max request/response size** — `spec.security.ipAllowlist.maxRequestSizeMB` / `maxResponseSizeMB`
+
 ## Removing a License
 
 Delete the license Secret:

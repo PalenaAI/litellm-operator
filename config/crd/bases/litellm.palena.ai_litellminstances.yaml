@@ -1191,6 +1191,36 @@ spec:
               security:
                 description: Security settings.
                 properties:
+                  ipAllowlist:
+                    description: |-
+                      IP allowlist configuration (enterprise).
+                      Restricts API access to specific IP addresses or CIDR ranges.
+                    properties:
+                      allowedIPs:
+                        description: List of allowed IP addresses or CIDR ranges (e.g.
+                          "10.0.0.1", "192.168.1.0/24").
+                        items:
+                          type: string
+                        minItems: 1
+                        type: array
+                      enabled:
+                        description: Enable IP address filtering.
+                        type: boolean
+                      maxRequestSizeMB:
+                        description: Maximum request size in MB (enterprise).
+                        type: integer
+                      maxResponseSizeMB:
+                        description: Maximum response size in MB (enterprise).
+                        type: integer
+                      useXForwardedFor:
+                        description: |-
+                          Use X-Forwarded-For header for client IP detection.
+                          Enable when LiteLLM is behind a load balancer or reverse proxy.
+                        type: boolean
+                    required:
+                    - allowedIPs
+                    - enabled
+                    type: object
                   networkPolicy:
                     description: NetworkPolicy configuration.
                     properties:

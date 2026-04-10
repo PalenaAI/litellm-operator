@@ -111,6 +111,12 @@ spec:
       allowedNamespaces:
         - default
         - production
+    ipAllowlist:
+      enabled: true
+      allowedIPs:
+        - "10.0.0.0/8"
+        - "192.168.1.0/24"
+      useXForwardedFor: true
 
   generalSettings:
     masterKeyRequired: true
@@ -300,6 +306,25 @@ Response caching configuration. See the [Caching guide](/guide/caching) for deta
 | `url` | string | Qdrant server URL (required) |
 | `apiKeySecretRef` | *SecretKeyRef | Qdrant API key Secret reference |
 | `collectionName` | string | Collection name for cached embeddings |
+
+### `security`
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `networkPolicy.enabled` | bool | `false` | Enable NetworkPolicy |
+| `networkPolicy.allowedNamespaces` | []string | — | Namespaces allowed ingress access |
+| `runAsNonRoot` | *bool | — | Run as non-root user (OpenShift compatible) |
+| `ipAllowlist` | *IPAllowlistSpec | — | IP address filtering (enterprise) |
+
+**IPAllowlistSpec:**
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | bool | `false` | Enable IP address filtering |
+| `allowedIPs` | []string | — | Allowed IP addresses or CIDR ranges (required, min 1) |
+| `useXForwardedFor` | *bool | — | Use `X-Forwarded-For` header for client IP detection. Enable when behind a load balancer |
+| `maxRequestSizeMB` | *int | — | Maximum request body size in MB (enterprise) |
+| `maxResponseSizeMB` | *int | — | Maximum response body size in MB (enterprise) |
 
 ## Status Fields
 

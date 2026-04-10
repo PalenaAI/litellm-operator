@@ -543,6 +543,35 @@ type SecuritySpec struct {
 	// (runs as nobody, UID 65534) and applies a restricted security context.
 	// +optional
 	RunAsNonRoot *bool `json:"runAsNonRoot,omitempty"`
+
+	// IP allowlist configuration (enterprise).
+	// Restricts API access to specific IP addresses or CIDR ranges.
+	// +optional
+	IPAllowlist *IPAllowlistSpec `json:"ipAllowlist,omitempty"`
+}
+
+// IPAllowlistSpec defines IP address filtering configuration.
+// This is a LiteLLM enterprise feature.
+type IPAllowlistSpec struct {
+	// Enable IP address filtering.
+	Enabled bool `json:"enabled"`
+
+	// List of allowed IP addresses or CIDR ranges (e.g. "10.0.0.1", "192.168.1.0/24").
+	// +kubebuilder:validation:MinItems=1
+	AllowedIPs []string `json:"allowedIPs"`
+
+	// Use X-Forwarded-For header for client IP detection.
+	// Enable when LiteLLM is behind a load balancer or reverse proxy.
+	// +optional
+	UseXForwardedFor *bool `json:"useXForwardedFor,omitempty"`
+
+	// Maximum request size in MB (enterprise).
+	// +optional
+	MaxRequestSizeMB *int `json:"maxRequestSizeMB,omitempty"`
+
+	// Maximum response size in MB (enterprise).
+	// +optional
+	MaxResponseSizeMB *int `json:"maxResponseSizeMB,omitempty"`
 }
 
 // NetworkPolicySpec defines NetworkPolicy configuration.

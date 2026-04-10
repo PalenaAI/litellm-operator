@@ -54,7 +54,7 @@
 
 The most complex controller. It manages all Kubernetes infrastructure for a LiteLLM deployment:
 
-1. **ConfigMap** — generates `proxy_server_config.yaml` from general settings, router settings (including tag-based routing), fallback chains, retry policies, caching, SSO, and callback configuration
+1. **ConfigMap** — generates `proxy_server_config.yaml` from general settings (including IP allowlisting), router settings (including tag-based routing), fallback chains, retry policies, caching, SSO, and callback configuration
 2. **Secrets** — master key (auto-generated or from existing Secret), salt key, SSO client credentials
 3. **Migration Job** — runs database migrations before Deployment rollout
 4. **Deployment** — LiteLLM container with env vars, volumes, probes, security context
@@ -102,7 +102,8 @@ The operator uses the standard Kubernetes reconciliation pattern:
 - Operator runs with a dedicated ServiceAccount and scoped RBAC
 - LiteLLM pods run as **non-root** with a **read-only root filesystem**
 - Secrets (master key, salt key, provider API keys, license keys) are always read from Kubernetes Secrets via `secretKeyRef` — never stored as plaintext in CRDs or read into operator memory
-- NetworkPolicy restricts which namespaces can reach the LiteLLM service
+- NetworkPolicy restricts which namespaces can reach the LiteLLM service (network layer)
+- IP allowlisting restricts API access to specific IP addresses or CIDR ranges (application layer, enterprise)
 - Generated virtual keys are stored in Secrets with `ownerReferences` for automatic garbage collection
 
 ## Upgrade Strategy
