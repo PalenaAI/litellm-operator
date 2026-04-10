@@ -253,3 +253,240 @@ func TestGenerateProxyConfig_NoFallbacks(t *testing.T) {
 		t.Error("router_settings should not be present when no router settings set")
 	}
 }
+
+func TestGenerateProxyConfig_CachingDisabled(t *testing.T) {
+	instance := newTestInstance()
+	// No caching set at all
+
+	config := GenerateProxyConfig(instance)
+
+	if _, ok := config["litellm_settings"]; ok {
+		t.Error("litellm_settings should not be present when caching is not configured")
+	}
+}
+
+func TestGenerateProxyConfig_CachingEnabledFalse(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: false,
+		Type:    "redis",
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	if _, ok := config["litellm_settings"]; ok {
+		t.Error("litellm_settings should not be present when caching.enabled is false")
+	}
+}
+
+func TestGenerateProxyConfig_CachingRedis(t *testing.T) {
+	instance := newTestInstance()
+	ttl := 300
+	port := 6380
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled:            true,
+		Type:               "redis",
+		Namespace:          "my-ns",
+		TTL:                &ttl,
+		SupportedCallTypes: []string{"acompletion", "aembedding"},
+		Mode:               "default_off",
+		Redis: &litellmv1alpha1.CacheRedisSpec{
+			Host: "redis.example.com",
+			Port: &port,
+			PasswordSecretRef: &litellmv1alpha1.SecretKeyRef{
+				Name: "redis-secret",
+				Key:  "password",
+			},
+			SSL: true,
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	ls, ok := config["litellm_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected litellm_settings to be present")
+	}
+	if ls["cache"] != true {
+		t.Error("expected cache=true")
+	}
+	params, ok := ls["cache_params"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected cache_params to be present")
+	}
+	if params["type"] != "redis" {
+		t.Errorf("expected type=redis, got %v", params["type"])
+	}
+	if params["host"] != "redis.example.com" {
+		t.Errorf("expected host=redis.example.com, got %v", params["host"])
+	}
+	if params["port"] != 6380 {
+		t.Errorf("expected port=6380, got %v", params["port"])
+	}
+	if params["password"] != "os.environ/CACHE_REDIS_PASSWORD" {
+		t.Errorf("expected password env ref, got %v", params["password"])
+	}
+	if params["ssl"] != true {
+		t.Error("expected ssl=true")
+	}
+	if params["ttl"] != 300 {
+		t.Errorf("expected ttl=300, got %v", params["ttl"])
+	}
+	if params["namespace"] != "my-ns" {
+		t.Errorf("expected namespace=my-ns, got %v", params["namespace"])
+	}
+	callTypes, ok := params["supported_call_types"].([]string)
+	if !ok || len(callTypes) != 2 {
+		t.Fatalf("expected 2 supported_call_types, got %v", params["supported_call_types"])
+	}
+	if callTypes[0] != "acompletion" || callTypes[1] != "aembedding" {
+		t.Errorf("unexpected supported_call_types: %v", callTypes)
+	}
+	if params["mode"] != "default_off" {
+		t.Errorf("expected mode=default_off, got %v", params["mode"])
+	}
+}
+
+func TestGenerateProxyConfig_CachingRedisReusesInstanceRedis(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Redis = &litellmv1alpha1.RedisSpec{
+		Enabled: true,
+		Host:    "shared-redis.default.svc",
+		Port:    6379,
+		PasswordSecretRef: &litellmv1alpha1.SecretKeyRef{
+			Name: "redis-secret",
+			Key:  "password",
+		},
+	}
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: true,
+		Type:    "redis",
+		// No Redis block — should reuse instance Redis
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	params := ls["cache_params"].(map[string]interface{})
+
+	if params["host"] != "shared-redis.default.svc" {
+		t.Errorf("expected host from instance Redis, got %v", params["host"])
+	}
+	if params["port"] != 6379 {
+		t.Errorf("expected port from instance Redis, got %v", params["port"])
+	}
+	if params["password"] != "os.environ/REDIS_PASSWORD" {
+		t.Errorf("expected REDIS_PASSWORD env ref for reused Redis, got %v", params["password"])
+	}
+}
+
+func TestGenerateProxyConfig_CachingS3(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: true,
+		Type:    "s3",
+		S3: &litellmv1alpha1.CacheS3Spec{
+			BucketName: "my-cache-bucket",
+			Region:     "us-east-1",
+			CredentialsSecretRef: &litellmv1alpha1.SecretKeyRef{
+				Name: "aws-creds",
+				Key:  "credentials",
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	params := ls["cache_params"].(map[string]interface{})
+
+	if params["type"] != "s3" {
+		t.Errorf("expected type=s3, got %v", params["type"])
+	}
+	if params["s3_bucket_name"] != "my-cache-bucket" {
+		t.Errorf("expected s3_bucket_name=my-cache-bucket, got %v", params["s3_bucket_name"])
+	}
+	if params["s3_region_name"] != "us-east-1" {
+		t.Errorf("expected s3_region_name=us-east-1, got %v", params["s3_region_name"])
+	}
+	if params["s3_aws_access_key_id"] != "os.environ/CACHE_S3_ACCESS_KEY_ID" {
+		t.Errorf("expected s3 access key env ref, got %v", params["s3_aws_access_key_id"])
+	}
+}
+
+func TestGenerateProxyConfig_CachingQdrant(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: true,
+		Type:    "qdrant",
+		Qdrant: &litellmv1alpha1.CacheQdrantSpec{
+			URL:            "http://qdrant:6333",
+			CollectionName: "llm-cache",
+			APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{
+				Name: "qdrant-secret",
+				Key:  "api-key",
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	params := ls["cache_params"].(map[string]interface{})
+
+	if params["type"] != "qdrant" {
+		t.Errorf("expected type=qdrant, got %v", params["type"])
+	}
+	if params["qdrant_url"] != "http://qdrant:6333" {
+		t.Errorf("expected qdrant_url, got %v", params["qdrant_url"])
+	}
+	if params["qdrant_collection_name"] != "llm-cache" {
+		t.Errorf("expected qdrant_collection_name=llm-cache, got %v", params["qdrant_collection_name"])
+	}
+	if params["qdrant_api_key"] != "os.environ/CACHE_QDRANT_API_KEY" {
+		t.Errorf("expected qdrant api key env ref, got %v", params["qdrant_api_key"])
+	}
+}
+
+func TestGenerateProxyConfig_CachingLocal(t *testing.T) {
+	instance := newTestInstance()
+	ttl := 120
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: true,
+		Type:    "local",
+		TTL:     &ttl,
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	params := ls["cache_params"].(map[string]interface{})
+
+	if params["type"] != "local" {
+		t.Errorf("expected type=local, got %v", params["type"])
+	}
+	if params["ttl"] != 120 {
+		t.Errorf("expected ttl=120, got %v", params["ttl"])
+	}
+}
+
+func TestGenerateProxyConfig_CachingWithExistingSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Callbacks = &litellmv1alpha1.CallbacksSpec{
+		Types: []string{"langfuse"},
+	}
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: true,
+		Type:    "local",
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if _, ok := ls["success_callback"]; !ok {
+		t.Error("expected success_callback in litellm_settings")
+	}
+	if ls["cache"] != true {
+		t.Error("expected cache=true alongside callbacks")
+	}
+}

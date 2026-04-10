@@ -144,7 +144,123 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		ls["failure_callback"] = instance.Spec.Callbacks.Types
 	}
 
+	// Caching
+	if instance.Spec.Caching != nil && instance.Spec.Caching.Enabled {
+		buildCachingConfig(instance, config)
+	}
+
 	return config
+}
+
+// buildCachingConfig writes cache settings into litellm_settings.
+func buildCachingConfig(instance *litellmv1alpha1.LiteLLMInstance, config map[string]interface{}) {
+	ls, ok := config["litellm_settings"].(map[string]interface{})
+	if !ok {
+		ls = map[string]interface{}{}
+		config["litellm_settings"] = ls
+	}
+
+	ls["cache"] = true
+
+	caching := instance.Spec.Caching
+	params := map[string]interface{}{}
+
+	cacheType := caching.Type
+	if cacheType == "" {
+		cacheType = "redis"
+	}
+	params["type"] = cacheType
+
+	// Backend-specific config
+	switch cacheType {
+	case "redis", "redis-semantic":
+		buildRedisCacheParams(instance, params)
+	case "s3":
+		if caching.S3 != nil {
+			params["s3_bucket_name"] = caching.S3.BucketName
+			if caching.S3.Region != "" {
+				params["s3_region_name"] = caching.S3.Region
+			}
+			if caching.S3.CredentialsSecretRef != nil {
+				params["s3_aws_access_key_id"] = "os.environ/CACHE_S3_ACCESS_KEY_ID"
+				params["s3_aws_secret_access_key"] = "os.environ/CACHE_S3_SECRET_ACCESS_KEY"
+			}
+		}
+	case "gcs":
+		if caching.GCS != nil {
+			params["s3_bucket_name"] = caching.GCS.BucketName // LiteLLM reuses s3_bucket_name for GCS
+			if caching.GCS.CredentialsSecretRef != nil {
+				params["s3_aws_access_key_id"] = "os.environ/CACHE_GCS_SERVICE_ACCOUNT_JSON"
+			}
+		}
+	case "qdrant":
+		if caching.Qdrant != nil {
+			params["qdrant_semantic_cache_embedding_model"] = "text-embedding-ada-002"
+			params["qdrant_url"] = caching.Qdrant.URL
+			if caching.Qdrant.APIKeySecretRef != nil {
+				params["qdrant_api_key"] = "os.environ/CACHE_QDRANT_API_KEY"
+			}
+			if caching.Qdrant.CollectionName != "" {
+				params["qdrant_collection_name"] = caching.Qdrant.CollectionName
+			}
+		}
+	}
+
+	if caching.TTL != nil {
+		params["ttl"] = *caching.TTL
+	}
+	if caching.Namespace != "" {
+		params["namespace"] = caching.Namespace
+	}
+	if len(caching.SupportedCallTypes) > 0 {
+		params["supported_call_types"] = caching.SupportedCallTypes
+	}
+	if caching.Mode == "default_off" {
+		params["mode"] = "default_off"
+	}
+
+	ls["cache_params"] = params
+}
+
+// buildRedisCacheParams fills Redis-specific cache_params.
+// If caching.redis is empty, falls back to the instance's Redis config.
+func buildRedisCacheParams(instance *litellmv1alpha1.LiteLLMInstance, params map[string]interface{}) {
+	caching := instance.Spec.Caching
+
+	if caching.Redis != nil {
+		// Explicit cache Redis config
+		if caching.Redis.Host != "" {
+			params["host"] = caching.Redis.Host
+		}
+		if caching.Redis.Port != nil {
+			params["port"] = *caching.Redis.Port
+		}
+		if caching.Redis.PasswordSecretRef != nil {
+			params["password"] = "os.environ/CACHE_REDIS_PASSWORD"
+		}
+		if caching.Redis.SSL {
+			params["ssl"] = true
+		}
+		return
+	}
+
+	// Fall back to instance Redis config
+	if instance.Spec.Redis != nil && instance.Spec.Redis.Enabled {
+		redis := instance.Spec.Redis
+		if redis.Host != "" {
+			params["host"] = redis.Host
+			port := redis.Port
+			if port == 0 {
+				port = 6379
+			}
+			params["port"] = port
+			if redis.PasswordSecretRef != nil {
+				params["password"] = "os.environ/REDIS_PASSWORD"
+			}
+		}
+		// If using connectionSecretRef, Redis URL is set via env var;
+		// LiteLLM picks it up automatically — no need for host/port in cache_params.
+	}
 }
 
 // buildFallbackConfig writes fallback settings into litellm_settings and router_settings.

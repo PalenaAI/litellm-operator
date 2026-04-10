@@ -126,6 +126,10 @@ type LiteLLMInstanceSpec struct {
 	// SCIM v2 provisioning configuration.
 	// +optional
 	SCIM *SCIMSpec `json:"scim,omitempty"`
+
+	// Response caching configuration.
+	// +optional
+	Caching *CachingSpec `json:"caching,omitempty"`
 }
 
 // ImageSpec defines the container image for LiteLLM.
@@ -791,6 +795,109 @@ type DefaultTeamParams struct {
 	// RPM limit.
 	// +optional
 	RPMLimit *int `json:"rpmLimit,omitempty"`
+}
+
+// CachingSpec defines response caching configuration.
+type CachingSpec struct {
+	// Enable response caching.
+	Enabled bool `json:"enabled"`
+
+	// Cache backend type.
+	// +kubebuilder:validation:Enum=redis;s3;gcs;local;qdrant;redis-semantic
+	// +kubebuilder:default="redis"
+	Type string `json:"type,omitempty"`
+
+	// Redis cache configuration (when type is "redis" or "redis-semantic").
+	// +optional
+	Redis *CacheRedisSpec `json:"redis,omitempty"`
+
+	// S3 cache configuration (when type is "s3").
+	// +optional
+	S3 *CacheS3Spec `json:"s3,omitempty"`
+
+	// GCS cache configuration (when type is "gcs").
+	// +optional
+	GCS *CacheGCSSpec `json:"gcs,omitempty"`
+
+	// Qdrant semantic cache configuration (when type is "qdrant").
+	// +optional
+	Qdrant *CacheQdrantSpec `json:"qdrant,omitempty"`
+
+	// Cache TTL in seconds.
+	// +kubebuilder:default=600
+	// +optional
+	TTL *int `json:"ttl,omitempty"`
+
+	// Namespace for cache key isolation.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// Restrict caching to specific call types.
+	// +optional
+	SupportedCallTypes []string `json:"supportedCallTypes,omitempty"`
+
+	// Cache mode: "default_on" (cache everything) or "default_off" (require explicit opt-in).
+	// +kubebuilder:validation:Enum=default_on;default_off
+	// +kubebuilder:default="default_on"
+	// +optional
+	Mode string `json:"mode,omitempty"`
+}
+
+// CacheRedisSpec defines Redis cache backend configuration.
+type CacheRedisSpec struct {
+	// Redis host. If empty, uses the instance's Redis config.
+	// +optional
+	Host string `json:"host,omitempty"`
+
+	// Redis port.
+	// +optional
+	Port *int `json:"port,omitempty"`
+
+	// Reference to Secret containing the Redis password.
+	// +optional
+	PasswordSecretRef *SecretKeyRef `json:"passwordSecretRef,omitempty"`
+
+	// Enable SSL/TLS.
+	// +optional
+	SSL bool `json:"ssl,omitempty"`
+}
+
+// CacheS3Spec defines S3 cache backend configuration.
+type CacheS3Spec struct {
+	// S3 bucket name.
+	BucketName string `json:"bucketName"`
+
+	// AWS region.
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// Reference to Secret containing AWS credentials.
+	// +optional
+	CredentialsSecretRef *SecretKeyRef `json:"credentialsSecretRef,omitempty"`
+}
+
+// CacheGCSSpec defines GCS cache backend configuration.
+type CacheGCSSpec struct {
+	// GCS bucket name.
+	BucketName string `json:"bucketName"`
+
+	// Reference to Secret containing GCS service account JSON.
+	// +optional
+	CredentialsSecretRef *SecretKeyRef `json:"credentialsSecretRef,omitempty"`
+}
+
+// CacheQdrantSpec defines Qdrant semantic cache backend configuration.
+type CacheQdrantSpec struct {
+	// Qdrant server URL.
+	URL string `json:"url"`
+
+	// Reference to Secret containing Qdrant API key.
+	// +optional
+	APIKeySecretRef *SecretKeyRef `json:"apiKeySecretRef,omitempty"`
+
+	// Collection name for cached embeddings.
+	// +optional
+	CollectionName string `json:"collectionName,omitempty"`
 }
 
 // SCIMSpec defines SCIM v2 provisioning configuration.

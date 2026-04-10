@@ -355,6 +355,9 @@ func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName s
 		}
 	}
 
+	// Caching env vars
+	vars = append(vars, cachingEnvVars(instance)...)
+
 	// Callbacks env vars
 	if instance.Spec.Callbacks != nil {
 		vars = append(vars, instance.Spec.Callbacks.EnvVars...)
@@ -539,6 +542,82 @@ func startupFailureThreshold(instance *litellmv1alpha1.LiteLLMInstance) int32 {
 		return instance.Spec.HealthCheck.StartupFailureThreshold
 	}
 	return 30
+}
+
+func cachingEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
+	caching := instance.Spec.Caching
+	if caching == nil || !caching.Enabled {
+		return nil
+	}
+
+	var vars []corev1.EnvVar
+
+	cacheType := caching.Type
+	if cacheType == "" {
+		cacheType = "redis"
+	}
+
+	switch cacheType {
+	case "redis", "redis-semantic":
+		if caching.Redis != nil && caching.Redis.PasswordSecretRef != nil {
+			vars = append(vars, corev1.EnvVar{
+				Name: "CACHE_REDIS_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: caching.Redis.PasswordSecretRef.Name},
+						Key:                  caching.Redis.PasswordSecretRef.Key,
+					},
+				},
+			})
+		}
+	case "s3":
+		if caching.S3 != nil && caching.S3.CredentialsSecretRef != nil {
+			vars = append(vars, corev1.EnvVar{
+				Name: "CACHE_S3_ACCESS_KEY_ID",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: caching.S3.CredentialsSecretRef.Name},
+						Key:                  "aws_access_key_id",
+					},
+				},
+			})
+			vars = append(vars, corev1.EnvVar{
+				Name: "CACHE_S3_SECRET_ACCESS_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: caching.S3.CredentialsSecretRef.Name},
+						Key:                  "aws_secret_access_key",
+					},
+				},
+			})
+		}
+	case "gcs":
+		if caching.GCS != nil && caching.GCS.CredentialsSecretRef != nil {
+			vars = append(vars, corev1.EnvVar{
+				Name: "CACHE_GCS_SERVICE_ACCOUNT_JSON",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: caching.GCS.CredentialsSecretRef.Name},
+						Key:                  caching.GCS.CredentialsSecretRef.Key,
+					},
+				},
+			})
+		}
+	case "qdrant":
+		if caching.Qdrant != nil && caching.Qdrant.APIKeySecretRef != nil {
+			vars = append(vars, corev1.EnvVar{
+				Name: "CACHE_QDRANT_API_KEY",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: caching.Qdrant.APIKeySecretRef.Name},
+						Key:                  caching.Qdrant.APIKeySecretRef.Key,
+					},
+				},
+			})
+		}
+	}
+
+	return vars
 }
 
 func boolPtr(b bool) *bool    { return &b }

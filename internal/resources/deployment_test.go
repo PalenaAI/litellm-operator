@@ -102,3 +102,117 @@ func TestBuildDeployment_LicenseSecretChangesTemplate(t *testing.T) {
 		t.Errorf("expected env var count to differ by 1, got without=%d with=%d", envCountWithout, envCountWith)
 	}
 }
+
+func TestBuildDeployment_CachingDisabled(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "")
+
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "CACHE_REDIS_PASSWORD" || env.Name == "CACHE_S3_ACCESS_KEY_ID" || env.Name == "CACHE_QDRANT_API_KEY" {
+			t.Errorf("cache env var %s should not be present when caching is disabled", env.Name)
+		}
+	}
+}
+
+func TestBuildDeployment_CachingRedisPassword(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: true,
+		Type:    "redis",
+		Redis: &litellmv1alpha1.CacheRedisSpec{
+			Host: "redis.example.com",
+			PasswordSecretRef: &litellmv1alpha1.SecretKeyRef{
+				Name: "cache-redis-secret",
+				Key:  "password",
+			},
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "")
+
+	found := false
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "CACHE_REDIS_PASSWORD" {
+			found = true
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				t.Fatal("CACHE_REDIS_PASSWORD should use secretKeyRef")
+			}
+			if env.ValueFrom.SecretKeyRef.Name != "cache-redis-secret" {
+				t.Errorf("expected secret name 'cache-redis-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
+			}
+			if env.ValueFrom.SecretKeyRef.Key != "password" {
+				t.Errorf("expected secret key 'password', got %q", env.ValueFrom.SecretKeyRef.Key)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("CACHE_REDIS_PASSWORD env var not found")
+	}
+}
+
+func TestBuildDeployment_CachingS3Credentials(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: true,
+		Type:    "s3",
+		S3: &litellmv1alpha1.CacheS3Spec{
+			BucketName: "my-bucket",
+			CredentialsSecretRef: &litellmv1alpha1.SecretKeyRef{
+				Name: "aws-creds",
+				Key:  "credentials",
+			},
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "")
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+			envMap[env.Name] = env.ValueFrom.SecretKeyRef.Name
+		}
+	}
+	if envMap["CACHE_S3_ACCESS_KEY_ID"] != "aws-creds" {
+		t.Error("CACHE_S3_ACCESS_KEY_ID not found or wrong secret")
+	}
+	if envMap["CACHE_S3_SECRET_ACCESS_KEY"] != "aws-creds" {
+		t.Error("CACHE_S3_SECRET_ACCESS_KEY not found or wrong secret")
+	}
+}
+
+func TestBuildDeployment_CachingQdrantAPIKey(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
+		Enabled: true,
+		Type:    "qdrant",
+		Qdrant: &litellmv1alpha1.CacheQdrantSpec{
+			URL: "http://qdrant:6333",
+			APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{
+				Name: "qdrant-secret",
+				Key:  "api-key",
+			},
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "")
+
+	found := false
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "CACHE_QDRANT_API_KEY" {
+			found = true
+			if env.ValueFrom.SecretKeyRef.Name != "qdrant-secret" {
+				t.Errorf("expected secret name 'qdrant-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("CACHE_QDRANT_API_KEY env var not found")
+	}
+}

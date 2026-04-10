@@ -18,6 +18,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **CloudNativePG backup/restore** — scheduled backups via CNPG `ScheduledBackup` CRs with configurable schedule, retention, and method
 - **Enterprise license activation** — convention-based license Secret detection (`{instance}-license` or `litellm-license`) with automatic `LITELLM_LICENSE` env var injection
 - **Auto-rollback** — automatically rolls back failed deployments when `spec.upgrade.autoRollback: true`
+- **Response caching** — 6 cache backends (Redis, S3, GCS, Qdrant semantic, Redis semantic, local) with TTL, namespace isolation, call-type filtering, and default-off mode
 - **Fallback chains** — default fallbacks, per-model fallbacks, content policy fallbacks, context window fallbacks, and per-error-type retry policies
 - **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
 - **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
@@ -278,6 +279,39 @@ spec:
         RateLimitError: 0
   # ... rest of spec
 ```
+
+### Response Caching
+
+Configure response caching to reduce latency and costs:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  caching:
+    enabled: true
+    type: redis             # redis, redis-semantic, s3, gcs, qdrant, local
+    ttl: 600                # cache TTL in seconds
+    namespace: "my-app"     # key isolation namespace
+    mode: default_on        # default_on or default_off
+    supportedCallTypes:     # restrict to specific call types
+      - acompletion
+      - aembedding
+    redis:
+      host: redis.example.com
+      port: 6379
+      passwordSecretRef:
+        name: redis-secret
+        key: password
+      ssl: true
+  # ... rest of spec
+```
+
+When `type: redis` and no `caching.redis` block is provided, the operator reuses the instance's existing `spec.redis` connection — no need to duplicate Redis details.
+
+Other backends: `s3` (with bucket, region, AWS credentials), `gcs` (with bucket, GCS service account), `qdrant` (semantic caching with embeddings), `local` (in-memory, no external dependencies).
 
 ### Auto-Rollback
 

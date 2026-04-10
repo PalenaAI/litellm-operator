@@ -86,6 +86,13 @@ spec:
     conflictResolution: crd-wins
     auditChanges: true
 
+  caching:
+    enabled: true
+    type: redis
+    ttl: 600
+    namespace: "prod"
+    mode: default_on
+
   resources:
     requests:
       cpu: 500m
@@ -111,6 +118,25 @@ spec:
   routerSettings:
     routingStrategy: least-busy
     numRetries: 3
+    retryPolicy:
+      TimeoutError: 2
+      RateLimitError: 3
+    modelGroupRetryPolicy:
+      gpt-4:
+        TimeoutError: 1
+
+  fallbacks:
+    defaultFallbacks: ["gpt-4-mini", "claude-3-haiku"]
+    modelFallbacks:
+      - model: gpt-4
+        fallbacks: ["gpt-4-mini", "claude-3-haiku"]
+    contentPolicyFallbacks:
+      - model: gpt-4
+        fallbacks: ["claude-3-sonnet"]
+    contextWindowFallbacks:
+      - model: gpt-4
+        fallbacks: ["gpt-4-32k", "claude-3-sonnet"]
+    maxFallbacks: 3
 ```
 
 ## Spec Fields
@@ -201,6 +227,76 @@ spec:
 | `numRetries` | *int | — | Number of retries |
 | `timeout` | *int | — | Timeout in seconds |
 | `cooldownTime` | *int | — | Cooldown time in seconds |
+| `retryPolicy` | map[string]int | — | Per-error-type retry counts (e.g., `TimeoutError: 2`, `RateLimitError: 3`) |
+| `modelGroupRetryPolicy` | map[string]map[string]int | — | Per-model-group retry overrides (e.g., `gpt-4: {TimeoutError: 1}`) |
+
+### `fallbacks`
+
+Configure model fallback chains. Fallback model names must match `model_name` values from your `LiteLLMModel` resources.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `defaultFallbacks` | []string | — | Global fallback models applied on any error |
+| `modelFallbacks` | []ModelFallbackEntry | — | Per-model fallback chains for general errors |
+| `contentPolicyFallbacks` | []ModelFallbackEntry | — | Fallbacks for content policy violations |
+| `contextWindowFallbacks` | []ModelFallbackEntry | — | Fallbacks for context window exceeded errors |
+| `maxFallbacks` | *int | `3` | Maximum number of fallback attempts |
+
+**ModelFallbackEntry:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `model` | string | Primary model name |
+| `fallbacks` | []string | Ordered list of fallback model names |
+
+### `caching`
+
+Response caching configuration. See the [Caching guide](/guide/caching) for detailed examples.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | bool | `false` | Enable response caching |
+| `type` | string | `redis` | Cache backend: `redis`, `redis-semantic`, `s3`, `gcs`, `qdrant`, `local` |
+| `ttl` | *int | `600` | Cache TTL in seconds |
+| `namespace` | string | — | Cache key namespace for isolation |
+| `supportedCallTypes` | []string | — | Restrict caching to specific call types |
+| `mode` | string | `default_on` | `default_on` (cache all) or `default_off` (require opt-in) |
+| `redis` | *CacheRedisSpec | — | Redis-specific config (omit to reuse `spec.redis`) |
+| `s3` | *CacheS3Spec | — | S3 backend config |
+| `gcs` | *CacheGCSSpec | — | GCS backend config |
+| `qdrant` | *CacheQdrantSpec | — | Qdrant semantic cache config |
+
+**CacheRedisSpec:**
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `host` | string | — | Redis host |
+| `port` | *int | — | Redis port |
+| `passwordSecretRef` | *SecretKeyRef | — | Redis password Secret reference |
+| `ssl` | bool | `false` | Enable SSL/TLS |
+
+**CacheS3Spec:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `bucketName` | string | S3 bucket name (required) |
+| `region` | string | AWS region |
+| `credentialsSecretRef` | *SecretKeyRef | Secret with `aws_access_key_id` and `aws_secret_access_key` keys |
+
+**CacheGCSSpec:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `bucketName` | string | GCS bucket name (required) |
+| `credentialsSecretRef` | *SecretKeyRef | Secret with GCS service account JSON |
+
+**CacheQdrantSpec:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `url` | string | Qdrant server URL (required) |
+| `apiKeySecretRef` | *SecretKeyRef | Qdrant API key Secret reference |
+| `collectionName` | string | Collection name for cached embeddings |
 
 ## Status Fields
 
