@@ -776,12 +776,29 @@ spec:
                   allowUserAuth:
                     description: Allow requests with no key.
                     type: boolean
+                  budgetDuration:
+                    description: Global budget reset duration (e.g., "1d", "7d", "30d").
+                    type: string
+                  budgetReschedulerMaxTime:
+                    description: Maximum interval in seconds between budget reset
+                      checks.
+                    type: integer
+                  budgetReschedulerMinTime:
+                    description: Minimum interval in seconds between budget reset
+                      checks.
+                    type: integer
                   customKeyGenerate:
                     description: Custom key generation function.
                     type: string
+                  globalMaxParallelRequests:
+                    description: Maximum parallel requests across the entire proxy.
+                    type: integer
                   masterKeyRequired:
                     description: Enable/disable master key requirement.
                     type: boolean
+                  maxBudget:
+                    description: Global proxy budget in USD.
+                    type: string
                   proxyBatchWriteAt:
                     description: Batch write interval in seconds.
                     type: integer
@@ -1179,6 +1196,9 @@ spec:
                   cooldownTime:
                     description: Cooldown time in seconds.
                     type: integer
+                  defaultMaxParallelRequests:
+                    description: Default max parallel requests per model deployment.
+                    type: integer
                   enableTagFiltering:
                     description: |-
                       Enable tag-based routing. When enabled, requests with matching tags
@@ -1194,6 +1214,24 @@ spec:
                   numRetries:
                     description: Number of retries.
                     type: integer
+                  providerBudgetConfig:
+                    additionalProperties:
+                      description: ProviderBudget defines a spending limit for a single
+                        LLM provider.
+                      properties:
+                        budgetLimit:
+                          description: Budget limit in USD.
+                          type: string
+                        timePeriod:
+                          description: Time period for the budget (e.g., "1d", "7d",
+                            "30d").
+                          type: string
+                      required:
+                      - budgetLimit
+                      - timePeriod
+                      type: object
+                    description: Per-provider budget limits.
+                    type: object
                   retryAfter:
                     description: Retry after seconds.
                     type: integer

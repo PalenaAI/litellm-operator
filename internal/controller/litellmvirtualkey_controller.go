@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -126,16 +127,18 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 	if vk.Status.LiteLLMKeyToken == "" {
 		// Generate key
 		req := litellm.KeyGenerateRequest{
-			KeyAlias:       vk.Spec.KeyAlias,
-			TeamID:         teamID,
-			UserID:         userID,
-			Models:         vk.Spec.Models,
-			MaxBudget:      vk.Spec.MaxBudget,
-			BudgetDuration: vk.Spec.BudgetDuration,
-			ExpiresAt:      vk.Spec.ExpiresAt,
-			TPMLimit:       vk.Spec.TPMLimit,
-			RPMLimit:       vk.Spec.RPMLimit,
-			Metadata:       vk.Spec.Metadata,
+			KeyAlias:            vk.Spec.KeyAlias,
+			TeamID:              teamID,
+			UserID:              userID,
+			Models:              vk.Spec.Models,
+			MaxBudget:           vk.Spec.MaxBudget,
+			BudgetDuration:      vk.Spec.BudgetDuration,
+			ExpiresAt:           vk.Spec.ExpiresAt,
+			TPMLimit:            vk.Spec.TPMLimit,
+			RPMLimit:            vk.Spec.RPMLimit,
+			Metadata:            vk.Spec.Metadata,
+			ModelMaxBudget:      parseModelMaxBudget(vk.Spec.ModelMaxBudget),
+			MaxParallelRequests: vk.Spec.MaxParallelRequests,
 		}
 
 		resp, err := apiClient.Keys().Generate(ctx, req)
@@ -203,13 +206,15 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 		currentHash := computeSpecHash(vk.Spec)
 		if vk.Annotations[AnnotationSyncHash] != currentHash {
 			req := litellm.KeyUpdateRequest{
-				Token:          vk.Status.LiteLLMKeyToken,
-				Models:         vk.Spec.Models,
-				MaxBudget:      vk.Spec.MaxBudget,
-				BudgetDuration: vk.Spec.BudgetDuration,
-				TPMLimit:       vk.Spec.TPMLimit,
-				RPMLimit:       vk.Spec.RPMLimit,
-				Metadata:       vk.Spec.Metadata,
+				Token:               vk.Status.LiteLLMKeyToken,
+				Models:              vk.Spec.Models,
+				MaxBudget:           vk.Spec.MaxBudget,
+				BudgetDuration:      vk.Spec.BudgetDuration,
+				TPMLimit:            vk.Spec.TPMLimit,
+				RPMLimit:            vk.Spec.RPMLimit,
+				Metadata:            vk.Spec.Metadata,
+				ModelMaxBudget:      parseModelMaxBudget(vk.Spec.ModelMaxBudget),
+				MaxParallelRequests: vk.Spec.MaxParallelRequests,
 			}
 			if err := apiClient.Keys().Update(ctx, req); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update key: %w", err)
@@ -280,6 +285,23 @@ func (r *LiteLLMVirtualKeyReconciler) handleDeletion(ctx context.Context, vk *li
 	}
 	controllerutil.RemoveFinalizer(vk, FinalizerName)
 	return ctrl.Result{}, r.Update(ctx, vk)
+}
+
+// parseModelMaxBudget converts CRD string-valued budget map to float64 for the API.
+func parseModelMaxBudget(budgets map[string]string) map[string]float64 {
+	if len(budgets) == 0 {
+		return nil
+	}
+	result := make(map[string]float64, len(budgets))
+	for model, val := range budgets {
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			result[model] = f
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // SetupWithManager sets up the controller with the Manager.

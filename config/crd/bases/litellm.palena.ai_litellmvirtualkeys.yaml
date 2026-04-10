@@ -81,10 +81,20 @@ spec:
               maxBudget:
                 description: Maximum budget in USD.
                 type: string
+              maxParallelRequests:
+                description: Maximum concurrent requests for this key.
+                type: integer
               metadata:
                 additionalProperties:
                   type: string
                 description: Custom metadata.
+                type: object
+              modelMaxBudget:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Per-model spending limits for this key (enterprise).
+                  Key: model name, Value: max budget in USD.
                 type: object
               models:
                 description: Models this key can access.

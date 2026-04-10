@@ -35,17 +35,18 @@ type TeamService interface {
 
 // TeamCreateRequest is the request to create a team.
 type TeamCreateRequest struct {
-	TeamAlias          string            `json:"team_alias"`
-	Models             []string          `json:"models,omitempty"`
-	MaxBudget          *float64          `json:"max_budget,omitempty"`
-	BudgetDuration     string            `json:"budget_duration,omitempty"`
-	TPMLimit           *int              `json:"tpm_limit,omitempty"`
-	RPMLimit           *int              `json:"rpm_limit,omitempty"`
-	TeamMemberRPMLimit *int              `json:"team_member_rpm_limit,omitempty"`
-	TeamMemberTPMLimit *int              `json:"team_member_tpm_limit,omitempty"`
-	Metadata           map[string]string `json:"metadata,omitempty"`
-	Members            []MemberRequest   `json:"members_with_roles,omitempty"`
-	Tags               []string          `json:"tags,omitempty"`
+	TeamAlias           string            `json:"team_alias"`
+	Models              []string          `json:"models,omitempty"`
+	MaxBudget           *float64          `json:"max_budget,omitempty"`
+	BudgetDuration      string            `json:"budget_duration,omitempty"`
+	TPMLimit            *int              `json:"tpm_limit,omitempty"`
+	RPMLimit            *int              `json:"rpm_limit,omitempty"`
+	TeamMemberRPMLimit  *int              `json:"team_member_rpm_limit,omitempty"`
+	TeamMemberTPMLimit  *int              `json:"team_member_tpm_limit,omitempty"`
+	MaxParallelRequests *int              `json:"max_parallel_requests,omitempty"`
+	Metadata            map[string]string `json:"metadata,omitempty"`
+	Members             []MemberRequest   `json:"members_with_roles,omitempty"`
+	Tags                []string          `json:"tags,omitempty"`
 }
 
 // MemberRequest defines a member to add to a team.
@@ -62,15 +63,16 @@ type TeamCreateResponse struct {
 
 // TeamUpdateRequest is the request to update a team.
 type TeamUpdateRequest struct {
-	TeamID         string            `json:"team_id"`
-	TeamAlias      string            `json:"team_alias,omitempty"`
-	Models         []string          `json:"models,omitempty"`
-	MaxBudget      *float64          `json:"max_budget,omitempty"`
-	BudgetDuration string            `json:"budget_duration,omitempty"`
-	TPMLimit       *int              `json:"tpm_limit,omitempty"`
-	RPMLimit       *int              `json:"rpm_limit,omitempty"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
-	Tags           []string          `json:"tags,omitempty"`
+	TeamID              string            `json:"team_id"`
+	TeamAlias           string            `json:"team_alias,omitempty"`
+	Models              []string          `json:"models,omitempty"`
+	MaxBudget           *float64          `json:"max_budget,omitempty"`
+	BudgetDuration      string            `json:"budget_duration,omitempty"`
+	TPMLimit            *int              `json:"tpm_limit,omitempty"`
+	RPMLimit            *int              `json:"rpm_limit,omitempty"`
+	MaxParallelRequests *int              `json:"max_parallel_requests,omitempty"`
+	Metadata            map[string]string `json:"metadata,omitempty"`
+	Tags                []string          `json:"tags,omitempty"`
 }
 
 // TeamInfo is the response from getting team info.

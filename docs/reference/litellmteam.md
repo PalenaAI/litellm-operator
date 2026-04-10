@@ -48,6 +48,7 @@ spec:
 | `teamMemberTpmLimit` | *int | No | — | Per-member TPM limit |
 | `metadata` | map[string]string | No | — | Custom metadata |
 | `tags` | []string | No | — | Tags for tag-based routing (keys inherit these tags) |
+| `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this team |
 | `memberManagement` | string | No | `mixed` | `crd`, `sso`, or `mixed` |
 | `members` | []TeamMember | No | — | Team members list |
 

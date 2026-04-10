@@ -112,16 +112,17 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 
 	if team.Status.LiteLLMTeamID == "" {
 		req := litellm.TeamCreateRequest{
-			TeamAlias:          team.Spec.TeamAlias,
-			Models:             team.Spec.Models,
-			MaxBudget:          team.Spec.MaxBudgetMonthly,
-			BudgetDuration:     team.Spec.BudgetDuration,
-			TPMLimit:           team.Spec.TPMLimit,
-			RPMLimit:           team.Spec.RPMLimit,
-			TeamMemberRPMLimit: team.Spec.TeamMemberRPMLimit,
-			TeamMemberTPMLimit: team.Spec.TeamMemberTPMLimit,
-			Metadata:           team.Spec.Metadata,
-			Tags:               team.Spec.Tags,
+			TeamAlias:           team.Spec.TeamAlias,
+			Models:              team.Spec.Models,
+			MaxBudget:           team.Spec.MaxBudgetMonthly,
+			BudgetDuration:      team.Spec.BudgetDuration,
+			TPMLimit:            team.Spec.TPMLimit,
+			RPMLimit:            team.Spec.RPMLimit,
+			TeamMemberRPMLimit:  team.Spec.TeamMemberRPMLimit,
+			TeamMemberTPMLimit:  team.Spec.TeamMemberTPMLimit,
+			MaxParallelRequests: team.Spec.MaxParallelRequests,
+			Metadata:            team.Spec.Metadata,
+			Tags:                team.Spec.Tags,
 		}
 		resp, err := apiClient.Teams().Create(ctx, req)
 		if err != nil {
@@ -144,15 +145,16 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 		currentHash := computeSpecHash(team.Spec)
 		if team.Annotations[AnnotationSyncHash] != currentHash {
 			req := litellm.TeamUpdateRequest{
-				TeamID:         team.Status.LiteLLMTeamID,
-				TeamAlias:      team.Spec.TeamAlias,
-				Models:         team.Spec.Models,
-				MaxBudget:      team.Spec.MaxBudgetMonthly,
-				BudgetDuration: team.Spec.BudgetDuration,
-				TPMLimit:       team.Spec.TPMLimit,
-				RPMLimit:       team.Spec.RPMLimit,
-				Metadata:       team.Spec.Metadata,
-				Tags:           team.Spec.Tags,
+				TeamID:              team.Status.LiteLLMTeamID,
+				TeamAlias:           team.Spec.TeamAlias,
+				Models:              team.Spec.Models,
+				MaxBudget:           team.Spec.MaxBudgetMonthly,
+				BudgetDuration:      team.Spec.BudgetDuration,
+				TPMLimit:            team.Spec.TPMLimit,
+				RPMLimit:            team.Spec.RPMLimit,
+				MaxParallelRequests: team.Spec.MaxParallelRequests,
+				Metadata:            team.Spec.Metadata,
+				Tags:                team.Spec.Tags,
 			}
 			if err := apiClient.Teams().Update(ctx, req); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update team: %w", err)

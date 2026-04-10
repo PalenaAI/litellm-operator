@@ -879,3 +879,170 @@ func TestGenerateProxyConfig_CachingWithExistingSettings(t *testing.T) {
 		t.Error("expected cache=true alongside callbacks")
 	}
 }
+
+func strPtr(s string) *string { return &s }
+
+func TestGenerateProxyConfig_GlobalBudget(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		MaxBudget:      strPtr("10000.00"),
+		BudgetDuration: "30d",
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["max_budget"] != "10000.00" {
+		t.Errorf("expected max_budget=10000.00, got %v", gs["max_budget"])
+	}
+	if gs["budget_duration"] != "30d" {
+		t.Errorf("expected budget_duration=30d, got %v", gs["budget_duration"])
+	}
+}
+
+func TestGenerateProxyConfig_GlobalMaxParallelRequests(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		GlobalMaxParallelRequests: intPtr(100),
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["global_max_parallel_requests"] != 100 {
+		t.Errorf("expected global_max_parallel_requests=100, got %v", gs["global_max_parallel_requests"])
+	}
+}
+
+func TestGenerateProxyConfig_BudgetRescheduler(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		BudgetReschedulerMinTime: intPtr(300),
+		BudgetReschedulerMaxTime: intPtr(600),
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["proxy_budget_rescheduler_min_time"] != 300 {
+		t.Errorf("expected proxy_budget_rescheduler_min_time=300, got %v", gs["proxy_budget_rescheduler_min_time"])
+	}
+	if gs["proxy_budget_rescheduler_max_time"] != 600 {
+		t.Errorf("expected proxy_budget_rescheduler_max_time=600, got %v", gs["proxy_budget_rescheduler_max_time"])
+	}
+}
+
+func TestGenerateProxyConfig_DefaultMaxParallelRequests(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{
+		DefaultMaxParallelRequests: intPtr(10),
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	rs, ok := config["router_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected router_settings to be present")
+	}
+	if rs["default_max_parallel_requests"] != 10 {
+		t.Errorf("expected default_max_parallel_requests=10, got %v", rs["default_max_parallel_requests"])
+	}
+}
+
+func TestGenerateProxyConfig_ProviderBudgetConfig(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{
+		ProviderBudgetConfig: map[string]litellmv1alpha1.ProviderBudget{
+			"openai": {
+				BudgetLimit: "500.00",
+				TimePeriod:  "1d",
+			},
+			"anthropic": {
+				BudgetLimit: "300.00",
+				TimePeriod:  "1d",
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	rs, ok := config["router_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected router_settings to be present")
+	}
+	pbc, ok := rs["provider_budget_config"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected provider_budget_config to be present")
+	}
+	openai, ok := pbc["openai"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected openai entry in provider_budget_config")
+	}
+	if openai["budget_limit"] != "500.00" {
+		t.Errorf("expected openai budget_limit=500.00, got %v", openai["budget_limit"])
+	}
+	if openai["time_period"] != "1d" {
+		t.Errorf("expected openai time_period=1d, got %v", openai["time_period"])
+	}
+	anthropic, ok := pbc["anthropic"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected anthropic entry in provider_budget_config")
+	}
+	if anthropic["budget_limit"] != "300.00" {
+		t.Errorf("expected anthropic budget_limit=300.00, got %v", anthropic["budget_limit"])
+	}
+}
+
+func TestGenerateProxyConfig_AllBudgetSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		MaxBudget:                 strPtr("5000.00"),
+		BudgetDuration:            "7d",
+		GlobalMaxParallelRequests: intPtr(50),
+		BudgetReschedulerMinTime:  intPtr(120),
+		BudgetReschedulerMaxTime:  intPtr(300),
+	}
+	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{
+		DefaultMaxParallelRequests: intPtr(5),
+		ProviderBudgetConfig: map[string]litellmv1alpha1.ProviderBudget{
+			"openai": {BudgetLimit: "1000.00", TimePeriod: "7d"},
+		},
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["max_budget"] != "5000.00" {
+		t.Errorf("expected max_budget=5000.00, got %v", gs["max_budget"])
+	}
+	if gs["budget_duration"] != "7d" {
+		t.Errorf("expected budget_duration=7d, got %v", gs["budget_duration"])
+	}
+	if gs["global_max_parallel_requests"] != 50 {
+		t.Errorf("expected global_max_parallel_requests=50, got %v", gs["global_max_parallel_requests"])
+	}
+	if gs["proxy_budget_rescheduler_min_time"] != 120 {
+		t.Errorf("expected proxy_budget_rescheduler_min_time=120, got %v", gs["proxy_budget_rescheduler_min_time"])
+	}
+	if gs["proxy_budget_rescheduler_max_time"] != 300 {
+		t.Errorf("expected proxy_budget_rescheduler_max_time=300, got %v", gs["proxy_budget_rescheduler_max_time"])
+	}
+
+	rs := config["router_settings"].(map[string]interface{})
+	if rs["default_max_parallel_requests"] != 5 {
+		t.Errorf("expected default_max_parallel_requests=5, got %v", rs["default_max_parallel_requests"])
+	}
+	pbc := rs["provider_budget_config"].(map[string]interface{})
+	if _, ok := pbc["openai"]; !ok {
+		t.Error("expected openai in provider_budget_config")
+	}
+}

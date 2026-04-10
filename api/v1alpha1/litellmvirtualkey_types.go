@@ -64,6 +64,15 @@ type LiteLLMVirtualKeySpec struct {
 	// +optional
 	Metadata map[string]string `json:"metadata,omitempty"`
 
+	// Per-model spending limits for this key (enterprise).
+	// Key: model name, Value: max budget in USD.
+	// +optional
+	ModelMaxBudget map[string]string `json:"modelMaxBudget,omitempty"`
+
+	// Maximum concurrent requests for this key.
+	// +optional
+	MaxParallelRequests *int `json:"maxParallelRequests,omitempty"`
+
 	// Name for the Secret that stores the generated API key.
 	// Defaults to "{name}-key".
 	// +optional

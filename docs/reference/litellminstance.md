@@ -120,17 +120,30 @@ spec:
 
   generalSettings:
     masterKeyRequired: true
+    maxBudget: "10000.00"
+    budgetDuration: "30d"
+    globalMaxParallelRequests: 100
+    budgetReschedulerMinTime: 300
+    budgetReschedulerMaxTime: 600
 
   routerSettings:
     routingStrategy: least-busy
     numRetries: 3
     enableTagFiltering: true
+    defaultMaxParallelRequests: 10
     retryPolicy:
       TimeoutError: 2
       RateLimitError: 3
     modelGroupRetryPolicy:
       gpt-4:
         TimeoutError: 1
+    providerBudgetConfig:
+      openai:
+        budgetLimit: "500.00"
+        timePeriod: "1d"
+      anthropic:
+        budgetLimit: "300.00"
+        timePeriod: "1d"
 
   fallbacks:
     defaultFallbacks: ["gpt-4-mini", "claude-3-haiku"]
@@ -245,6 +258,11 @@ spec:
 | `proxyBatchWriteAt` | int | Batch write interval in seconds |
 | `alertTypes` | []string | Alert types for notifications |
 | `allowUserAuth` | *bool | Allow requests without a key |
+| `maxBudget` | *string | Global proxy budget in USD |
+| `budgetDuration` | string | Global budget reset duration (e.g., `1d`, `7d`, `30d`) |
+| `globalMaxParallelRequests` | *int | Maximum parallel requests across the entire proxy |
+| `budgetReschedulerMinTime` | *int | Minimum interval (seconds) between budget reset checks |
+| `budgetReschedulerMaxTime` | *int | Maximum interval (seconds) between budget reset checks |
 
 ### `routerSettings`
 
@@ -258,6 +276,15 @@ spec:
 | `modelGroupRetryPolicy` | map[string]map[string]int | — | Per-model-group retry overrides (e.g., `gpt-4: {TimeoutError: 1}`) |
 | `enableTagFiltering` | *bool | — | Enable tag-based routing. Requests with matching tags route to tagged model deployments |
 | `tagFilteringMatchAny` | *bool | — | If true, match ANY tag (OR logic). If false (default), ALL tags must match (AND logic) |
+| `defaultMaxParallelRequests` | *int | — | Default max parallel requests per model deployment |
+| `providerBudgetConfig` | map[string]ProviderBudget | — | Per-provider spending limits |
+
+**ProviderBudget:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `budgetLimit` | string | Budget limit in USD |
+| `timePeriod` | string | Time period for the budget (e.g., `1d`, `7d`, `30d`) |
 
 ### `fallbacks`
 

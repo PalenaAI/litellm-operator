@@ -1,9 +1,9 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  creationTimestamp: null
   name: litellmvirtualkeys.litellm.palena.ai
 spec:
   group: litellm.palena.ai
@@ -81,10 +81,20 @@ spec:
               maxBudget:
                 description: Maximum budget in USD.
                 type: string
+              maxParallelRequests:
+                description: Maximum concurrent requests for this key.
+                type: integer
               metadata:
                 additionalProperties:
                   type: string
                 description: Custom metadata.
+                type: object
+              modelMaxBudget:
+                additionalProperties:
+                  type: string
+                description: |-
+                  Per-model spending limits for this key (enterprise).
+                  Key: model name, Value: max budget in USD.
                 type: object
               models:
                 description: Models this key can access.
@@ -218,9 +228,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: null
-  storedVersions: null

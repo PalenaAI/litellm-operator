@@ -72,6 +72,9 @@ spec:
               maxBudgetMonthly:
                 description: Maximum monthly budget in USD.
                 type: number
+              maxParallelRequests:
+                description: Maximum concurrent requests for this team.
+                type: integer
               memberManagement:
                 default: mixed
                 description: |-

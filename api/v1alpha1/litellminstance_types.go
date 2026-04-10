@@ -338,6 +338,26 @@ type GeneralSettingsSpec struct {
 	// Allow requests with no key.
 	// +optional
 	AllowUserAuth *bool `json:"allowUserAuth,omitempty"`
+
+	// Global proxy budget in USD.
+	// +optional
+	MaxBudget *string `json:"maxBudget,omitempty"`
+
+	// Global budget reset duration (e.g., "1d", "7d", "30d").
+	// +optional
+	BudgetDuration string `json:"budgetDuration,omitempty"`
+
+	// Maximum parallel requests across the entire proxy.
+	// +optional
+	GlobalMaxParallelRequests *int `json:"globalMaxParallelRequests,omitempty"`
+
+	// Minimum interval in seconds between budget reset checks.
+	// +optional
+	BudgetReschedulerMinTime *int `json:"budgetReschedulerMinTime,omitempty"`
+
+	// Maximum interval in seconds between budget reset checks.
+	// +optional
+	BudgetReschedulerMaxTime *int `json:"budgetReschedulerMaxTime,omitempty"`
 }
 
 // FallbackSpec defines fallback chain configuration for model routing.
@@ -420,6 +440,23 @@ type RouterSettingsSpec struct {
 	// If false (default), ALL tags must match (AND logic).
 	// +optional
 	TagFilteringMatchAny *bool `json:"tagFilteringMatchAny,omitempty"`
+
+	// Default max parallel requests per model deployment.
+	// +optional
+	DefaultMaxParallelRequests *int `json:"defaultMaxParallelRequests,omitempty"`
+
+	// Per-provider budget limits.
+	// +optional
+	ProviderBudgetConfig map[string]ProviderBudget `json:"providerBudgetConfig,omitempty"`
+}
+
+// ProviderBudget defines a spending limit for a single LLM provider.
+type ProviderBudget struct {
+	// Budget limit in USD.
+	BudgetLimit string `json:"budgetLimit"`
+
+	// Time period for the budget (e.g., "1d", "7d", "30d").
+	TimePeriod string `json:"timePeriod"`
 }
 
 // ConfigSyncSpec defines bidirectional config sync settings.

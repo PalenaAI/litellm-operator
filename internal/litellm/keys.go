@@ -34,16 +34,18 @@ type KeyService interface {
 
 // KeyGenerateRequest is the request to generate a virtual key.
 type KeyGenerateRequest struct {
-	KeyAlias       string            `json:"key_alias,omitempty"`
-	TeamID         string            `json:"team_id,omitempty"`
-	UserID         string            `json:"user_id,omitempty"`
-	Models         []string          `json:"models,omitempty"`
-	MaxBudget      *string           `json:"max_budget,omitempty"`
-	BudgetDuration string            `json:"budget_duration,omitempty"`
-	ExpiresAt      *metav1.Time      `json:"expires,omitempty"`
-	TPMLimit       *int              `json:"tpm_limit,omitempty"`
-	RPMLimit       *int              `json:"rpm_limit,omitempty"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
+	KeyAlias            string             `json:"key_alias,omitempty"`
+	TeamID              string             `json:"team_id,omitempty"`
+	UserID              string             `json:"user_id,omitempty"`
+	Models              []string           `json:"models,omitempty"`
+	MaxBudget           *string            `json:"max_budget,omitempty"`
+	BudgetDuration      string             `json:"budget_duration,omitempty"`
+	ExpiresAt           *metav1.Time       `json:"expires,omitempty"`
+	TPMLimit            *int               `json:"tpm_limit,omitempty"`
+	RPMLimit            *int               `json:"rpm_limit,omitempty"`
+	Metadata            map[string]string  `json:"metadata,omitempty"`
+	ModelMaxBudget      map[string]float64 `json:"model_max_budget,omitempty"`
+	MaxParallelRequests *int               `json:"max_parallel_requests,omitempty"`
 }
 
 // KeyGenerateResponse is the response from generating a key.
@@ -54,13 +56,15 @@ type KeyGenerateResponse struct {
 
 // KeyUpdateRequest is the request to update a virtual key.
 type KeyUpdateRequest struct {
-	Token          string            `json:"key"`
-	Models         []string          `json:"models,omitempty"`
-	MaxBudget      *string           `json:"max_budget,omitempty"`
-	BudgetDuration string            `json:"budget_duration,omitempty"`
-	TPMLimit       *int              `json:"tpm_limit,omitempty"`
-	RPMLimit       *int              `json:"rpm_limit,omitempty"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
+	Token               string             `json:"key"`
+	Models              []string           `json:"models,omitempty"`
+	MaxBudget           *string            `json:"max_budget,omitempty"`
+	BudgetDuration      string             `json:"budget_duration,omitempty"`
+	TPMLimit            *int               `json:"tpm_limit,omitempty"`
+	RPMLimit            *int               `json:"rpm_limit,omitempty"`
+	Metadata            map[string]string  `json:"metadata,omitempty"`
+	ModelMaxBudget      map[string]float64 `json:"model_max_budget,omitempty"`
+	MaxParallelRequests *int               `json:"max_parallel_requests,omitempty"`
 }
 
 // KeyInfo is the response from getting key info.

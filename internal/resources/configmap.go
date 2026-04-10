@@ -70,6 +70,21 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		if instance.Spec.GeneralSettings.AllowUserAuth != nil {
 			gs["allow_user_auth"] = *instance.Spec.GeneralSettings.AllowUserAuth
 		}
+		if instance.Spec.GeneralSettings.MaxBudget != nil {
+			gs["max_budget"] = *instance.Spec.GeneralSettings.MaxBudget
+		}
+		if instance.Spec.GeneralSettings.BudgetDuration != "" {
+			gs["budget_duration"] = instance.Spec.GeneralSettings.BudgetDuration
+		}
+		if instance.Spec.GeneralSettings.GlobalMaxParallelRequests != nil {
+			gs["global_max_parallel_requests"] = *instance.Spec.GeneralSettings.GlobalMaxParallelRequests
+		}
+		if instance.Spec.GeneralSettings.BudgetReschedulerMinTime != nil {
+			gs["proxy_budget_rescheduler_min_time"] = *instance.Spec.GeneralSettings.BudgetReschedulerMinTime
+		}
+		if instance.Spec.GeneralSettings.BudgetReschedulerMaxTime != nil {
+			gs["proxy_budget_rescheduler_max_time"] = *instance.Spec.GeneralSettings.BudgetReschedulerMaxTime
+		}
 		if len(gs) > 0 {
 			config["general_settings"] = gs
 		}
@@ -104,6 +119,19 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		}
 		if instance.Spec.RouterSettings.TagFilteringMatchAny != nil {
 			rs["tag_filtering_match_any"] = *instance.Spec.RouterSettings.TagFilteringMatchAny
+		}
+		if instance.Spec.RouterSettings.DefaultMaxParallelRequests != nil {
+			rs["default_max_parallel_requests"] = *instance.Spec.RouterSettings.DefaultMaxParallelRequests
+		}
+		if len(instance.Spec.RouterSettings.ProviderBudgetConfig) > 0 {
+			pbc := map[string]interface{}{}
+			for provider, budget := range instance.Spec.RouterSettings.ProviderBudgetConfig {
+				pbc[provider] = map[string]interface{}{
+					"budget_limit": budget.BudgetLimit,
+					"time_period":  budget.TimePeriod,
+				}
+			}
+			rs["provider_budget_config"] = pbc
 		}
 		if len(rs) > 0 {
 			config["router_settings"] = rs

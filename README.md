@@ -22,6 +22,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **Tag-based routing** — route requests to model deployments by tags, assign tags to teams for team-scoped routing
 - **Fallback chains** — default fallbacks, per-model fallbacks, content policy fallbacks, context window fallbacks, and per-error-type retry policies
 - **Pass-through endpoints** — proxy arbitrary API requests to upstream services (image generation, fine-tuning, etc.) with static and secret-backed headers, sub-path routing, and optional LiteLLM authentication
+- **Advanced budget controls** — global proxy budget, per-provider spending caps, per-model budgets per key (enterprise), and concurrency limits at proxy/deployment/team/key levels
 - **IP allowlisting (enterprise)** — restrict API access to specific IP addresses or CIDR ranges via `spec.security.ipAllowlist`, with `X-Forwarded-For` support and max request/response size limits
 - **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
 - **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
