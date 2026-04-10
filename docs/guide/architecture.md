@@ -54,7 +54,7 @@
 
 The most complex controller. It manages all Kubernetes infrastructure for a LiteLLM deployment:
 
-1. **ConfigMap** — generates `proxy_server_config.yaml` from general settings, router settings, fallback chains, retry policies, caching, SSO, and callback configuration
+1. **ConfigMap** — generates `proxy_server_config.yaml` from general settings, router settings (including tag-based routing), fallback chains, retry policies, caching, SSO, and callback configuration
 2. **Secrets** — master key (auto-generated or from existing Secret), salt key, SSO client credentials
 3. **Migration Job** — runs database migrations before Deployment rollout
 4. **Deployment** — LiteLLM container with env vars, volumes, probes, security context

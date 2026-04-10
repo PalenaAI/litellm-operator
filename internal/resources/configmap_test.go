@@ -470,6 +470,60 @@ func TestGenerateProxyConfig_CachingLocal(t *testing.T) {
 	}
 }
 
+func TestGenerateProxyConfig_TagFilteringEnabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{
+		EnableTagFiltering: boolPtr(true),
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	rs, ok := config["router_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected router_settings to be present")
+	}
+	if rs["enable_tag_filtering"] != true {
+		t.Errorf("expected enable_tag_filtering=true, got %v", rs["enable_tag_filtering"])
+	}
+	if _, ok := rs["tag_filtering_match_any"]; ok {
+		t.Error("tag_filtering_match_any should not be present when not set")
+	}
+}
+
+func TestGenerateProxyConfig_TagFilteringMatchAny(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{
+		EnableTagFiltering:   boolPtr(true),
+		TagFilteringMatchAny: boolPtr(true),
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	rs := config["router_settings"].(map[string]interface{})
+	if rs["enable_tag_filtering"] != true {
+		t.Errorf("expected enable_tag_filtering=true, got %v", rs["enable_tag_filtering"])
+	}
+	if rs["tag_filtering_match_any"] != true {
+		t.Errorf("expected tag_filtering_match_any=true, got %v", rs["tag_filtering_match_any"])
+	}
+}
+
+func TestGenerateProxyConfig_TagFilteringDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{
+		EnableTagFiltering: boolPtr(false),
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	// enable_tag_filtering=false should not emit the key
+	if rs, ok := config["router_settings"].(map[string]interface{}); ok {
+		if _, ok := rs["enable_tag_filtering"]; ok {
+			t.Error("enable_tag_filtering should not be present when false")
+		}
+	}
+}
+
 func TestGenerateProxyConfig_CachingWithExistingSettings(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Callbacks = &litellmv1alpha1.CallbacksSpec{

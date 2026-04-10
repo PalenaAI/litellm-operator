@@ -119,6 +119,13 @@ spec:
               modelName:
                 description: Model name exposed to clients.
                 type: string
+              tags:
+                description: |-
+                  Tags for tag-based routing. Requests with matching tags
+                  will be routed to this model deployment.
+                items:
+                  type: string
+                type: array
             required:
             - instanceRef
             - litellmParams

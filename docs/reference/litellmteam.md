@@ -24,6 +24,7 @@ spec:
   budgetDuration: "30d"
   rpmLimit: 200
   tpmLimit: 50000
+  tags: ["paid"]
   memberManagement: mixed
   members:
     - email: lead@example.com
@@ -46,6 +47,7 @@ spec:
 | `teamMemberRpmLimit` | *int | No | — | Per-member RPM limit |
 | `teamMemberTpmLimit` | *int | No | — | Per-member TPM limit |
 | `metadata` | map[string]string | No | — | Custom metadata |
+| `tags` | []string | No | — | Tags for tag-based routing (keys inherit these tags) |
 | `memberManagement` | string | No | `mixed` | `crd`, `sso`, or `mixed` |
 | `members` | []TeamMember | No | — | Team members list |
 

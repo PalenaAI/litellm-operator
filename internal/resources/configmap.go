@@ -96,6 +96,12 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		if len(instance.Spec.RouterSettings.ModelGroupRetryPolicy) > 0 {
 			rs["model_group_retry_policy"] = instance.Spec.RouterSettings.ModelGroupRetryPolicy
 		}
+		if instance.Spec.RouterSettings.EnableTagFiltering != nil && *instance.Spec.RouterSettings.EnableTagFiltering {
+			rs["enable_tag_filtering"] = true
+		}
+		if instance.Spec.RouterSettings.TagFilteringMatchAny != nil {
+			rs["tag_filtering_match_any"] = *instance.Spec.RouterSettings.TagFilteringMatchAny
+		}
 		if len(rs) > 0 {
 			config["router_settings"] = rs
 		}

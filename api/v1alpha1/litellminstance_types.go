@@ -405,6 +405,16 @@ type RouterSettingsSpec struct {
 	// Per-model-group retry policies.
 	// +optional
 	ModelGroupRetryPolicy map[string]map[string]int `json:"modelGroupRetryPolicy,omitempty"`
+
+	// Enable tag-based routing. When enabled, requests with matching tags
+	// are routed to model deployments that share those tags.
+	// +optional
+	EnableTagFiltering *bool `json:"enableTagFiltering,omitempty"`
+
+	// If true, match requests having ANY of the specified tags (OR logic).
+	// If false (default), ALL tags must match (AND logic).
+	// +optional
+	TagFilteringMatchAny *bool `json:"tagFilteringMatchAny,omitempty"`
 }
 
 // ConfigSyncSpec defines bidirectional config sync settings.

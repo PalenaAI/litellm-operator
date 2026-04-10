@@ -118,6 +118,7 @@ spec:
   routerSettings:
     routingStrategy: least-busy
     numRetries: 3
+    enableTagFiltering: true
     retryPolicy:
       TimeoutError: 2
       RateLimitError: 3
@@ -229,6 +230,8 @@ spec:
 | `cooldownTime` | *int | — | Cooldown time in seconds |
 | `retryPolicy` | map[string]int | — | Per-error-type retry counts (e.g., `TimeoutError: 2`, `RateLimitError: 3`) |
 | `modelGroupRetryPolicy` | map[string]map[string]int | — | Per-model-group retry overrides (e.g., `gpt-4: {TimeoutError: 1}`) |
+| `enableTagFiltering` | *bool | — | Enable tag-based routing. Requests with matching tags route to tagged model deployments |
+| `tagFilteringMatchAny` | *bool | — | If true, match ANY tag (OR logic). If false (default), ALL tags must match (AND logic) |
 
 ### `fallbacks`
 

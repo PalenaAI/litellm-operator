@@ -45,6 +45,7 @@ type TeamCreateRequest struct {
 	TeamMemberTPMLimit *int              `json:"team_member_tpm_limit,omitempty"`
 	Metadata           map[string]string `json:"metadata,omitempty"`
 	Members            []MemberRequest   `json:"members_with_roles,omitempty"`
+	Tags               []string          `json:"tags,omitempty"`
 }
 
 // MemberRequest defines a member to add to a team.
@@ -69,6 +70,7 @@ type TeamUpdateRequest struct {
 	TPMLimit       *int              `json:"tpm_limit,omitempty"`
 	RPMLimit       *int              `json:"rpm_limit,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
+	Tags           []string          `json:"tags,omitempty"`
 }
 
 // TeamInfo is the response from getting team info.

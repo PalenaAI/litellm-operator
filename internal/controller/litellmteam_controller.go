@@ -121,6 +121,7 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 			TeamMemberRPMLimit: team.Spec.TeamMemberRPMLimit,
 			TeamMemberTPMLimit: team.Spec.TeamMemberTPMLimit,
 			Metadata:           team.Spec.Metadata,
+			Tags:               team.Spec.Tags,
 		}
 		resp, err := apiClient.Teams().Create(ctx, req)
 		if err != nil {
@@ -151,6 +152,7 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 				TPMLimit:       team.Spec.TPMLimit,
 				RPMLimit:       team.Spec.RPMLimit,
 				Metadata:       team.Spec.Metadata,
+				Tags:           team.Spec.Tags,
 			}
 			if err := apiClient.Teams().Update(ctx, req); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update team: %w", err)

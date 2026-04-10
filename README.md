@@ -19,6 +19,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **Enterprise license activation** — convention-based license Secret detection (`{instance}-license` or `litellm-license`) with automatic `LITELLM_LICENSE` env var injection
 - **Auto-rollback** — automatically rolls back failed deployments when `spec.upgrade.autoRollback: true`
 - **Response caching** — 6 cache backends (Redis, S3, GCS, Qdrant semantic, Redis semantic, local) with TTL, namespace isolation, call-type filtering, and default-off mode
+- **Tag-based routing** — route requests to model deployments by tags, assign tags to teams for team-scoped routing
 - **Fallback chains** — default fallbacks, per-model fallbacks, content policy fallbacks, context window fallbacks, and per-error-type retry policies
 - **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
 - **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
@@ -234,6 +235,48 @@ spec:
         method: snapshot        # snapshot or barmanObjectStore
   # ... rest of spec
 ```
+
+### Tag-Based Routing
+
+Route requests to different model deployments based on tags. Useful for free/paid tiers or team-specific model access:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  routerSettings:
+    enableTagFiltering: true
+  # ... rest of spec
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMModel
+metadata:
+  name: gpt4-paid
+spec:
+  instanceRef:
+    name: my-gateway
+  modelName: gpt-4
+  litellmParams:
+    model: openai/gpt-4
+    apiKeySecretRef:
+      name: openai-credentials
+      key: OPENAI_API_KEY
+  tags: ["paid"]
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: paid-tier
+spec:
+  instanceRef:
+    name: my-gateway
+  teamAlias: paid-tier
+  tags: ["paid"]
+```
+
+Requests from the `paid-tier` team are routed to model deployments tagged `paid`. Use `tagFilteringMatchAny: true` in `routerSettings` to match requests having ANY of the specified tags (default is ALL must match).
 
 ### Fallback Chains
 

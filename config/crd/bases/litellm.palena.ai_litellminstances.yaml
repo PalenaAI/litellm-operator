@@ -1097,6 +1097,11 @@ spec:
                   cooldownTime:
                     description: Cooldown time in seconds.
                     type: integer
+                  enableTagFiltering:
+                    description: |-
+                      Enable tag-based routing. When enabled, requests with matching tags
+                      are routed to model deployments that share those tags.
+                    type: boolean
                   modelGroupRetryPolicy:
                     additionalProperties:
                       additionalProperties:
@@ -1126,6 +1131,11 @@ spec:
                     - latency-based-routing
                     - usage-based-routing
                     type: string
+                  tagFilteringMatchAny:
+                    description: |-
+                      If true, match requests having ANY of the specified tags (OR logic).
+                      If false (default), ALL tags must match (AND logic).
+                    type: boolean
                   timeout:
                     description: Timeout in seconds.
                     type: integer

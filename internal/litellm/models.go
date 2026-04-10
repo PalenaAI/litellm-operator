@@ -40,14 +40,15 @@ type ModelCreateRequest struct {
 
 // ModelParams defines provider-specific model parameters.
 type ModelParams struct {
-	Model         string `json:"model"`
-	APIBase       string `json:"api_base,omitempty"`
-	APIKey        string `json:"api_key,omitempty"`
-	RPM           *int   `json:"rpm,omitempty"`
-	TPM           *int   `json:"tpm,omitempty"`
-	Timeout       *int   `json:"timeout,omitempty"`
-	StreamTimeout *int   `json:"stream_timeout,omitempty"`
-	MaxRetries    *int   `json:"max_retries,omitempty"`
+	Model         string   `json:"model"`
+	APIBase       string   `json:"api_base,omitempty"`
+	APIKey        string   `json:"api_key,omitempty"`
+	RPM           *int     `json:"rpm,omitempty"`
+	TPM           *int     `json:"tpm,omitempty"`
+	Timeout       *int     `json:"timeout,omitempty"`
+	StreamTimeout *int     `json:"stream_timeout,omitempty"`
+	MaxRetries    *int     `json:"max_retries,omitempty"`
+	Tags          []string `json:"tags,omitempty"`
 }
 
 // ModelInfoReq defines optional model info in requests.

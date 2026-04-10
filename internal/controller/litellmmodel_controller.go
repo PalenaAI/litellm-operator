@@ -145,6 +145,7 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			Timeout:       model.Spec.LiteLLMParams.Timeout,
 			StreamTimeout: model.Spec.LiteLLMParams.StreamTimeout,
 			MaxRetries:    model.Spec.LiteLLMParams.MaxRetries,
+			Tags:          model.Spec.Tags,
 		},
 	}
 	if model.Spec.ModelInfo != nil {
