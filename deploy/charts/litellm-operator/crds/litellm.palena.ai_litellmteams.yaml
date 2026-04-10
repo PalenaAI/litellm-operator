@@ -72,6 +72,9 @@ spec:
               maxBudgetMonthly:
                 description: Maximum monthly budget in USD.
                 type: number
+              maxParallelRequests:
+                description: Maximum concurrent requests for this team.
+                type: integer
               memberManagement:
                 default: mixed
                 description: |-
@@ -118,6 +121,13 @@ spec:
               rpmLimit:
                 description: RPM limit for the team.
                 type: integer
+              tags:
+                description: |-
+                  Tags associated with this team. Keys generated for team members
+                  will inherit these tags for tag-based routing.
+                items:
+                  type: string
+                type: array
               teamAlias:
                 description: Human-readable team alias.
                 type: string

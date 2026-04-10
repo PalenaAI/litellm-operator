@@ -47,6 +47,10 @@ Three member management modes prevent the operator from destroying SSO-provision
 
 When a `LiteLLMVirtualKey` is created, the operator generates an API key via the LiteLLM API and stores it in a Kubernetes Secret with owner references for automatic garbage collection. [Learn more](/guide/virtual-keys).
 
+### Enterprise License Activation
+
+Convention-based license management. Drop a Secret named `{instance}-license` or `litellm-license` into the namespace and the operator injects the `LITELLM_LICENSE` env var automatically — no CRD fields required. [Learn more](/guide/enterprise-license).
+
 ### Production Infrastructure
 
 The Instance controller manages the full production stack:
@@ -54,7 +58,7 @@ The Instance controller manages the full production stack:
 - ConfigMap with `proxy_server_config.yaml`
 - Service, Ingress, and OpenShift Route
 - HPA and PDB for availability
-- NetworkPolicy for security
+- NetworkPolicy and IP allowlisting for security
 - Database migration Jobs
 - SSO and SCIM configuration
 

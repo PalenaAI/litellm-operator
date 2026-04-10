@@ -56,6 +56,10 @@ type LiteLLMInstanceSpec struct {
 	// +optional
 	RouterSettings *RouterSettingsSpec `json:"routerSettings,omitempty"`
 
+	// Fallback configuration for model routing.
+	// +optional
+	Fallbacks *FallbackSpec `json:"fallbacks,omitempty"`
+
 	// Config sync settings for bidirectional synchronization.
 	// +optional
 	ConfigSync *ConfigSyncSpec `json:"configSync,omitempty"`
@@ -122,6 +126,15 @@ type LiteLLMInstanceSpec struct {
 	// SCIM v2 provisioning configuration.
 	// +optional
 	SCIM *SCIMSpec `json:"scim,omitempty"`
+
+	// Response caching configuration.
+	// +optional
+	Caching *CachingSpec `json:"caching,omitempty"`
+
+	// Pass-through endpoint definitions.
+	// Allows proxying arbitrary API requests to upstream services through LiteLLM.
+	// +optional
+	PassThroughEndpoints []PassThroughEndpoint `json:"passThroughEndpoints,omitempty"`
 }
 
 // ImageSpec defines the container image for LiteLLM.
@@ -325,6 +338,60 @@ type GeneralSettingsSpec struct {
 	// Allow requests with no key.
 	// +optional
 	AllowUserAuth *bool `json:"allowUserAuth,omitempty"`
+
+	// Global proxy budget in USD.
+	// +optional
+	MaxBudget *string `json:"maxBudget,omitempty"`
+
+	// Global budget reset duration (e.g., "1d", "7d", "30d").
+	// +optional
+	BudgetDuration string `json:"budgetDuration,omitempty"`
+
+	// Maximum parallel requests across the entire proxy.
+	// +optional
+	GlobalMaxParallelRequests *int `json:"globalMaxParallelRequests,omitempty"`
+
+	// Minimum interval in seconds between budget reset checks.
+	// +optional
+	BudgetReschedulerMinTime *int `json:"budgetReschedulerMinTime,omitempty"`
+
+	// Maximum interval in seconds between budget reset checks.
+	// +optional
+	BudgetReschedulerMaxTime *int `json:"budgetReschedulerMaxTime,omitempty"`
+}
+
+// FallbackSpec defines fallback chain configuration for model routing.
+type FallbackSpec struct {
+	// Default fallback models applied on any error.
+	// List of model names to try in order.
+	// +optional
+	DefaultFallbacks []string `json:"defaultFallbacks,omitempty"`
+
+	// Per-model fallback chains for general errors.
+	// +optional
+	ModelFallbacks []ModelFallbackEntry `json:"modelFallbacks,omitempty"`
+
+	// Fallback models for content policy violations.
+	// +optional
+	ContentPolicyFallbacks []ModelFallbackEntry `json:"contentPolicyFallbacks,omitempty"`
+
+	// Fallback models for context window exceeded errors.
+	// +optional
+	ContextWindowFallbacks []ModelFallbackEntry `json:"contextWindowFallbacks,omitempty"`
+
+	// Maximum number of fallback attempts.
+	// +kubebuilder:default=3
+	// +optional
+	MaxFallbacks *int `json:"maxFallbacks,omitempty"`
+}
+
+// ModelFallbackEntry maps a primary model to an ordered list of fallback models.
+type ModelFallbackEntry struct {
+	// Primary model name.
+	Model string `json:"model"`
+
+	// Ordered list of fallback model names.
+	Fallbacks []string `json:"fallbacks"`
 }
 
 // RouterSettingsSpec defines LiteLLM router settings.
@@ -353,6 +420,43 @@ type RouterSettingsSpec struct {
 	// Cooldown time in seconds.
 	// +optional
 	CooldownTime *int `json:"cooldownTime,omitempty"`
+
+	// Global retry policy by error type.
+	// Keys: TimeoutError, RateLimitError, ContentPolicyViolationError, etc.
+	// Values: number of retries.
+	// +optional
+	RetryPolicy map[string]int `json:"retryPolicy,omitempty"`
+
+	// Per-model-group retry policies.
+	// +optional
+	ModelGroupRetryPolicy map[string]map[string]int `json:"modelGroupRetryPolicy,omitempty"`
+
+	// Enable tag-based routing. When enabled, requests with matching tags
+	// are routed to model deployments that share those tags.
+	// +optional
+	EnableTagFiltering *bool `json:"enableTagFiltering,omitempty"`
+
+	// If true, match requests having ANY of the specified tags (OR logic).
+	// If false (default), ALL tags must match (AND logic).
+	// +optional
+	TagFilteringMatchAny *bool `json:"tagFilteringMatchAny,omitempty"`
+
+	// Default max parallel requests per model deployment.
+	// +optional
+	DefaultMaxParallelRequests *int `json:"defaultMaxParallelRequests,omitempty"`
+
+	// Per-provider budget limits.
+	// +optional
+	ProviderBudgetConfig map[string]ProviderBudget `json:"providerBudgetConfig,omitempty"`
+}
+
+// ProviderBudget defines a spending limit for a single LLM provider.
+type ProviderBudget struct {
+	// Budget limit in USD.
+	BudgetLimit string `json:"budgetLimit"`
+
+	// Time period for the budget (e.g., "1d", "7d", "30d").
+	TimePeriod string `json:"timePeriod"`
 }
 
 // ConfigSyncSpec defines bidirectional config sync settings.
@@ -481,6 +585,35 @@ type SecuritySpec struct {
 	// (runs as nobody, UID 65534) and applies a restricted security context.
 	// +optional
 	RunAsNonRoot *bool `json:"runAsNonRoot,omitempty"`
+
+	// IP allowlist configuration (enterprise).
+	// Restricts API access to specific IP addresses or CIDR ranges.
+	// +optional
+	IPAllowlist *IPAllowlistSpec `json:"ipAllowlist,omitempty"`
+}
+
+// IPAllowlistSpec defines IP address filtering configuration.
+// This is a LiteLLM enterprise feature.
+type IPAllowlistSpec struct {
+	// Enable IP address filtering.
+	Enabled bool `json:"enabled"`
+
+	// List of allowed IP addresses or CIDR ranges (e.g. "10.0.0.1", "192.168.1.0/24").
+	// +kubebuilder:validation:MinItems=1
+	AllowedIPs []string `json:"allowedIPs"`
+
+	// Use X-Forwarded-For header for client IP detection.
+	// Enable when LiteLLM is behind a load balancer or reverse proxy.
+	// +optional
+	UseXForwardedFor *bool `json:"useXForwardedFor,omitempty"`
+
+	// Maximum request size in MB (enterprise).
+	// +optional
+	MaxRequestSizeMB *int `json:"maxRequestSizeMB,omitempty"`
+
+	// Maximum response size in MB (enterprise).
+	// +optional
+	MaxResponseSizeMB *int `json:"maxResponseSizeMB,omitempty"`
 }
 
 // NetworkPolicySpec defines NetworkPolicy configuration.
@@ -745,6 +878,160 @@ type DefaultTeamParams struct {
 	RPMLimit *int `json:"rpmLimit,omitempty"`
 }
 
+// CachingSpec defines response caching configuration.
+type CachingSpec struct {
+	// Enable response caching.
+	Enabled bool `json:"enabled"`
+
+	// Cache backend type.
+	// +kubebuilder:validation:Enum=redis;s3;gcs;local;qdrant;redis-semantic
+	// +kubebuilder:default="redis"
+	Type string `json:"type,omitempty"`
+
+	// Redis cache configuration (when type is "redis" or "redis-semantic").
+	// +optional
+	Redis *CacheRedisSpec `json:"redis,omitempty"`
+
+	// S3 cache configuration (when type is "s3").
+	// +optional
+	S3 *CacheS3Spec `json:"s3,omitempty"`
+
+	// GCS cache configuration (when type is "gcs").
+	// +optional
+	GCS *CacheGCSSpec `json:"gcs,omitempty"`
+
+	// Qdrant semantic cache configuration (when type is "qdrant").
+	// +optional
+	Qdrant *CacheQdrantSpec `json:"qdrant,omitempty"`
+
+	// Cache TTL in seconds.
+	// +kubebuilder:default=600
+	// +optional
+	TTL *int `json:"ttl,omitempty"`
+
+	// Namespace for cache key isolation.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// Restrict caching to specific call types.
+	// +optional
+	SupportedCallTypes []string `json:"supportedCallTypes,omitempty"`
+
+	// Cache mode: "default_on" (cache everything) or "default_off" (require explicit opt-in).
+	// +kubebuilder:validation:Enum=default_on;default_off
+	// +kubebuilder:default="default_on"
+	// +optional
+	Mode string `json:"mode,omitempty"`
+}
+
+// CacheRedisSpec defines Redis cache backend configuration.
+type CacheRedisSpec struct {
+	// Redis host. If empty, uses the instance's Redis config.
+	// +optional
+	Host string `json:"host,omitempty"`
+
+	// Redis port.
+	// +optional
+	Port *int `json:"port,omitempty"`
+
+	// Reference to Secret containing the Redis password.
+	// +optional
+	PasswordSecretRef *SecretKeyRef `json:"passwordSecretRef,omitempty"`
+
+	// Enable SSL/TLS.
+	// +optional
+	SSL bool `json:"ssl,omitempty"`
+}
+
+// CacheS3Spec defines S3 cache backend configuration.
+type CacheS3Spec struct {
+	// S3 bucket name.
+	BucketName string `json:"bucketName"`
+
+	// AWS region.
+	// +optional
+	Region string `json:"region,omitempty"`
+
+	// Reference to Secret containing AWS credentials.
+	// +optional
+	CredentialsSecretRef *SecretKeyRef `json:"credentialsSecretRef,omitempty"`
+}
+
+// CacheGCSSpec defines GCS cache backend configuration.
+type CacheGCSSpec struct {
+	// GCS bucket name.
+	BucketName string `json:"bucketName"`
+
+	// Reference to Secret containing GCS service account JSON.
+	// +optional
+	CredentialsSecretRef *SecretKeyRef `json:"credentialsSecretRef,omitempty"`
+}
+
+// CacheQdrantSpec defines Qdrant semantic cache backend configuration.
+type CacheQdrantSpec struct {
+	// Qdrant server URL.
+	URL string `json:"url"`
+
+	// Reference to Secret containing Qdrant API key.
+	// +optional
+	APIKeySecretRef *SecretKeyRef `json:"apiKeySecretRef,omitempty"`
+
+	// Collection name for cached embeddings.
+	// +optional
+	CollectionName string `json:"collectionName,omitempty"`
+}
+
+// PassThroughEndpoint defines a pass-through endpoint that proxies requests to an upstream service.
+type PassThroughEndpoint struct {
+	// Route path on the LiteLLM proxy (e.g., "/bria", "/api/v1/custom").
+	Path string `json:"path"`
+
+	// Target URL to forward requests to.
+	Target string `json:"target"`
+
+	// Enable LiteLLM authentication for this endpoint (enterprise).
+	// +optional
+	Auth *bool `json:"auth,omitempty"`
+
+	// Forward incoming client headers to the target.
+	// +optional
+	ForwardHeaders *bool `json:"forwardHeaders,omitempty"`
+
+	// Forward requests to sub-paths (e.g., /path/sub/route → target/sub/route).
+	// +optional
+	IncludeSubpath *bool `json:"includeSubpath,omitempty"`
+
+	// HTTP methods to allow. If empty, all methods are allowed.
+	// +optional
+	Methods []string `json:"methods,omitempty"`
+
+	// Custom headers to add to forwarded requests.
+	// For headers containing secrets, use headerSecrets instead.
+	// +optional
+	Headers map[string]string `json:"headers,omitempty"`
+
+	// Headers sourced from Kubernetes Secrets.
+	// +optional
+	HeaderSecrets []HeaderSecretRef `json:"headerSecrets,omitempty"`
+
+	// Default query parameters added to all forwarded requests.
+	// +optional
+	DefaultQueryParams map[string]string `json:"defaultQueryParams,omitempty"`
+}
+
+// HeaderSecretRef references a Secret value to use as an HTTP header.
+type HeaderSecretRef struct {
+	// HTTP header name (e.g., "Authorization").
+	HeaderName string `json:"headerName"`
+
+	// Prefix prepended to the secret value (e.g., "Bearer ").
+	// +optional
+	Prefix string `json:"prefix,omitempty"`
+
+	// Reference to Secret containing the header value.
+	SecretRef SecretKeyRef `json:"secretRef"`
+}
+
 // SCIMSpec defines SCIM v2 provisioning configuration.
 type SCIMSpec struct {
 	// Enable SCIM v2 provisioning endpoints.
@@ -796,6 +1083,10 @@ type LiteLLMInstanceStatus struct {
 	// +optional
 	SCIM *SCIMStatus `json:"scim,omitempty"`
 
+	// License activation status.
+	// +optional
+	License *LicenseStatus `json:"license,omitempty"`
+
 	// Backup status (CloudNativePG).
 	// +optional
 	Backup *BackupStatus `json:"backup,omitempty"`
@@ -807,6 +1098,16 @@ type LiteLLMInstanceStatus struct {
 	// Standard Kubernetes conditions.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// LicenseStatus reflects license Secret detection.
+type LicenseStatus struct {
+	// Whether a license Secret was detected.
+	Active bool `json:"active"`
+
+	// Name of the Secret providing the license.
+	// +optional
+	SecretName string `json:"secretName,omitempty"`
 }
 
 // BackupStatus defines backup status for CNPG.

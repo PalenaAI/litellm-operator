@@ -82,6 +82,30 @@ spec:
 
 The operator resolves these references to LiteLLM IDs before generating the key.
 
+## Per-Model Budget Limits (Enterprise)
+
+Set per-model spending limits on a key with `modelMaxBudget`:
+
+```yaml
+spec:
+  instanceRef:
+    name: my-gateway
+  keyAlias: capped-key
+  models:
+    - gpt-4
+    - claude-3-opus
+  modelMaxBudget:
+    gpt-4: "100.00"
+    claude-3-opus: "50.00"
+  maxParallelRequests: 5
+```
+
+This limits spending per model independently — once the GPT-4 budget is exhausted, GPT-4 requests are rejected but Claude requests continue up to their own limit. `maxParallelRequests` caps concurrency for the key.
+
+::: tip
+`modelMaxBudget` requires a LiteLLM Enterprise license. The operator will set `Reason: EnterpriseLicenseRequired` on the condition if the license is missing.
+:::
+
 ## Key Updates vs Regeneration
 
 - **Updating** key properties (budget, rate limits, models) calls `POST /key/update` — the key value itself doesn't change

@@ -187,6 +187,8 @@ curl http://localhost:4000/v1/chat/completions \
 ## Next Steps
 
 - [Architecture](/guide/architecture) — understand how the operator works
+- [Enterprise License](/guide/enterprise-license) — activate LiteLLM Enterprise features
+- [Caching](/guide/caching) — configure response caching
 - [Config Sync](/guide/config-sync) — learn about bidirectional synchronization
 - [SSO Setup](/guide/sso) — configure single sign-on
 - [CRD Reference](/reference/crds) — full field reference for all CRDs

@@ -42,6 +42,8 @@ spec:
 | `tpmLimit` | *int | No | — | Tokens per minute limit |
 | `rpmLimit` | *int | No | — | Requests per minute limit |
 | `metadata` | map[string]string | No | — | Custom metadata |
+| `modelMaxBudget` | map[string]string | No | — | Per-model spending limits in USD (enterprise) |
+| `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this key |
 | `keySecretName` | string | No | `{name}-key` | Name for the generated Secret |
 
 ## Status Fields

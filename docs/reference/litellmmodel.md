@@ -29,6 +29,7 @@ spec:
     maxTokens: 128000
     inputCostPerToken: 0.0000025
     outputCostPerToken: 0.00001
+  tags: ["paid"]
 ```
 
 ## Spec Fields
@@ -39,6 +40,7 @@ spec:
 | `modelName` | string | Yes | Model name exposed to clients |
 | `litellmParams` | LiteLLMModelParams | Yes | Provider-specific parameters |
 | `modelInfo` | *ModelInfo | No | Optional model metadata |
+| `tags` | []string | No | Tags for tag-based routing (requires `enableTagFiltering` on the instance) |
 
 ### `litellmParams`
 

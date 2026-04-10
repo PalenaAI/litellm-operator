@@ -82,6 +82,17 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// Reconcile model
 	result, err := r.reconcileModel(ctx, &model, resolved)
 	if err != nil {
+		if isEnterpriseLicenseError(err) {
+			meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
+				Type:               ConditionSynced,
+				Status:             metav1.ConditionFalse,
+				Reason:             "EnterpriseLicenseRequired",
+				Message:            "This feature requires a LiteLLM Enterprise license. Create a license Secret to activate.",
+				ObservedGeneration: model.Generation,
+			})
+			_ = r.Status().Update(ctx, &model)
+			return ctrl.Result{}, nil
+		}
 		log.Error(err, "failed to reconcile model")
 		meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 			Type:    ConditionSynced,
@@ -134,6 +145,7 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			Timeout:       model.Spec.LiteLLMParams.Timeout,
 			StreamTimeout: model.Spec.LiteLLMParams.StreamTimeout,
 			MaxRetries:    model.Spec.LiteLLMParams.MaxRetries,
+			Tags:          model.Spec.Tags,
 		},
 	}
 	if model.Spec.ModelInfo != nil {

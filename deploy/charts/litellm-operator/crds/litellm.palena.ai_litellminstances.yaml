@@ -81,6 +81,148 @@ spec:
                 - enabled
                 - maxReplicas
                 type: object
+              caching:
+                description: Response caching configuration.
+                properties:
+                  enabled:
+                    description: Enable response caching.
+                    type: boolean
+                  gcs:
+                    description: GCS cache configuration (when type is "gcs").
+                    properties:
+                      bucketName:
+                        description: GCS bucket name.
+                        type: string
+                      credentialsSecretRef:
+                        description: Reference to Secret containing GCS service account
+                          JSON.
+                        properties:
+                          key:
+                            description: Key within the Secret.
+                            type: string
+                          name:
+                            description: Name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                    required:
+                    - bucketName
+                    type: object
+                  mode:
+                    default: default_on
+                    description: 'Cache mode: "default_on" (cache everything) or "default_off"
+                      (require explicit opt-in).'
+                    enum:
+                    - default_on
+                    - default_off
+                    type: string
+                  namespace:
+                    description: Namespace for cache key isolation.
+                    type: string
+                  qdrant:
+                    description: Qdrant semantic cache configuration (when type is
+                      "qdrant").
+                    properties:
+                      apiKeySecretRef:
+                        description: Reference to Secret containing Qdrant API key.
+                        properties:
+                          key:
+                            description: Key within the Secret.
+                            type: string
+                          name:
+                            description: Name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      collectionName:
+                        description: Collection name for cached embeddings.
+                        type: string
+                      url:
+                        description: Qdrant server URL.
+                        type: string
+                    required:
+                    - url
+                    type: object
+                  redis:
+                    description: Redis cache configuration (when type is "redis" or
+                      "redis-semantic").
+                    properties:
+                      host:
+                        description: Redis host. If empty, uses the instance's Redis
+                          config.
+                        type: string
+                      passwordSecretRef:
+                        description: Reference to Secret containing the Redis password.
+                        properties:
+                          key:
+                            description: Key within the Secret.
+                            type: string
+                          name:
+                            description: Name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      port:
+                        description: Redis port.
+                        type: integer
+                      ssl:
+                        description: Enable SSL/TLS.
+                        type: boolean
+                    type: object
+                  s3:
+                    description: S3 cache configuration (when type is "s3").
+                    properties:
+                      bucketName:
+                        description: S3 bucket name.
+                        type: string
+                      credentialsSecretRef:
+                        description: Reference to Secret containing AWS credentials.
+                        properties:
+                          key:
+                            description: Key within the Secret.
+                            type: string
+                          name:
+                            description: Name of the Secret.
+                            type: string
+                        required:
+                        - key
+                        - name
+                        type: object
+                      region:
+                        description: AWS region.
+                        type: string
+                    required:
+                    - bucketName
+                    type: object
+                  supportedCallTypes:
+                    description: Restrict caching to specific call types.
+                    items:
+                      type: string
+                    type: array
+                  ttl:
+                    default: 600
+                    description: Cache TTL in seconds.
+                    type: integer
+                  type:
+                    default: redis
+                    description: Cache backend type.
+                    enum:
+                    - redis
+                    - s3
+                    - gcs
+                    - local
+                    - qdrant
+                    - redis-semantic
+                    type: string
+                required:
+                - enabled
+                type: object
               callbacks:
                 description: Callback configuration.
                 properties:
@@ -249,6 +391,38 @@ spec:
                   cloudnativepg:
                     description: CloudNativePG managed database.
                     properties:
+                      backup:
+                        description: |-
+                          Backup configuration using CloudNativePG ScheduledBackup.
+                          Requires CloudNativePG operator to be installed.
+                        properties:
+                          enabled:
+                            description: Enable scheduled backups.
+                            type: boolean
+                          method:
+                            default: snapshot
+                            description: 'Backup method: snapshot or barmanObjectStore.'
+                            enum:
+                            - snapshot
+                            - barmanObjectStore
+                            type: string
+                          retention:
+                            default: 7
+                            description: Number of backups to retain.
+                            minimum: 1
+                            type: integer
+                          schedule:
+                            default: 0 0 * * *
+                            description: Cron schedule for backups (e.g., "0 0 * *
+                              *" for daily at midnight).
+                            type: string
+                          suspend:
+                            description: Suspend scheduled backups without deleting
+                              the schedule.
+                            type: boolean
+                        required:
+                        - enabled
+                        type: object
                       clusterName:
                         description: Name of the CloudNativePG Cluster CR.
                         type: string
@@ -478,6 +652,119 @@ spec:
                   - name
                   type: object
                 type: array
+              fallbacks:
+                description: Fallback configuration for model routing.
+                properties:
+                  contentPolicyFallbacks:
+                    description: Fallback models for content policy violations.
+                    items:
+                      description: ModelFallbackEntry maps a primary model to an ordered
+                        list of fallback models.
+                      properties:
+                        fallbacks:
+                          description: Ordered list of fallback model names.
+                          items:
+                            type: string
+                          type: array
+                        model:
+                          description: Primary model name.
+                          type: string
+                      required:
+                      - fallbacks
+                      - model
+                      type: object
+                    type: array
+                  contextWindowFallbacks:
+                    description: Fallback models for context window exceeded errors.
+                    items:
+                      description: ModelFallbackEntry maps a primary model to an ordered
+                        list of fallback models.
+                      properties:
+                        fallbacks:
+                          description: Ordered list of fallback model names.
+                          items:
+                            type: string
+                          type: array
+                        model:
+                          description: Primary model name.
+                          type: string
+                      required:
+                      - fallbacks
+                      - model
+                      type: object
+                    type: array
+                  defaultFallbacks:
+                    description: |-
+                      Default fallback models applied on any error.
+                      List of model names to try in order.
+                    items:
+                      type: string
+                    type: array
+                  maxFallbacks:
+                    default: 3
+                    description: Maximum number of fallback attempts.
+                    type: integer
+                  modelFallbacks:
+                    description: Per-model fallback chains for general errors.
+                    items:
+                      description: ModelFallbackEntry maps a primary model to an ordered
+                        list of fallback models.
+                      properties:
+                        fallbacks:
+                          description: Ordered list of fallback model names.
+                          items:
+                            type: string
+                          type: array
+                        model:
+                          description: Primary model name.
+                          type: string
+                      required:
+                      - fallbacks
+                      - model
+                      type: object
+                    type: array
+                type: object
+              gatewayHTTPRoute:
+                description: Gateway API HTTPRoute configuration.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: Annotations for the HTTPRoute.
+                    type: object
+                  enabled:
+                    description: Enable HTTPRoute.
+                    type: boolean
+                  host:
+                    description: Hostname for the HTTPRoute.
+                    type: string
+                  parentRefs:
+                    description: ParentRefs are references to the Gateway(s) to attach
+                      the route to.
+                    items:
+                      description: GatewayParentRef identifies a Gateway to attach
+                        the HTTPRoute to.
+                      properties:
+                        name:
+                          description: Name of the Gateway.
+                          type: string
+                        namespace:
+                          description: Namespace of the Gateway. Defaults to the route's
+                            namespace.
+                          type: string
+                        sectionName:
+                          description: SectionName is the name of a specific listener
+                            on the Gateway to attach to.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    minItems: 1
+                    type: array
+                required:
+                - enabled
+                - parentRefs
+                type: object
               generalSettings:
                 description: General settings for the LiteLLM proxy.
                 properties:
@@ -489,12 +776,29 @@ spec:
                   allowUserAuth:
                     description: Allow requests with no key.
                     type: boolean
+                  budgetDuration:
+                    description: Global budget reset duration (e.g., "1d", "7d", "30d").
+                    type: string
+                  budgetReschedulerMaxTime:
+                    description: Maximum interval in seconds between budget reset
+                      checks.
+                    type: integer
+                  budgetReschedulerMinTime:
+                    description: Minimum interval in seconds between budget reset
+                      checks.
+                    type: integer
                   customKeyGenerate:
                     description: Custom key generation function.
                     type: string
+                  globalMaxParallelRequests:
+                    description: Maximum parallel requests across the entire proxy.
+                    type: integer
                   masterKeyRequired:
                     description: Enable/disable master key requirement.
                     type: boolean
+                  maxBudget:
+                    description: Global proxy budget in USD.
+                    type: string
                   proxyBatchWriteAt:
                     description: Batch write interval in seconds.
                     type: integer
@@ -601,6 +905,44 @@ spec:
               observability:
                 description: Observability configuration.
                 properties:
+                  grafanaDashboard:
+                    description: Grafana dashboard configuration.
+                    properties:
+                      enabled:
+                        description: Enable Grafana dashboard ConfigMap creation.
+                        type: boolean
+                      folder:
+                        default: LiteLLM
+                        description: Grafana folder to place the dashboard in.
+                        type: string
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: Additional labels for the dashboard ConfigMap.
+                        type: object
+                    required:
+                    - enabled
+                    type: object
+                  prometheusRule:
+                    description: PrometheusRule configuration for alerting.
+                    properties:
+                      disabledAlerts:
+                        description: Disable specific default alerts by name.
+                        items:
+                          type: string
+                        type: array
+                      enabled:
+                        description: Enable PrometheusRule creation with default alerts.
+                        type: boolean
+                      labels:
+                        additionalProperties:
+                          type: string
+                        description: Additional labels for the PrometheusRule (e.g.,
+                          for Prometheus rule selection).
+                        type: object
+                    required:
+                    - enabled
+                    type: object
                   serviceMonitor:
                     description: ServiceMonitor configuration for Prometheus.
                     properties:
@@ -620,6 +962,88 @@ spec:
                     - enabled
                     type: object
                 type: object
+              passThroughEndpoints:
+                description: |-
+                  Pass-through endpoint definitions.
+                  Allows proxying arbitrary API requests to upstream services through LiteLLM.
+                items:
+                  description: PassThroughEndpoint defines a pass-through endpoint
+                    that proxies requests to an upstream service.
+                  properties:
+                    auth:
+                      description: Enable LiteLLM authentication for this endpoint
+                        (enterprise).
+                      type: boolean
+                    defaultQueryParams:
+                      additionalProperties:
+                        type: string
+                      description: Default query parameters added to all forwarded
+                        requests.
+                      type: object
+                    forwardHeaders:
+                      description: Forward incoming client headers to the target.
+                      type: boolean
+                    headerSecrets:
+                      description: Headers sourced from Kubernetes Secrets.
+                      items:
+                        description: HeaderSecretRef references a Secret value to
+                          use as an HTTP header.
+                        properties:
+                          headerName:
+                            description: HTTP header name (e.g., "Authorization").
+                            type: string
+                          prefix:
+                            description: Prefix prepended to the secret value (e.g.,
+                              "Bearer ").
+                            type: string
+                          secretRef:
+                            description: Reference to Secret containing the header
+                              value.
+                            properties:
+                              key:
+                                description: Key within the Secret.
+                                type: string
+                              name:
+                                description: Name of the Secret.
+                                type: string
+                            required:
+                            - key
+                            - name
+                            type: object
+                        required:
+                        - headerName
+                        - secretRef
+                        type: object
+                      type: array
+                    headers:
+                      additionalProperties:
+                        type: string
+                      description: |-
+                        Custom headers to add to forwarded requests.
+                        For headers containing secrets, use headerSecrets instead.
+                      type: object
+                    includeSubpath:
+                      description: Forward requests to sub-paths (e.g., /path/sub/route
+                        → target/sub/route).
+                      type: boolean
+                    methods:
+                      description: HTTP methods to allow. If empty, all methods are
+                        allowed.
+                      items:
+                        type: string
+                      type: array
+                    path:
+                      description: Route path on the LiteLLM proxy (e.g., "/bria",
+                        "/api/v1/custom").
+                      type: string
+                    target:
+                      description: Target URL to forward requests to.
+                      type: string
+                  required:
+                  - path
+                  - target
+                  type: object
+                type: array
               podDisruptionBudget:
                 description: Pod disruption budget configuration.
                 properties:
@@ -772,12 +1196,53 @@ spec:
                   cooldownTime:
                     description: Cooldown time in seconds.
                     type: integer
+                  defaultMaxParallelRequests:
+                    description: Default max parallel requests per model deployment.
+                    type: integer
+                  enableTagFiltering:
+                    description: |-
+                      Enable tag-based routing. When enabled, requests with matching tags
+                      are routed to model deployments that share those tags.
+                    type: boolean
+                  modelGroupRetryPolicy:
+                    additionalProperties:
+                      additionalProperties:
+                        type: integer
+                      type: object
+                    description: Per-model-group retry policies.
+                    type: object
                   numRetries:
                     description: Number of retries.
                     type: integer
+                  providerBudgetConfig:
+                    additionalProperties:
+                      description: ProviderBudget defines a spending limit for a single
+                        LLM provider.
+                      properties:
+                        budgetLimit:
+                          description: Budget limit in USD.
+                          type: string
+                        timePeriod:
+                          description: Time period for the budget (e.g., "1d", "7d",
+                            "30d").
+                          type: string
+                      required:
+                      - budgetLimit
+                      - timePeriod
+                      type: object
+                    description: Per-provider budget limits.
+                    type: object
                   retryAfter:
                     description: Retry after seconds.
                     type: integer
+                  retryPolicy:
+                    additionalProperties:
+                      type: integer
+                    description: |-
+                      Global retry policy by error type.
+                      Keys: TimeoutError, RateLimitError, ContentPolicyViolationError, etc.
+                      Values: number of retries.
+                    type: object
                   routingStrategy:
                     description: Routing strategy.
                     enum:
@@ -786,6 +1251,11 @@ spec:
                     - latency-based-routing
                     - usage-based-routing
                     type: string
+                  tagFilteringMatchAny:
+                    description: |-
+                      If true, match requests having ANY of the specified tags (OR logic).
+                      If false (default), ALL tags must match (AND logic).
+                    type: boolean
                   timeout:
                     description: Timeout in seconds.
                     type: integer
@@ -841,6 +1311,36 @@ spec:
               security:
                 description: Security settings.
                 properties:
+                  ipAllowlist:
+                    description: |-
+                      IP allowlist configuration (enterprise).
+                      Restricts API access to specific IP addresses or CIDR ranges.
+                    properties:
+                      allowedIPs:
+                        description: List of allowed IP addresses or CIDR ranges (e.g.
+                          "10.0.0.1", "192.168.1.0/24").
+                        items:
+                          type: string
+                        minItems: 1
+                        type: array
+                      enabled:
+                        description: Enable IP address filtering.
+                        type: boolean
+                      maxRequestSizeMB:
+                        description: Maximum request size in MB (enterprise).
+                        type: integer
+                      maxResponseSizeMB:
+                        description: Maximum response size in MB (enterprise).
+                        type: integer
+                      useXForwardedFor:
+                        description: |-
+                          Use X-Forwarded-For header for client IP detection.
+                          Enable when LiteLLM is behind a load balancer or reverse proxy.
+                        type: boolean
+                    required:
+                    - allowedIPs
+                    - enabled
+                    type: object
                   networkPolicy:
                     description: NetworkPolicy configuration.
                     properties:
@@ -1245,6 +1745,20 @@ spec:
           status:
             description: LiteLLMInstanceStatus defines the observed state of LiteLLMInstance.
             properties:
+              backup:
+                description: Backup status (CloudNativePG).
+                properties:
+                  configured:
+                    description: Whether scheduled backups are configured.
+                    type: boolean
+                  lastBackupStatus:
+                    description: Last backup status.
+                    type: string
+                  lastBackupTime:
+                    description: Last backup time.
+                    format: date-time
+                    type: string
+                type: object
               conditions:
                 description: Standard Kubernetes conditions.
                 items:
@@ -1352,6 +1866,21 @@ spec:
               endpoint:
                 description: Internal cluster endpoint URL.
                 type: string
+              lastSuccessfulRevision:
+                description: Last successful deployment revision for auto-rollback.
+                type: string
+              license:
+                description: License activation status.
+                properties:
+                  active:
+                    description: Whether a license Secret was detected.
+                    type: boolean
+                  secretName:
+                    description: Name of the Secret providing the license.
+                    type: string
+                required:
+                - active
+                type: object
               ready:
                 description: Whether the instance is fully ready.
                 type: boolean

@@ -60,6 +60,15 @@ type LiteLLMTeamSpec struct {
 	// +optional
 	Metadata map[string]string `json:"metadata,omitempty"`
 
+	// Tags associated with this team. Keys generated for team members
+	// will inherit these tags for tag-based routing.
+	// +optional
+	Tags []string `json:"tags,omitempty"`
+
+	// Maximum concurrent requests for this team.
+	// +optional
+	MaxParallelRequests *int `json:"maxParallelRequests,omitempty"`
+
 	// Controls who owns team membership.
 	//   "crd"   — CRD is authoritative. Only listed members exist.
 	//   "sso"   — IdP is authoritative. spec.members is ignored.

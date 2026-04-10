@@ -34,6 +34,11 @@ type LiteLLMModelSpec struct {
 	// Optional model metadata.
 	// +optional
 	ModelInfo *ModelInfo `json:"modelInfo,omitempty"`
+
+	// Tags for tag-based routing. Requests with matching tags
+	// will be routed to this model deployment.
+	// +optional
+	Tags []string `json:"tags,omitempty"`
 }
 
 // LiteLLMModelParams defines provider-specific model parameters.
