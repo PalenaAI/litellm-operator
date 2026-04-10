@@ -18,6 +18,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **CloudNativePG backup/restore** — scheduled backups via CNPG `ScheduledBackup` CRs with configurable schedule, retention, and method
 - **Enterprise license activation** — convention-based license Secret detection (`{instance}-license` or `litellm-license`) with automatic `LITELLM_LICENSE` env var injection
 - **Auto-rollback** — automatically rolls back failed deployments when `spec.upgrade.autoRollback: true`
+- **Fallback chains** — default fallbacks, per-model fallbacks, content policy fallbacks, context window fallbacks, and per-error-type retry policies
 - **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
 - **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
 
@@ -230,6 +231,51 @@ spec:
         schedule: "0 2 * * *"   # daily at 2am
         retention: 7
         method: snapshot        # snapshot or barmanObjectStore
+  # ... rest of spec
+```
+
+### Fallback Chains
+
+Configure model fallback routing so requests automatically try alternative models on failure:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  fallbacks:
+    # Global fallbacks applied on any error
+    defaultFallbacks: ["gpt-4-mini", "claude-3-haiku"]
+
+    # Per-model fallbacks for general errors
+    modelFallbacks:
+      - model: gpt-4
+        fallbacks: ["gpt-4-mini", "claude-3-haiku"]
+
+    # Fallbacks for content policy violations
+    contentPolicyFallbacks:
+      - model: gpt-4
+        fallbacks: ["claude-3-sonnet"]
+
+    # Fallbacks for context window exceeded
+    contextWindowFallbacks:
+      - model: gpt-4
+        fallbacks: ["gpt-4-32k", "claude-3-sonnet"]
+
+    maxFallbacks: 3
+
+  routerSettings:
+    # Retry policy by error type (retries on same model before fallback)
+    retryPolicy:
+      TimeoutError: 2
+      RateLimitError: 3
+      ContentPolicyViolationError: 0
+    # Per-model-group retry overrides
+    modelGroupRetryPolicy:
+      gpt-4:
+        TimeoutError: 1
+        RateLimitError: 0
   # ... rest of spec
 ```
 

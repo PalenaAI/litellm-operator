@@ -56,6 +56,10 @@ type LiteLLMInstanceSpec struct {
 	// +optional
 	RouterSettings *RouterSettingsSpec `json:"routerSettings,omitempty"`
 
+	// Fallback configuration for model routing.
+	// +optional
+	Fallbacks *FallbackSpec `json:"fallbacks,omitempty"`
+
 	// Config sync settings for bidirectional synchronization.
 	// +optional
 	ConfigSync *ConfigSyncSpec `json:"configSync,omitempty"`
@@ -327,6 +331,40 @@ type GeneralSettingsSpec struct {
 	AllowUserAuth *bool `json:"allowUserAuth,omitempty"`
 }
 
+// FallbackSpec defines fallback chain configuration for model routing.
+type FallbackSpec struct {
+	// Default fallback models applied on any error.
+	// List of model names to try in order.
+	// +optional
+	DefaultFallbacks []string `json:"defaultFallbacks,omitempty"`
+
+	// Per-model fallback chains for general errors.
+	// +optional
+	ModelFallbacks []ModelFallbackEntry `json:"modelFallbacks,omitempty"`
+
+	// Fallback models for content policy violations.
+	// +optional
+	ContentPolicyFallbacks []ModelFallbackEntry `json:"contentPolicyFallbacks,omitempty"`
+
+	// Fallback models for context window exceeded errors.
+	// +optional
+	ContextWindowFallbacks []ModelFallbackEntry `json:"contextWindowFallbacks,omitempty"`
+
+	// Maximum number of fallback attempts.
+	// +kubebuilder:default=3
+	// +optional
+	MaxFallbacks *int `json:"maxFallbacks,omitempty"`
+}
+
+// ModelFallbackEntry maps a primary model to an ordered list of fallback models.
+type ModelFallbackEntry struct {
+	// Primary model name.
+	Model string `json:"model"`
+
+	// Ordered list of fallback model names.
+	Fallbacks []string `json:"fallbacks"`
+}
+
 // RouterSettingsSpec defines LiteLLM router settings.
 type RouterSettingsSpec struct {
 	// Routing strategy.
@@ -353,6 +391,16 @@ type RouterSettingsSpec struct {
 	// Cooldown time in seconds.
 	// +optional
 	CooldownTime *int `json:"cooldownTime,omitempty"`
+
+	// Global retry policy by error type.
+	// Keys: TimeoutError, RateLimitError, ContentPolicyViolationError, etc.
+	// Values: number of retries.
+	// +optional
+	RetryPolicy map[string]int `json:"retryPolicy,omitempty"`
+
+	// Per-model-group retry policies.
+	// +optional
+	ModelGroupRetryPolicy map[string]map[string]int `json:"modelGroupRetryPolicy,omitempty"`
 }
 
 // ConfigSyncSpec defines bidirectional config sync settings.

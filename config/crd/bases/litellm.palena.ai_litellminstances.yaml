@@ -510,6 +510,78 @@ spec:
                   - name
                   type: object
                 type: array
+              fallbacks:
+                description: Fallback configuration for model routing.
+                properties:
+                  contentPolicyFallbacks:
+                    description: Fallback models for content policy violations.
+                    items:
+                      description: ModelFallbackEntry maps a primary model to an ordered
+                        list of fallback models.
+                      properties:
+                        fallbacks:
+                          description: Ordered list of fallback model names.
+                          items:
+                            type: string
+                          type: array
+                        model:
+                          description: Primary model name.
+                          type: string
+                      required:
+                      - fallbacks
+                      - model
+                      type: object
+                    type: array
+                  contextWindowFallbacks:
+                    description: Fallback models for context window exceeded errors.
+                    items:
+                      description: ModelFallbackEntry maps a primary model to an ordered
+                        list of fallback models.
+                      properties:
+                        fallbacks:
+                          description: Ordered list of fallback model names.
+                          items:
+                            type: string
+                          type: array
+                        model:
+                          description: Primary model name.
+                          type: string
+                      required:
+                      - fallbacks
+                      - model
+                      type: object
+                    type: array
+                  defaultFallbacks:
+                    description: |-
+                      Default fallback models applied on any error.
+                      List of model names to try in order.
+                    items:
+                      type: string
+                    type: array
+                  maxFallbacks:
+                    default: 3
+                    description: Maximum number of fallback attempts.
+                    type: integer
+                  modelFallbacks:
+                    description: Per-model fallback chains for general errors.
+                    items:
+                      description: ModelFallbackEntry maps a primary model to an ordered
+                        list of fallback models.
+                      properties:
+                        fallbacks:
+                          description: Ordered list of fallback model names.
+                          items:
+                            type: string
+                          type: array
+                        model:
+                          description: Primary model name.
+                          type: string
+                      required:
+                      - fallbacks
+                      - model
+                      type: object
+                    type: array
+                type: object
               gatewayHTTPRoute:
                 description: Gateway API HTTPRoute configuration.
                 properties:
@@ -883,12 +955,27 @@ spec:
                   cooldownTime:
                     description: Cooldown time in seconds.
                     type: integer
+                  modelGroupRetryPolicy:
+                    additionalProperties:
+                      additionalProperties:
+                        type: integer
+                      type: object
+                    description: Per-model-group retry policies.
+                    type: object
                   numRetries:
                     description: Number of retries.
                     type: integer
                   retryAfter:
                     description: Retry after seconds.
                     type: integer
+                  retryPolicy:
+                    additionalProperties:
+                      type: integer
+                    description: |-
+                      Global retry policy by error type.
+                      Keys: TimeoutError, RateLimitError, ContentPolicyViolationError, etc.
+                      Values: number of retries.
+                    type: object
                   routingStrategy:
                     description: Routing strategy.
                     enum:

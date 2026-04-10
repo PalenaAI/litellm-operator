@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Fallback chains** — new `spec.fallbacks` field on `LiteLLMInstance` configures model fallback routing. Supports `defaultFallbacks` (global fallback list for any error), per-model `modelFallbacks`, `contentPolicyFallbacks` (on content policy violations), `contextWindowFallbacks` (on context window exceeded), and `maxFallbacks` to limit chain depth. Fallback entries map a primary model to an ordered list of fallback models in the format LiteLLM expects.
+- **Retry policies** — new `retryPolicy` and `modelGroupRetryPolicy` fields on `spec.routerSettings` configure per-error-type retry counts globally and per model group (e.g., `TimeoutError: 2`, `RateLimitError: 3`). Retries happen on the same model; fallbacks switch to a different model.
 - **Enterprise license management** — convention-based LiteLLM Enterprise license activation. The operator detects a well-known Secret (`{instance-name}-license` per-instance, or `litellm-license` namespace-wide fallback) and injects the `LITELLM_LICENSE` environment variable into the Deployment via `secretKeyRef` (the license value is never read into operator memory). License status is reflected in `.status.license`. The controller watches license Secrets and triggers reconciliation on create/update/delete. All downstream controllers (Model, Team, User, VirtualKey) detect enterprise-only API errors (403 + "enterprise") and set `Reason: EnterpriseLicenseRequired` without requeueing.
 
 ## [0.7.0] - 2026-04-06

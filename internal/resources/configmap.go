@@ -90,9 +90,20 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		if instance.Spec.RouterSettings.CooldownTime != nil {
 			rs["cooldown_time"] = *instance.Spec.RouterSettings.CooldownTime
 		}
+		if len(instance.Spec.RouterSettings.RetryPolicy) > 0 {
+			rs["retry_policy"] = instance.Spec.RouterSettings.RetryPolicy
+		}
+		if len(instance.Spec.RouterSettings.ModelGroupRetryPolicy) > 0 {
+			rs["model_group_retry_policy"] = instance.Spec.RouterSettings.ModelGroupRetryPolicy
+		}
 		if len(rs) > 0 {
 			config["router_settings"] = rs
 		}
+	}
+
+	// Fallback configuration
+	if instance.Spec.Fallbacks != nil {
+		buildFallbackConfig(instance.Spec.Fallbacks, config)
 	}
 
 	// SSO litellm_settings
@@ -134,6 +145,52 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 	}
 
 	return config
+}
+
+// buildFallbackConfig writes fallback settings into litellm_settings and router_settings.
+func buildFallbackConfig(fb *litellmv1alpha1.FallbackSpec, config map[string]interface{}) {
+	// litellm_settings: default_fallbacks, content_policy_fallbacks, context_window_fallbacks
+	if len(fb.DefaultFallbacks) > 0 || len(fb.ContentPolicyFallbacks) > 0 || len(fb.ContextWindowFallbacks) > 0 {
+		ls, ok := config["litellm_settings"].(map[string]interface{})
+		if !ok {
+			ls = map[string]interface{}{}
+			config["litellm_settings"] = ls
+		}
+		if len(fb.DefaultFallbacks) > 0 {
+			ls["default_fallbacks"] = fb.DefaultFallbacks
+		}
+		if len(fb.ContentPolicyFallbacks) > 0 {
+			ls["content_policy_fallbacks"] = modelFallbackEntriesToMaps(fb.ContentPolicyFallbacks)
+		}
+		if len(fb.ContextWindowFallbacks) > 0 {
+			ls["context_window_fallbacks"] = modelFallbackEntriesToMaps(fb.ContextWindowFallbacks)
+		}
+	}
+
+	// router_settings: fallbacks, max_fallbacks
+	if len(fb.ModelFallbacks) > 0 || fb.MaxFallbacks != nil {
+		rs, ok := config["router_settings"].(map[string]interface{})
+		if !ok {
+			rs = map[string]interface{}{}
+			config["router_settings"] = rs
+		}
+		if len(fb.ModelFallbacks) > 0 {
+			rs["fallbacks"] = modelFallbackEntriesToMaps(fb.ModelFallbacks)
+		}
+		if fb.MaxFallbacks != nil {
+			rs["max_fallbacks"] = *fb.MaxFallbacks
+		}
+	}
+}
+
+// modelFallbackEntriesToMaps converts ModelFallbackEntry slices to the list-of-single-key-maps
+// format that LiteLLM expects: [{"gpt-4": ["gpt-4-mini", "claude-3-haiku"]}].
+func modelFallbackEntriesToMaps(entries []litellmv1alpha1.ModelFallbackEntry) []map[string][]string {
+	result := make([]map[string][]string, len(entries))
+	for i, e := range entries {
+		result[i] = map[string][]string{e.Model: e.Fallbacks}
+	}
+	return result
 }
 
 func mapDefaultUserParams(p *litellmv1alpha1.DefaultUserParams) map[string]interface{} {
