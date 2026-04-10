@@ -38,6 +38,7 @@ spec:
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `instanceRef` | InstanceRef | Yes | — | Reference to the LiteLLMInstance |
+| `organizationRef` | *OrganizationRef | No | — | Reference to a [LiteLLMOrganization](/reference/litellmorganization) in the same namespace |
 | `teamAlias` | string | Yes | — | Human-readable team name |
 | `models` | []string | No | — | Models this team can access |
 | `maxBudgetMonthly` | *float64 | No | — | Maximum monthly budget in USD |

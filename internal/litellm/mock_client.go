@@ -20,29 +20,32 @@ import "context"
 
 // MockClient implements Client for testing.
 type MockClient struct {
-	MockModels *MockModelService
-	MockTeams  *MockTeamService
-	MockUsers  *MockUserService
-	MockKeys   *MockKeyService
-	MockHealth *MockHealthService
+	MockModels        *MockModelService
+	MockTeams         *MockTeamService
+	MockUsers         *MockUserService
+	MockKeys          *MockKeyService
+	MockOrganizations *MockOrganizationService
+	MockHealth        *MockHealthService
 }
 
 // NewMockClient creates a new MockClient with default implementations.
 func NewMockClient() *MockClient {
 	return &MockClient{
-		MockModels: &MockModelService{},
-		MockTeams:  &MockTeamService{},
-		MockUsers:  &MockUserService{},
-		MockKeys:   &MockKeyService{},
-		MockHealth: &MockHealthService{},
+		MockModels:        &MockModelService{},
+		MockTeams:         &MockTeamService{},
+		MockUsers:         &MockUserService{},
+		MockKeys:          &MockKeyService{},
+		MockOrganizations: &MockOrganizationService{},
+		MockHealth:        &MockHealthService{},
 	}
 }
 
-func (m *MockClient) Models() ModelService  { return m.MockModels }
-func (m *MockClient) Teams() TeamService    { return m.MockTeams }
-func (m *MockClient) Users() UserService    { return m.MockUsers }
-func (m *MockClient) Keys() KeyService      { return m.MockKeys }
-func (m *MockClient) Health() HealthService { return m.MockHealth }
+func (m *MockClient) Models() ModelService               { return m.MockModels }
+func (m *MockClient) Teams() TeamService                 { return m.MockTeams }
+func (m *MockClient) Users() UserService                 { return m.MockUsers }
+func (m *MockClient) Keys() KeyService                   { return m.MockKeys }
+func (m *MockClient) Organizations() OrganizationService { return m.MockOrganizations }
+func (m *MockClient) Health() HealthService              { return m.MockHealth }
 
 // MockModelService records calls and returns configured responses.
 type MockModelService struct {
@@ -242,6 +245,66 @@ func (m *MockKeyService) List(ctx context.Context) ([]KeyInfo, error) {
 		return m.ListFunc(ctx)
 	}
 	return nil, nil
+}
+
+// MockOrganizationService records calls and returns configured responses.
+type MockOrganizationService struct {
+	CreateFunc       func(ctx context.Context, req OrganizationCreateRequest) (*OrganizationCreateResponse, error)
+	UpdateFunc       func(ctx context.Context, req OrganizationUpdateRequest) error
+	DeleteFunc       func(ctx context.Context, organizationID string) error
+	GetFunc          func(ctx context.Context, organizationID string) (*OrganizationInfo, error)
+	ListFunc         func(ctx context.Context) ([]OrganizationInfo, error)
+	AddMemberFunc    func(ctx context.Context, req OrgMemberAddRequest) error
+	DeleteMemberFunc func(ctx context.Context, organizationID, userID string) error
+}
+
+func (m *MockOrganizationService) Create(ctx context.Context, req OrganizationCreateRequest) (*OrganizationCreateResponse, error) {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(ctx, req)
+	}
+	return &OrganizationCreateResponse{OrganizationID: "mock-org-id", OrganizationAlias: req.OrganizationAlias}, nil
+}
+
+func (m *MockOrganizationService) Update(ctx context.Context, req OrganizationUpdateRequest) error {
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(ctx, req)
+	}
+	return nil
+}
+
+func (m *MockOrganizationService) Delete(ctx context.Context, organizationID string) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, organizationID)
+	}
+	return nil
+}
+
+func (m *MockOrganizationService) Get(ctx context.Context, organizationID string) (*OrganizationInfo, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, organizationID)
+	}
+	return &OrganizationInfo{OrganizationID: organizationID}, nil
+}
+
+func (m *MockOrganizationService) List(ctx context.Context) ([]OrganizationInfo, error) {
+	if m.ListFunc != nil {
+		return m.ListFunc(ctx)
+	}
+	return nil, nil
+}
+
+func (m *MockOrganizationService) AddMember(ctx context.Context, req OrgMemberAddRequest) error {
+	if m.AddMemberFunc != nil {
+		return m.AddMemberFunc(ctx, req)
+	}
+	return nil
+}
+
+func (m *MockOrganizationService) DeleteMember(ctx context.Context, organizationID, userID string) error {
+	if m.DeleteMemberFunc != nil {
+		return m.DeleteMemberFunc(ctx, organizationID, userID)
+	}
+	return nil
 }
 
 // MockHealthService records calls and returns configured responses.

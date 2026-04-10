@@ -4,28 +4,25 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: litellmteams.litellm.palena.ai
+  name: litellmorganizations.litellm.palena.ai
 spec:
   group: litellm.palena.ai
   names:
-    kind: LiteLLMTeam
-    listKind: LiteLLMTeamList
-    plural: litellmteams
+    kind: LiteLLMOrganization
+    listKind: LiteLLMOrganizationList
+    plural: litellmorganizations
     shortNames:
-    - lt
-    singular: litellmteam
+    - lo
+    singular: litellmorganization
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.teamAlias
+    - jsonPath: .spec.organizationAlias
       name: Alias
       type: string
-    - jsonPath: .status.totalMemberCount
+    - jsonPath: .status.memberCount
       name: Members
       type: integer
-    - jsonPath: .spec.memberManagement
-      name: MemberMgmt
-      type: string
     - jsonPath: .status.synced
       name: Synced
       type: boolean
@@ -35,7 +32,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: LiteLLMTeam is the Schema for the litellmteams API.
+        description: LiteLLMOrganization is the Schema for the litellmorganizations
+          API.
         properties:
           apiVersion:
             description: |-
@@ -55,13 +53,14 @@ spec:
           metadata:
             type: object
           spec:
-            description: LiteLLMTeamSpec defines the desired state of LiteLLMTeam.
+            description: LiteLLMOrganizationSpec defines the desired state of LiteLLMOrganization.
             properties:
               budgetDuration:
-                description: Budget reset duration (e.g., "30d", "7d").
+                description: Budget reset interval (e.g., "1d", "7d", "30d").
                 type: string
               instanceRef:
-                description: Reference to the LiteLLMInstance.
+                description: Reference to the LiteLLMInstance this organization belongs
+                  to.
                 properties:
                   name:
                     description: Name of the LiteLLMInstance CR.
@@ -69,40 +68,23 @@ spec:
                 required:
                 - name
                 type: object
-              maxBudgetMonthly:
-                description: Maximum monthly budget in USD.
+              maxBudget:
+                description: Maximum budget in USD.
                 type: number
-              maxParallelRequests:
-                description: Maximum concurrent requests for this team.
-                type: integer
-              memberManagement:
-                default: mixed
-                description: |-
-                  Controls who owns team membership.
-                    "crd"   — CRD is authoritative. Only listed members exist.
-                    "sso"   — IdP is authoritative. spec.members is ignored.
-                    "mixed" — CRD members are additive. SSO members are preserved.
-                enum:
-                - crd
-                - sso
-                - mixed
-                type: string
               members:
-                description: |-
-                  Team members. Behavior depends on memberManagement mode.
-                  Ignored when memberManagement is "sso".
+                description: Organization members.
                 items:
-                  description: TeamMember defines a team member.
+                  description: OrganizationMember defines a member of an organization.
                   properties:
                     email:
                       description: User email address.
                       type: string
                     role:
-                      default: user
-                      description: Role within the team.
+                      default: internal_user
+                      description: 'Role within the organization: org_admin or internal_user.'
                       enum:
-                      - admin
-                      - user
+                      - org_admin
+                      - internal_user
                       type: string
                   required:
                   - email
@@ -111,50 +93,30 @@ spec:
               metadata:
                 additionalProperties:
                   type: string
-                description: Custom metadata for the team.
+                description: Metadata key-value pairs.
                 type: object
               models:
-                description: Models this team can access.
+                description: List of models this organization can access.
                 items:
                   type: string
                 type: array
-              organizationRef:
-                description: Reference to the organization this team belongs to.
-                properties:
-                  name:
-                    description: Name of the LiteLLMOrganization CR.
-                    type: string
-                required:
-                - name
-                type: object
-              rpmLimit:
-                description: RPM limit for the team.
-                type: integer
-              tags:
-                description: |-
-                  Tags associated with this team. Keys generated for team members
-                  will inherit these tags for tag-based routing.
-                items:
-                  type: string
-                type: array
-              teamAlias:
-                description: Human-readable team alias.
+              organizationAlias:
+                description: Human-readable alias for the organization.
                 type: string
-              teamMemberRpmLimit:
-                description: RPM limit per team member.
-                type: integer
-              teamMemberTpmLimit:
-                description: TPM limit per team member.
+              rpmLimit:
+                description: RPM limit for the organization.
+                format: int64
                 type: integer
               tpmLimit:
-                description: TPM limit for the team.
+                description: TPM limit for the organization.
+                format: int64
                 type: integer
             required:
             - instanceRef
-            - teamAlias
+            - organizationAlias
             type: object
           status:
-            description: LiteLLMTeamStatus defines the observed state of LiteLLMTeam.
+            description: LiteLLMOrganizationStatus defines the observed state of LiteLLMOrganization.
             properties:
               conditions:
                 description: Standard conditions.
@@ -213,29 +175,6 @@ spec:
                   - type
                   type: object
                 type: array
-              crdMembers:
-                description: Members managed by this CRD.
-                items:
-                  description: TeamMemberStatus defines the status of a team member.
-                  properties:
-                    email:
-                      description: Member email.
-                      type: string
-                    role:
-                      description: Member role.
-                      type: string
-                    source:
-                      description: Source of the member ("crd", "azure-entra", "okta",
-                        etc.).
-                      type: string
-                    synced:
-                      description: Whether the member is synced.
-                      type: boolean
-                  required:
-                  - email
-                  - role
-                  type: object
-                type: array
               currentSpend:
                 description: Current spend in USD.
                 type: number
@@ -243,38 +182,15 @@ spec:
                 description: Last successful sync time.
                 format: date-time
                 type: string
-              litellmTeamId:
-                description: LiteLLM-assigned team ID.
+              litellmOrganizationId:
+                description: Organization ID assigned by LiteLLM.
                 type: string
-              ssoMembers:
-                description: Members provisioned by SSO/SCIM (not managed by CRD).
-                items:
-                  description: TeamMemberStatus defines the status of a team member.
-                  properties:
-                    email:
-                      description: Member email.
-                      type: string
-                    role:
-                      description: Member role.
-                      type: string
-                    source:
-                      description: Source of the member ("crd", "azure-entra", "okta",
-                        etc.).
-                      type: string
-                    synced:
-                      description: Whether the member is synced.
-                      type: boolean
-                  required:
-                  - email
-                  - role
-                  type: object
-                type: array
-              synced:
-                description: Whether the team is synced to LiteLLM.
-                type: boolean
-              totalMemberCount:
-                description: Total member count (CRD + SSO).
+              memberCount:
+                description: Number of members.
                 type: integer
+              synced:
+                description: Whether the organization is synced to LiteLLM.
+                type: boolean
             type: object
         type: object
     served: true

@@ -6,11 +6,12 @@ The operator communicates with LiteLLM through a REST API client defined as Go i
 
 ```go
 type Client interface {
-    Models() ModelService
-    Teams()  TeamService
-    Users()  UserService
-    Keys()   KeyService
-    Health() HealthService
+    Models()        ModelService
+    Teams()         TeamService
+    Users()         UserService
+    Keys()          KeyService
+    Organizations() OrganizationService
+    Health()        HealthService
 }
 ```
 
@@ -64,6 +65,18 @@ type ClientFactory func(endpoint, masterKey string) Client
 | `Delete` | POST | `/key/delete` | Revoke a key |
 | `Get` | GET | `/key/info?key=` | Get key info |
 | `List` | GET | `/key/list` | List all keys |
+
+### OrganizationService
+
+| Method | HTTP | Endpoint | Description |
+| --- | --- | --- | --- |
+| `Create` | POST | `/organization/new` | Create an organization |
+| `Update` | POST | `/organization/update` | Update organization properties |
+| `Delete` | POST | `/organization/delete` | Delete an organization |
+| `Get` | GET | `/organization/info?organization_id=` | Get organization info |
+| `List` | GET | `/organization/list` | List all organizations |
+| `AddMember` | POST | `/organization/member_add` | Add an organization member |
+| `DeleteMember` | POST | `/organization/member_delete` | Remove an organization member |
 
 ### HealthService
 

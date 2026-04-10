@@ -34,6 +34,7 @@ type Client interface {
 	Teams() TeamService
 	Users() UserService
 	Keys() KeyService
+	Organizations() OrganizationService
 	Health() HealthService
 }
 
@@ -55,11 +56,12 @@ type httpClient struct {
 	http      *http.Client
 }
 
-func (c *httpClient) Models() ModelService  { return &modelService{c} }
-func (c *httpClient) Teams() TeamService    { return &teamService{c} }
-func (c *httpClient) Users() UserService    { return &userService{c} }
-func (c *httpClient) Keys() KeyService      { return &keyService{c} }
-func (c *httpClient) Health() HealthService { return &healthService{c} }
+func (c *httpClient) Models() ModelService               { return &modelService{c} }
+func (c *httpClient) Teams() TeamService                 { return &teamService{c} }
+func (c *httpClient) Users() UserService                 { return &userService{c} }
+func (c *httpClient) Keys() KeyService                   { return &keyService{c} }
+func (c *httpClient) Organizations() OrganizationService { return &organizationService{c} }
+func (c *httpClient) Health() HealthService              { return &healthService{c} }
 
 func (c *httpClient) do(ctx context.Context, method, path string, body interface{}, result interface{}) error {
 	var reqBody io.Reader

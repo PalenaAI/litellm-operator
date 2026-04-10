@@ -7,28 +7,36 @@
 │                     LiteLLM Operator                            │
 │                                                                 │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │    Instance       │  │     Model        │  │    Team      │  │
+│  │    Instance       │  │  Organization    │  │    Team      │  │
 │  │   Controller      │  │   Controller     │  │  Controller  │  │
 │  │                   │  │                  │  │              │  │
-│  │ - Deployment      │  │ - POST /model/*  │  │ - POST /team │  │
-│  │ - ConfigMap       │  │ - Health check   │  │ - Members    │  │
-│  │ - Service         │  │ - Status sync    │  │ - Budgets    │  │
+│  │ - Deployment      │  │ - POST /org/*    │  │ - POST /team │  │
+│  │ - ConfigMap       │  │ - Members        │  │ - Members    │  │
+│  │ - Service         │  │ - Budget mgmt   │  │ - Budgets    │  │
 │  │ - Ingress/Route   │  │                  │  │              │  │
 │  │ - HPA, PDB        │  └────────┬─────────┘  └──────┬───────┘  │
 │  │ - Migration Job   │           │                    │          │
 │  │ - SSO/SCIM config │  ┌────────┴────────┐  ┌───────┴───────┐  │
-│  │ - License Secret  │  │     User        │  │  VirtualKey   │  │
-│  │ - Config Sync     │  │   Controller    │  │  Controller   │  │
+│  │ - License Secret  │  │     Model       │  │     User      │  │
+│  │ - Config Sync     │  │   Controller    │  │   Controller  │  │
 │  └────────┬──────────┘  │                 │  │               │  │
-│           │             │                 │  │               │  │
-│           │             │ - POST /user/*  │  │ - POST /key/* │  │
-│           │             │ - Budget mgmt   │  │ - Secret mgmt │  │
+│           │             │ - POST /model/* │  │ - POST /user/*│  │
+│           │             │ - Health check  │  │ - Budget mgmt │  │
 │           │             └────────┬────────┘  └───────┬───────┘  │
 │           │                      │                    │          │
-│  ┌────────▼──────────────────────▼────────────────────▼───────┐  │
+│           │             ┌────────┴────────────────────┘          │
+│           │             │                                        │
+│           │    ┌────────┴────────┐                               │
+│           │    │  VirtualKey     │                               │
+│           │    │  Controller     │                               │
+│           │    │ - POST /key/*   │                               │
+│           │    │ - Secret mgmt   │                               │
+│           │    └────────┬────────┘                               │
+│           │             │                                        │
+│  ┌────────▼─────────────▼────────────────────────────────────┐  │
 │  │                    LiteLLM API Client                      │  │
-│  │  ModelService · TeamService · UserService                  │  │
-│  │  KeyService · HealthService                                │  │
+│  │  OrganizationService · ModelService · TeamService          │  │
+│  │  UserService · KeyService · HealthService                  │  │
 │  └────────────────────────┬───────────────────────────────────┘  │
 │                           │                                      │
 └───────────────────────────┼──────────────────────────────────────┘
@@ -70,7 +78,7 @@ The most complex controller. It manages all Kubernetes infrastructure for a Lite
 
 ### Secondary Controllers
 
-All secondary controllers (Model, Team, User, VirtualKey) follow the same pattern:
+All secondary controllers (Organization, Model, Team, User, VirtualKey) follow the same pattern:
 
 ```
 CR created/updated/deleted

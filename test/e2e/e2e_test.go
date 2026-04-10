@@ -47,8 +47,10 @@ const metricsRoleBindingName = "litellm-operator-metrics-binding"
 const (
 	testNamespace    = "e2e-fullstack"
 	instanceName     = "e2e-litellm"
+	orgName          = "e2e-org"
 	modelName        = "e2e-model"
 	teamName         = "e2e-team"
+	orgTeamName      = "e2e-org-team"
 	userName         = "e2e-user"
 	virtualKeyName   = "e2e-vk"
 	litellmTestImage = "ghcr.io/berriai/litellm:main-v1.60.0"
@@ -138,6 +140,39 @@ spec:
   service:
     type: ClusterIP
     port: 4000
+`
+
+const organizationYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMOrganization
+metadata:
+  name: e2e-org
+  namespace: e2e-fullstack
+spec:
+  instanceRef:
+    name: e2e-litellm
+  organizationAlias: e2e-test-org
+  models:
+    - e2e-gpt-4o
+  maxBudget: 1000
+  budgetDuration: "30d"
+`
+
+const orgTeamYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: e2e-org-team
+  namespace: e2e-fullstack
+spec:
+  instanceRef:
+    name: e2e-litellm
+  organizationRef:
+    name: e2e-org
+  teamAlias: e2e-org-scoped-team
+  models:
+    - e2e-gpt-4o
+  memberManagement: crd
 `
 
 const modelYAML = `
@@ -460,8 +495,8 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 				}
 
 				kinds := []string{
-					"litellminstance", "litellmmodel", "litellmteam",
-					"litellmuser", "litellmvirtualkey",
+					"litellminstance", "litellmorganization", "litellmmodel",
+					"litellmteam", "litellmuser", "litellmvirtualkey",
 				}
 				for _, kind := range kinds {
 					cmd = exec.Command("kubectl", "get", kind, "-n", testNamespace, "-o", "yaml")
@@ -564,6 +599,52 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 			output, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(output).NotTo(BeEmpty(), "litellmModelId should be set after sync")
+		})
+
+		It("should create a LiteLLMOrganization and wait for Synced", func() {
+			By("applying the LiteLLMOrganization CR")
+			applyYAML(organizationYAML)
+
+			By("waiting for the organization to be synced")
+			verifyOrgSynced := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmorganization", orgName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyOrgSynced, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the organization has a LiteLLM ID")
+			cmd := exec.Command("kubectl", "get", "litellmorganization", orgName,
+				"-n", testNamespace, "-o", "jsonpath={.status.litellmOrganizationId}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).NotTo(BeEmpty(), "litellmOrganizationId should be set after sync")
+		})
+
+		It("should create a LiteLLMTeam scoped to an organization", func() {
+			By("applying the org-scoped LiteLLMTeam CR")
+			applyYAML(orgTeamYAML)
+
+			By("waiting for the org-scoped team to be synced")
+			verifyOrgTeamSynced := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmteam", orgTeamName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyOrgTeamSynced, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the org-scoped team has a LiteLLM ID")
+			cmd := exec.Command("kubectl", "get", "litellmteam", orgTeamName,
+				"-n", testNamespace, "-o", "jsonpath={.status.litellmTeamId}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(output).NotTo(BeEmpty(), "litellmTeamId should be set for org-scoped team")
 		})
 
 		It("should create a LiteLLMTeam and wait for Synced", func() {
@@ -684,6 +765,36 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 
 			verifyDeleted := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "litellmteam", teamName,
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should delete org-scoped Team and verify cleanup", func() {
+			cmd := exec.Command("kubectl", "delete", "litellmteam", orgTeamName,
+				"-n", testNamespace, "--timeout=60s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			verifyDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmteam", orgTeamName,
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should delete Organization and verify cleanup", func() {
+			cmd := exec.Command("kubectl", "delete", "litellmorganization", orgName,
+				"-n", testNamespace, "--timeout=60s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			verifyDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmorganization", orgName,
 					"-n", testNamespace)
 				_, err := utils.Run(cmd)
 				g.Expect(err).To(HaveOccurred())

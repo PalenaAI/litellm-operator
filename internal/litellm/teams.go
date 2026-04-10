@@ -36,6 +36,7 @@ type TeamService interface {
 // TeamCreateRequest is the request to create a team.
 type TeamCreateRequest struct {
 	TeamAlias           string            `json:"team_alias"`
+	OrganizationID      string            `json:"organization_id,omitempty"`
 	Models              []string          `json:"models,omitempty"`
 	MaxBudget           *float64          `json:"max_budget,omitempty"`
 	BudgetDuration      string            `json:"budget_duration,omitempty"`
@@ -65,6 +66,7 @@ type TeamCreateResponse struct {
 type TeamUpdateRequest struct {
 	TeamID              string            `json:"team_id"`
 	TeamAlias           string            `json:"team_alias,omitempty"`
+	OrganizationID      string            `json:"organization_id,omitempty"`
 	Models              []string          `json:"models,omitempty"`
 	MaxBudget           *float64          `json:"max_budget,omitempty"`
 	BudgetDuration      string            `json:"budget_duration,omitempty"`

@@ -1,12 +1,13 @@
 # CRD Reference
 
-The LiteLLM Operator defines five Custom Resource Definitions in the `litellm.palena.ai/v1alpha1` API group.
+The LiteLLM Operator defines six Custom Resource Definitions in the `litellm.palena.ai/v1alpha1` API group.
 
 ## Overview
 
 | CRD | Short Name | Scope | Description |
 | --- | --- | --- | --- |
 | [LiteLLMInstance](/reference/litellminstance) | `li` | Namespaced | Primary CRD. Deploys LiteLLM proxy infrastructure |
+| [LiteLLMOrganization](/reference/litellmorganization) | `lo` | Namespaced | Creates an organization for multi-tenant isolation |
 | [LiteLLMModel](/reference/litellmmodel) | `lm` | Namespaced | Registers an AI model with the proxy |
 | [LiteLLMTeam](/reference/litellmteam) | `lt` | Namespaced | Creates a team with budget and member management |
 | [LiteLLMUser](/reference/litellmuser) | `lu` | Namespaced | Creates a user (non-SSO environments) |
@@ -14,15 +15,17 @@ The LiteLLM Operator defines five Custom Resource Definitions in the `litellm.pa
 
 ## Relationship Diagram
 
-```
+```text
 LiteLLMInstance
-├── LiteLLMModel      (instanceRef → LiteLLMInstance)
-├── LiteLLMTeam       (instanceRef → LiteLLMInstance)
-├── LiteLLMUser       (instanceRef → LiteLLMInstance, teamRef → LiteLLMTeam)
-└── LiteLLMVirtualKey (instanceRef → LiteLLMInstance, teamRef → LiteLLMTeam, userRef → LiteLLMUser)
+├── LiteLLMOrganization (instanceRef → LiteLLMInstance)
+│   └── LiteLLMTeam     (organizationRef → LiteLLMOrganization)
+├── LiteLLMModel        (instanceRef → LiteLLMInstance)
+├── LiteLLMTeam         (instanceRef → LiteLLMInstance)
+├── LiteLLMUser         (instanceRef → LiteLLMInstance, teamRef → LiteLLMTeam)
+└── LiteLLMVirtualKey   (instanceRef → LiteLLMInstance, teamRef → LiteLLMTeam, userRef → LiteLLMUser)
 ```
 
-All secondary CRDs reference a `LiteLLMInstance` in the same namespace via `spec.instanceRef`. The operator resolves this to find the LiteLLM API endpoint and master key.
+All secondary CRDs reference a `LiteLLMInstance` in the same namespace via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`. The operator resolves these references to find the LiteLLM API endpoint, master key, and organization ID.
 
 ## Common Types
 
@@ -51,7 +54,7 @@ instanceRef:
 
 ```bash
 # List all resources
-kubectl get li,lm,lt,lu,lk
+kubectl get li,lo,lm,lt,lu,lk
 
 # Watch a specific type
 kubectl get litellmmodels -w

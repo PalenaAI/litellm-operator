@@ -6,7 +6,8 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 
 ## Features
 
-- **Declarative LiteLLM deployment** — manage proxy instances, models, teams, users, and API keys as Kubernetes custom resources
+- **Declarative LiteLLM deployment** — manage proxy instances, organizations, models, teams, users, and API keys as Kubernetes custom resources
+- **Multi-tenancy** — full Organization > Team > User > Key hierarchy with org-scoped budgets, model access, and member management
 - **Bidirectional config sync** — reconciles CRD state with the LiteLLM REST API on every sync interval
 - **Team member management** — three modes: `crd` (CRD authoritative), `sso` (IdP authoritative), `mixed` (additive)
 - **VirtualKey secret management** — generated API keys are stored in Kubernetes Secrets with owner references for automatic cleanup
@@ -32,12 +33,13 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 | CRD | Short Name | Description |
 | --- | ---------- | ----------- |
 | `LiteLLMInstance` | `li` | Deploys a LiteLLM proxy with database, Redis, networking, and SSO |
+| `LiteLLMOrganization` | `lo` | Creates an organization for multi-tenant isolation with budget and model access |
 | `LiteLLMModel` | `lm` | Registers a model (e.g., `openai/gpt-4o`) with the proxy |
 | `LiteLLMTeam` | `lt` | Creates a team with budget limits and member management |
 | `LiteLLMUser` | `lu` | Creates a user (service accounts, bot users, non-SSO environments) |
 | `LiteLLMVirtualKey` | `lk` | Generates an API key scoped to a team/user with budget and rate limits |
 
-All secondary resources (`LiteLLMModel`, `LiteLLMTeam`, `LiteLLMUser`, `LiteLLMVirtualKey`) reference a `LiteLLMInstance` via `spec.instanceRef`.
+All secondary resources reference a `LiteLLMInstance` via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`.
 
 ## Prerequisites
 
@@ -137,6 +139,41 @@ spec:
     name: engineering
   models: [gpt-4o]
   maxBudget: "100"
+```
+
+### Multi-Tenant Organizations
+
+Create an organization to group teams under a shared budget and model access policy:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMOrganization
+metadata:
+  name: acme-corp
+spec:
+  instanceRef:
+    name: my-gateway
+  organizationAlias: acme-corp
+  models: [gpt-4o, claude-4-sonnet]
+  maxBudget: 5000
+  budgetDuration: "30d"
+  members:
+    - email: admin@acme.com
+      role: org_admin
+    - email: user@acme.com
+      role: internal_user
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: acme-engineering
+spec:
+  instanceRef:
+    name: my-gateway
+  organizationRef:
+    name: acme-corp
+  teamAlias: acme-engineering
+  models: [gpt-4o]
 ```
 
 ### OpenShift / Non-Root Environments
@@ -513,7 +550,7 @@ make run           # Run operator outside the cluster
 Key design points:
 
 - **LiteLLMInstance** controller manages Deployment, ConfigMap, Service, Secrets, Ingress, HPA, PDB, NetworkPolicy, migration Jobs, ServiceMonitor, PrometheusRule, Grafana dashboard ConfigMaps, and CNPG ScheduledBackups
-- **Secondary controllers** (Model, Team, User, VirtualKey) resolve their `instanceRef` to discover the LiteLLM API endpoint and master key, then sync state via the REST API
+- **Secondary controllers** (Organization, Model, Team, User, VirtualKey) resolve their `instanceRef` to discover the LiteLLM API endpoint and master key, then sync state via the REST API
 - **Finalizers** ensure cleanup: deleting a CRD calls the corresponding LiteLLM API delete endpoint before removing the Kubernetes resource
 - **Spec hash annotations** (`litellm.palena.ai/sync-hash`) enable change detection to avoid unnecessary API calls
 

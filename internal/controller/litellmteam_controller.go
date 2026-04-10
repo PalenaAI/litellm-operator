@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -110,9 +111,16 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 	log := logf.FromContext(ctx)
 	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 
+	// Resolve organization reference if set
+	orgID, err := r.resolveOrganizationRef(ctx, team)
+	if err != nil {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("resolve organization ref: %w", err)
+	}
+
 	if team.Status.LiteLLMTeamID == "" {
 		req := litellm.TeamCreateRequest{
 			TeamAlias:           team.Spec.TeamAlias,
+			OrganizationID:      orgID,
 			Models:              team.Spec.Models,
 			MaxBudget:           team.Spec.MaxBudgetMonthly,
 			BudgetDuration:      team.Spec.BudgetDuration,
@@ -147,6 +155,7 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 			req := litellm.TeamUpdateRequest{
 				TeamID:              team.Status.LiteLLMTeamID,
 				TeamAlias:           team.Spec.TeamAlias,
+				OrganizationID:      orgID,
 				Models:              team.Spec.Models,
 				MaxBudget:           team.Spec.MaxBudgetMonthly,
 				BudgetDuration:      team.Spec.BudgetDuration,
@@ -278,6 +287,25 @@ func (r *LiteLLMTeamReconciler) reconcileMembers(
 	default:
 		return fmt.Errorf("unknown memberManagement mode: %q", mgmt)
 	}
+}
+
+func (r *LiteLLMTeamReconciler) resolveOrganizationRef(
+	ctx context.Context,
+	team *litellmv1alpha1.LiteLLMTeam,
+) (string, error) {
+	if team.Spec.OrganizationRef == nil {
+		return "", nil
+	}
+	var org litellmv1alpha1.LiteLLMOrganization
+	if err := r.Get(ctx, types.NamespacedName{
+		Name: team.Spec.OrganizationRef.Name, Namespace: team.Namespace,
+	}, &org); err != nil {
+		return "", fmt.Errorf("resolve organization ref %q: %w", team.Spec.OrganizationRef.Name, err)
+	}
+	if org.Status.LiteLLMOrganizationID == "" {
+		return "", fmt.Errorf("organization %q not yet synced (no litellmOrganizationId)", team.Spec.OrganizationRef.Name)
+	}
+	return org.Status.LiteLLMOrganizationID, nil
 }
 
 func (r *LiteLLMTeamReconciler) handleDeletion(ctx context.Context, team *litellmv1alpha1.LiteLLMTeam) (ctrl.Result, error) {

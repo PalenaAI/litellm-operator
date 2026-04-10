@@ -71,6 +71,7 @@ export default defineConfig({
         items: [
           { text: 'Overview', link: '/reference/crds' },
           { text: 'LiteLLMInstance', link: '/reference/litellminstance' },
+          { text: 'LiteLLMOrganization', link: '/reference/litellmorganization' },
           { text: 'LiteLLMModel', link: '/reference/litellmmodel' },
           { text: 'LiteLLMTeam', link: '/reference/litellmteam' },
           { text: 'LiteLLMUser', link: '/reference/litellmuser' },

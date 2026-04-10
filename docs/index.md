@@ -19,7 +19,7 @@ hero:
 features:
   - icon: "\U0001F4E6"
     title: Declarative CRDs
-    details: Manage LiteLLM instances, models, teams, users, and API keys as Kubernetes custom resources. Full GitOps compatibility.
+    details: Manage LiteLLM instances, organizations, models, teams, users, and API keys as Kubernetes custom resources. Full GitOps compatibility.
   - icon: "\U0001F504"
     title: Bidirectional Config Sync
     details: Changes made via CRDs or the Admin UI are kept in sync. Three policies for unmanaged resources — preserve, prune, or adopt.

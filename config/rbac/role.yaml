@@ -78,6 +78,7 @@ rules:
   resources:
   - litellminstances
   - litellmmodels
+  - litellmorganizations
   - litellmteams
   - litellmusers
   - litellmvirtualkeys
@@ -94,6 +95,7 @@ rules:
   resources:
   - litellminstances/finalizers
   - litellmmodels/finalizers
+  - litellmorganizations/finalizers
   - litellmteams/finalizers
   - litellmusers/finalizers
   - litellmvirtualkeys/finalizers
@@ -104,6 +106,7 @@ rules:
   resources:
   - litellminstances/status
   - litellmmodels/status
+  - litellmorganizations/status
   - litellmteams/status
   - litellmusers/status
   - litellmvirtualkeys/status

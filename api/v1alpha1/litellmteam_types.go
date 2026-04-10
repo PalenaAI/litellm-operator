@@ -25,6 +25,10 @@ type LiteLLMTeamSpec struct {
 	// Reference to the LiteLLMInstance.
 	InstanceRef InstanceRef `json:"instanceRef"`
 
+	// Reference to the organization this team belongs to.
+	// +optional
+	OrganizationRef *OrganizationRef `json:"organizationRef,omitempty"`
+
 	// Human-readable team alias.
 	TeamAlias string `json:"teamAlias"`
 
