@@ -4,25 +4,25 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
   creationTimestamp: null
-  name: litellmvirtualkeys.litellm.palena.ai
+  name: litellmorganizations.litellm.palena.ai
 spec:
   group: litellm.palena.ai
   names:
-    kind: LiteLLMVirtualKey
-    listKind: LiteLLMVirtualKeyList
-    plural: litellmvirtualkeys
+    kind: LiteLLMOrganization
+    listKind: LiteLLMOrganizationList
+    plural: litellmorganizations
     shortNames:
-    - lk
-    singular: litellmvirtualkey
+    - lo
+    singular: litellmorganization
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.keyAlias
+    - jsonPath: .spec.organizationAlias
       name: Alias
       type: string
-    - jsonPath: .status.isActive
-      name: Active
-      type: boolean
+    - jsonPath: .status.memberCount
+      name: Members
+      type: integer
     - jsonPath: .status.synced
       name: Synced
       type: boolean
@@ -32,7 +32,8 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: LiteLLMVirtualKey is the Schema for the litellmvirtualkeys API.
+        description: LiteLLMOrganization is the Schema for the litellmorganizations
+          API.
         properties:
           apiVersion:
             description: |-
@@ -52,25 +53,14 @@ spec:
           metadata:
             type: object
           spec:
-            description: LiteLLMVirtualKeySpec defines the desired state of LiteLLMVirtualKey.
+            description: LiteLLMOrganizationSpec defines the desired state of LiteLLMOrganization.
             properties:
               budgetDuration:
-                description: Budget reset duration (e.g., "30d").
+                description: Budget reset interval (e.g., "1d", "7d", "30d").
                 type: string
-              expiresAt:
-                description: Key expiration time.
-                format: date-time
-                type: string
-              guardrails:
-                description: |-
-                  Guardrails to activate for this key. Each entry must match the
-                  guardrailName of a LiteLLMGuardrail CR bound to the same instance.
-                  Requires a LiteLLM Enterprise license.
-                items:
-                  type: string
-                type: array
               instanceRef:
-                description: Reference to the LiteLLMInstance.
+                description: Reference to the LiteLLMInstance this organization belongs
+                  to.
                 properties:
                   name:
                     description: Name of the LiteLLMInstance CR.
@@ -78,67 +68,55 @@ spec:
                 required:
                 - name
                 type: object
-              keyAlias:
-                description: Human-readable key alias.
-                type: string
-              keySecretName:
-                description: |-
-                  Name for the Secret that stores the generated API key.
-                  Defaults to "{name}-key".
-                type: string
               maxBudget:
                 description: Maximum budget in USD.
-                type: string
-              maxParallelRequests:
-                description: Maximum concurrent requests for this key.
-                type: integer
+                type: number
+              members:
+                description: Organization members.
+                items:
+                  description: OrganizationMember defines a member of an organization.
+                  properties:
+                    email:
+                      description: User email address.
+                      type: string
+                    role:
+                      default: internal_user
+                      description: 'Role within the organization: org_admin or internal_user.'
+                      enum:
+                      - org_admin
+                      - internal_user
+                      type: string
+                  required:
+                  - email
+                  type: object
+                type: array
               metadata:
                 additionalProperties:
                   type: string
-                description: Custom metadata.
-                type: object
-              modelMaxBudget:
-                additionalProperties:
-                  type: string
-                description: |-
-                  Per-model spending limits for this key (enterprise).
-                  Key: model name, Value: max budget in USD.
+                description: Metadata key-value pairs.
                 type: object
               models:
-                description: Models this key can access.
+                description: List of models this organization can access.
                 items:
                   type: string
                 type: array
+              organizationAlias:
+                description: Human-readable alias for the organization.
+                type: string
               rpmLimit:
-                description: RPM limit for this key.
+                description: RPM limit for the organization.
+                format: int64
                 type: integer
-              teamRef:
-                description: Reference to a LiteLLMTeam CR that this key belongs to.
-                properties:
-                  name:
-                    description: Name of the LiteLLMInstance CR.
-                    type: string
-                required:
-                - name
-                type: object
               tpmLimit:
-                description: TPM limit for this key.
+                description: TPM limit for the organization.
+                format: int64
                 type: integer
-              userRef:
-                description: Reference to a LiteLLMUser CR that this key belongs to.
-                properties:
-                  name:
-                    description: Name of the LiteLLMInstance CR.
-                    type: string
-                required:
-                - name
-                type: object
             required:
             - instanceRef
-            - keyAlias
+            - organizationAlias
             type: object
           status:
-            description: LiteLLMVirtualKeyStatus defines the observed state of LiteLLMVirtualKey.
+            description: LiteLLMOrganizationStatus defines the observed state of LiteLLMOrganization.
             properties:
               conditions:
                 description: Standard conditions.
@@ -198,37 +176,20 @@ spec:
                   type: object
                 type: array
               currentSpend:
-                description: Current spend on this key in USD.
-                type: string
-              expiresAt:
-                description: Key expiration time.
-                format: date-time
-                type: string
-              isActive:
-                description: Whether the key is active.
-                type: boolean
-              keySecretRef:
-                description: Reference to the Secret containing the API key.
-                properties:
-                  key:
-                    description: Key within the Secret.
-                    type: string
-                  name:
-                    description: Name of the Secret.
-                    type: string
-                required:
-                - key
-                - name
-                type: object
+                description: Current spend in USD.
+                type: number
               lastSyncTime:
                 description: Last successful sync time.
                 format: date-time
                 type: string
-              litellmKeyToken:
-                description: LiteLLM-assigned key token (hashed, for reference).
+              litellmOrganizationId:
+                description: Organization ID assigned by LiteLLM.
                 type: string
+              memberCount:
+                description: Number of members.
+                type: integer
               synced:
-                description: Whether the key is synced to LiteLLM.
+                description: Whether the organization is synced to LiteLLM.
                 type: boolean
             type: object
         type: object

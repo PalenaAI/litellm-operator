@@ -4,25 +4,28 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
   creationTimestamp: null
-  name: litellmvirtualkeys.litellm.palena.ai
+  name: litellmcustomers.litellm.palena.ai
 spec:
   group: litellm.palena.ai
   names:
-    kind: LiteLLMVirtualKey
-    listKind: LiteLLMVirtualKeyList
-    plural: litellmvirtualkeys
+    kind: LiteLLMCustomer
+    listKind: LiteLLMCustomerList
+    plural: litellmcustomers
     shortNames:
-    - lk
-    singular: litellmvirtualkey
+    - lcust
+    singular: litellmcustomer
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.keyAlias
-      name: Alias
+    - jsonPath: .spec.customerId
+      name: CustomerID
       type: string
-    - jsonPath: .status.isActive
-      name: Active
-      type: boolean
+    - jsonPath: .spec.maxBudget
+      name: MaxBudget
+      type: string
+    - jsonPath: .status.currentSpend
+      name: Spend
+      type: string
     - jsonPath: .status.synced
       name: Synced
       type: boolean
@@ -32,7 +35,10 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: LiteLLMVirtualKey is the Schema for the litellmvirtualkeys API.
+        description: |-
+          LiteLLMCustomer is the Schema for the litellmcustomers API.
+          A Customer represents an external end-user of the AI gateway with its own
+          spending, rate, and access policies.
         properties:
           apiVersion:
             description: |-
@@ -52,25 +58,42 @@ spec:
           metadata:
             type: object
           spec:
-            description: LiteLLMVirtualKeySpec defines the desired state of LiteLLMVirtualKey.
+            description: |-
+              LiteLLMCustomerSpec defines the desired state of LiteLLMCustomer.
+
+              A Customer represents an external end-user of the LiteLLM AI gateway —
+              typically the user of an application built on top of LiteLLM. Customers
+              are identified by LiteLLM as "end_users" and can have their own budgets,
+              rate limits, and model access policies.
             properties:
+              alias:
+                description: Human-readable alias for the customer.
+                type: string
+              allowedModelRegion:
+                description: List of models this customer is allowed to access.
+                type: string
+              blocked:
+                description: Whether the customer is blocked from making requests.
+                type: boolean
               budgetDuration:
-                description: Budget reset duration (e.g., "30d").
+                description: Budget reset duration (e.g., "1d", "7d", "30d").
                 type: string
-              expiresAt:
-                description: Key expiration time.
-                format: date-time
-                type: string
-              guardrails:
+              budgetId:
                 description: |-
-                  Guardrails to activate for this key. Each entry must match the
-                  guardrailName of a LiteLLMGuardrail CR bound to the same instance.
-                  Requires a LiteLLM Enterprise license.
-                items:
-                  type: string
-                type: array
+                  Reference to a predefined budget tier by budget_id.
+                  Mutually exclusive with MaxBudget.
+                type: string
+              customerId:
+                description: |-
+                  Unique customer identifier (typically an external user ID).
+                  Maps to LiteLLM's `user_id` / `end_user_id` field.
+                type: string
+              defaultModel:
+                description: Default model to use for this customer.
+                type: string
               instanceRef:
-                description: Reference to the LiteLLMInstance.
+                description: Reference to the LiteLLMInstance this customer belongs
+                  to.
                 properties:
                   name:
                     description: Name of the LiteLLMInstance CR.
@@ -78,68 +101,62 @@ spec:
                 required:
                 - name
                 type: object
-              keyAlias:
-                description: Human-readable key alias.
-                type: string
-              keySecretName:
-                description: |-
-                  Name for the Secret that stores the generated API key.
-                  Defaults to "{name}-key".
-                type: string
               maxBudget:
                 description: Maximum budget in USD.
-                type: string
-              maxParallelRequests:
-                description: Maximum concurrent requests for this key.
-                type: integer
+                type: number
               metadata:
                 additionalProperties:
                   type: string
-                description: Custom metadata.
-                type: object
-              modelMaxBudget:
-                additionalProperties:
-                  type: string
-                description: |-
-                  Per-model spending limits for this key (enterprise).
-                  Key: model name, Value: max budget in USD.
+                description: Metadata key-value pairs stored with the customer.
                 type: object
               models:
-                description: Models this key can access.
+                description: List of models this customer is allowed to access.
                 items:
                   type: string
                 type: array
+              objectPermission:
+                description: Object permissions (MCP servers, vector stores, agents,
+                  access groups).
+                properties:
+                  accessGroups:
+                    description: Allowed access groups.
+                    items:
+                      type: string
+                    type: array
+                  agents:
+                    description: Allowed agents.
+                    items:
+                      type: string
+                    type: array
+                  mcpServers:
+                    description: Allowed MCP servers.
+                    items:
+                      type: string
+                    type: array
+                  vectorStores:
+                    description: Allowed vector stores.
+                    items:
+                      type: string
+                    type: array
+                type: object
               rpmLimit:
-                description: RPM limit for this key.
+                description: RPM (requests-per-minute) limit for this customer.
+                format: int64
                 type: integer
-              teamRef:
-                description: Reference to a LiteLLMTeam CR that this key belongs to.
-                properties:
-                  name:
-                    description: Name of the LiteLLMInstance CR.
-                    type: string
-                required:
-                - name
-                type: object
               tpmLimit:
-                description: TPM limit for this key.
+                description: TPM (tokens-per-minute) limit for this customer.
+                format: int64
                 type: integer
-              userRef:
-                description: Reference to a LiteLLMUser CR that this key belongs to.
-                properties:
-                  name:
-                    description: Name of the LiteLLMInstance CR.
-                    type: string
-                required:
-                - name
-                type: object
             required:
+            - customerId
             - instanceRef
-            - keyAlias
             type: object
           status:
-            description: LiteLLMVirtualKeyStatus defines the observed state of LiteLLMVirtualKey.
+            description: LiteLLMCustomerStatus defines the observed state of LiteLLMCustomer.
             properties:
+              blocked:
+                description: Whether the customer is blocked (as reported by LiteLLM).
+                type: boolean
               conditions:
                 description: Standard conditions.
                 items:
@@ -198,37 +215,14 @@ spec:
                   type: object
                 type: array
               currentSpend:
-                description: Current spend on this key in USD.
-                type: string
-              expiresAt:
-                description: Key expiration time.
-                format: date-time
-                type: string
-              isActive:
-                description: Whether the key is active.
-                type: boolean
-              keySecretRef:
-                description: Reference to the Secret containing the API key.
-                properties:
-                  key:
-                    description: Key within the Secret.
-                    type: string
-                  name:
-                    description: Name of the Secret.
-                    type: string
-                required:
-                - key
-                - name
-                type: object
+                description: Current spend in USD, refreshed from /customer/info.
+                type: number
               lastSyncTime:
                 description: Last successful sync time.
                 format: date-time
                 type: string
-              litellmKeyToken:
-                description: LiteLLM-assigned key token (hashed, for reference).
-                type: string
               synced:
-                description: Whether the key is synced to LiteLLM.
+                description: Whether the customer is synced to LiteLLM.
                 type: boolean
             type: object
         type: object

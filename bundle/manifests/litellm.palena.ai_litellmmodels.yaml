@@ -82,6 +82,19 @@ spec:
                     - key
                     - name
                     type: object
+                  credentialRef:
+                    description: |-
+                      Reference to a LiteLLMCredential CR for provider authentication.
+                      When set, the model is registered with `litellm_credential_name`
+                      pointing at the credential, and apiKeySecretRef / apiBase on this
+                      model are ignored in favor of the credential's values.
+                    properties:
+                      name:
+                        description: Name of the LiteLLMCredential CR.
+                        type: string
+                    required:
+                    - name
+                    type: object
                   maxRetries:
                     description: Max retries for failed requests.
                     type: integer
@@ -119,6 +132,13 @@ spec:
               modelName:
                 description: Model name exposed to clients.
                 type: string
+              tags:
+                description: |-
+                  Tags for tag-based routing. Requests with matching tags
+                  will be routed to this model deployment.
+                items:
+                  type: string
+                type: array
             required:
             - instanceRef
             - litellmParams

@@ -3,7 +3,7 @@ kind: ClusterServiceVersion
 metadata:
   annotations:
     alm-examples: '[]'
-    capabilities: Seamless Upgrades
+    capabilities: Full Lifecycle
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.7.0
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
@@ -16,6 +16,32 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: LiteLLMOrganization is the Schema for the litellmorganizations
+        API.
+      displayName: LiteLLM Organization
+      kind: LiteLLMOrganization
+      name: litellmorganizations.litellm.palena.ai
+      version: v1alpha1
+    - description: LiteLLMCredential is the Schema for the litellmcredentials API
+        — reusable provider credentials rendered into the proxy config.
+      displayName: LiteLLM Credential
+      kind: LiteLLMCredential
+      name: litellmcredentials.litellm.palena.ai
+      version: v1alpha1
+    - description: LiteLLMGuardrail is the Schema for the litellmguardrails API —
+        content moderation and safety integrations rendered into the proxy config.
+      displayName: LiteLLM Guardrail
+      kind: LiteLLMGuardrail
+      name: litellmguardrails.litellm.palena.ai
+      version: v1alpha1
+    - description: |-
+        LiteLLMCustomer is the Schema for the litellmcustomers API.
+        A Customer represents an external end-user of the AI gateway with its own
+        spending, rate, and access policies.
+      displayName: LiteLLM Customer
+      kind: LiteLLMCustomer
+      name: litellmcustomers.litellm.palena.ai
+      version: v1alpha1
     - description: LiteLLMInstance is the Schema for the litellminstances API.
       displayName: LiteLLM Instance
       kind: LiteLLMInstance
@@ -50,12 +76,16 @@ spec:
 
     ## Features
 
-    - **Declarative LiteLLM deployment** — manage proxy instances, models, teams, users, and API keys as Kubernetes custom resources
+    - **Declarative LiteLLM deployment** — manage proxy instances, organizations, models, teams, users, customers, credentials, guardrails, and virtual keys as Kubernetes custom resources
     - **Bidirectional config sync** — reconciles CRD state with the LiteLLM REST API on every sync interval
     - **Team member management** — three modes: CRD authoritative, SSO authoritative, and mixed
     - **VirtualKey secret management** — generated API keys stored in Kubernetes Secrets with owner references
+    - **Reusable credentials** — `LiteLLMCredential` CRs produce a shared `credential_list` referenced by any model, with API keys injected from Secrets as env vars
+    - **Content moderation** — `LiteLLMGuardrail` CRs configure Aporia, Lakera, Bedrock, Presidio, and other guardrail providers with per-key and per-team opt-in
+    - **Customer / end-user billing** — `LiteLLMCustomer` CRs manage external end-user budgets, rate limits, and model access for multi-tenant applications
+    - **Organization hierarchy** — `LiteLLMOrganization` groups teams under a shared budget and rate limit envelope
     - **SSO/SCIM support** — configure Azure Entra ID, Okta, Google, or generic OIDC providers declaratively
-    - **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts
+    - **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts, ServiceMonitor, PrometheusRule, Grafana dashboard
 
     ## Prerequisites
 
