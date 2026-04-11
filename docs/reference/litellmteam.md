@@ -50,6 +50,7 @@ spec:
 | `metadata` | map[string]string | No | — | Custom metadata |
 | `tags` | []string | No | — | Tags for tag-based routing (keys inherit these tags) |
 | `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this team |
+| `guardrails` | []string | No | — | Names of [LiteLLMGuardrail](/reference/litellmguardrail) CRs this team opts into. Each entry must match `spec.guardrailName` on a guardrail bound to the same instance (enterprise) |
 | `memberManagement` | string | No | `mixed` | `crd`, `sso`, or `mixed` |
 | `members` | []TeamMember | No | — | Team members list |
 

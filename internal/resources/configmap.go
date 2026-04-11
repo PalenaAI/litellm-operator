@@ -31,9 +31,11 @@ import (
 
 // BuildConfigMap creates the ConfigMap containing proxy_server_config.yaml.
 // credentials are the LiteLLMCredential CRs bound to this instance (used to
-// populate the `credential_list` section); pass nil if none.
-func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, credentials []litellmv1alpha1.LiteLLMCredential) (*corev1.ConfigMap, error) {
-	config := GenerateProxyConfig(instance, credentials)
+// populate the `credential_list` section); pass nil if none. guardrails are
+// the LiteLLMGuardrail CRs bound to this instance (used to populate the
+// top-level `guardrails` section); pass nil if none.
+func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) (*corev1.ConfigMap, error) {
+	config := GenerateProxyConfig(instance, credentials, guardrails)
 	configYAML, err := yaml.Marshal(config)
 	if err != nil {
 		return nil, err
@@ -53,7 +55,8 @@ func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string
 
 // GenerateProxyConfig generates the proxy_server_config structure from the instance spec.
 // credentials, when non-empty, are serialized into the top-level `credential_list` section.
-func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials []litellmv1alpha1.LiteLLMCredential) map[string]interface{} {
+// guardrails, when non-empty, are serialized into the top-level `guardrails` section.
+func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) map[string]interface{} {
 	config := map[string]interface{}{
 		"model_list": []interface{}{},
 	}
@@ -207,6 +210,9 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 	// credential_list — centralized provider credentials referenced by models.
 	buildCredentialList(instance, credentials, config)
 
+	// guardrails — content moderation / safety integrations.
+	buildGuardrailsList(instance, guardrails, config)
+
 	return config
 }
 
@@ -256,6 +262,66 @@ func buildCredentialList(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 func CredentialEnvVarName(credentialName string) string {
 	sanitized := sanitizeEnvVarSegment.ReplaceAllString(credentialName, "_")
 	return strings.ToUpper("CREDENTIAL_" + sanitized + "_API_KEY")
+}
+
+// GuardrailEnvVarName returns the env var name the operator uses to inject a
+// LiteLLMGuardrail's API key into the proxy Deployment. The same name is
+// referenced from the generated `guardrails` config section via
+// `os.environ/GUARDRAIL_{NAME}_API_KEY`.
+func GuardrailEnvVarName(guardrailName string) string {
+	sanitized := sanitizeEnvVarSegment.ReplaceAllString(guardrailName, "_")
+	return strings.ToUpper("GUARDRAIL_" + sanitized + "_API_KEY")
+}
+
+// buildGuardrailsList serializes LiteLLMGuardrail CRs bound to this instance
+// into LiteLLM's `guardrails` list format:
+//
+//	guardrails:
+//	  - guardrail_name: pii-detector
+//	    litellm_params:
+//	      guardrail: aporia
+//	      mode: pre_call
+//	      api_key: os.environ/GUARDRAIL_PII_DETECTOR_API_KEY
+//	      api_base: https://api.aporia.com
+//
+// Guardrails bound to other instances are skipped. An empty list is a no-op.
+func buildGuardrailsList(instance *litellmv1alpha1.LiteLLMInstance, guardrails []litellmv1alpha1.LiteLLMGuardrail, config map[string]interface{}) {
+	if len(guardrails) == 0 {
+		return
+	}
+	entries := make([]map[string]interface{}, 0, len(guardrails))
+	for _, g := range guardrails {
+		if g.Spec.InstanceRef.Name != instance.Name {
+			continue
+		}
+		params := map[string]interface{}{
+			"guardrail": g.Spec.Provider,
+			"mode":      g.Spec.Mode,
+		}
+		if g.Spec.APIKeySecretRef != nil {
+			params["api_key"] = fmt.Sprintf("os.environ/%s", GuardrailEnvVarName(g.Spec.GuardrailName))
+		}
+		if g.Spec.APIBase != "" {
+			params["api_base"] = g.Spec.APIBase
+		}
+		if g.Spec.DefaultOn != nil {
+			params["default_on"] = *g.Spec.DefaultOn
+		}
+		for k, v := range g.Spec.Params {
+			// Don't let user params override the keys we set explicitly.
+			if _, reserved := params[k]; reserved {
+				continue
+			}
+			params[k] = v
+		}
+		entries = append(entries, map[string]interface{}{
+			"guardrail_name": g.Spec.GuardrailName,
+			"litellm_params": params,
+		})
+	}
+	if len(entries) > 0 {
+		config["guardrails"] = entries
+	}
 }
 
 // buildDefaultCustomerBudget writes default end-user budget settings into litellm_settings.

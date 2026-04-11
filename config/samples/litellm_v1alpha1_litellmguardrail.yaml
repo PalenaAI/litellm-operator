@@ -1,0 +1,59 @@
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMGuardrail
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: pii-detector
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  # Name referenced from LiteLLMVirtualKey.spec.guardrails and
+  # LiteLLMTeam.spec.guardrails.
+  guardrailName: pii-detector
+  provider: aporia
+  mode: pre_call
+  apiKeySecretRef:
+    name: aporia-credentials
+    key: APORIA_API_KEY
+  apiBase: https://gr-prd-dc.aporia.com
+  defaultOn: false
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMGuardrail
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: presidio-redact
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  guardrailName: presidio-redact
+  provider: presidio
+  mode: pre_call
+  # Local presidio does not need an API key; point it at an internal service.
+  params:
+    presidio_analyzer_api_base: http://presidio-analyzer.guardrails.svc.cluster.local:3000
+    presidio_anonymizer_api_base: http://presidio-anonymizer.guardrails.svc.cluster.local:3000
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMGuardrail
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: bedrock-pii
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  guardrailName: bedrock-pii
+  provider: bedrock
+  mode: post_call
+  apiKeySecretRef:
+    name: aws-credentials
+    key: AWS_SECRET_ACCESS_KEY
+  params:
+    guardrailIdentifier: abc123
+    guardrailVersion: DRAFT
+    aws_region_name: us-east-1

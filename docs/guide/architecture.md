@@ -97,6 +97,10 @@ CR created/updated/deleted
 
 The Credential controller is different: `LiteLLMCredential` is a **config-level** resource, not an API-level one. There is no `POST /credential/new` equivalent — credentials live in the proxy's `credential_list` config section. The controller validates the referenced Secret and counts consuming models, but the actual materialization happens in the Instance controller, which watches LiteLLMCredential and rebuilds the ConfigMap + rolls the Deployment whenever a credential changes. API keys are injected as `CREDENTIAL_{NAME}_API_KEY` env vars via `secretKeyRef`, and the ConfigMap uses `os.environ/...` placeholders so plaintext keys never land on disk.
 
+### Guardrail Controller
+
+Like the Credential controller, the Guardrail controller manages a **config-level** resource. `LiteLLMGuardrail` CRs are rendered into the `guardrails` section of `proxy_server_config.yaml` by the Instance controller — there is no API-level create/update. The Guardrail controller validates that the referenced instance and (if declared) API key Secret exist, and reports `Ready` / `SecretNotFound` / `InstanceNotFound` conditions. The Instance controller watches LiteLLMGuardrail CRs and rebuilds the ConfigMap + rolls the Deployment whenever a guardrail is created, updated, or deleted. Provider API keys are injected as `GUARDRAIL_{NAME}_API_KEY` env vars via `secretKeyRef`, referenced from the config as `os.environ/...`. Per-key/per-team guardrail assignment via `spec.guardrails []string` on `LiteLLMVirtualKey` / `LiteLLMTeam` is a LiteLLM Enterprise feature.
+
 ## Reconciliation Model
 
 The operator uses the standard Kubernetes reconciliation pattern:

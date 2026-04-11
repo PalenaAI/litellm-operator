@@ -55,6 +55,9 @@ const (
 	customerName     = "e2e-customer"
 	customerID       = "e2e-customer-42"
 	virtualKeyName   = "e2e-vk"
+	guardrailName    = "e2e-guardrail"
+	guardrailAlias   = "e2e-pii-detector"
+	guardrailEnvVar  = "GUARDRAIL_E2E_PII_DETECTOR_API_KEY"
 	litellmTestImage = "ghcr.io/berriai/litellm:main-v1.60.0"
 )
 
@@ -260,6 +263,29 @@ spec:
   models:
     - e2e-gpt-4o
   keySecretName: e2e-vk-api-key
+`
+
+// guardrailYAML reuses the existing e2e-fake-api-key Secret (OPENAI_API_KEY)
+// as a stand-in for a provider API key. The controller only validates that the
+// Secret and key exist — no outbound network call is made to the guardrail
+// provider during e2e, so a fake key is sufficient.
+const guardrailYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMGuardrail
+metadata:
+  name: e2e-guardrail
+  namespace: e2e-fullstack
+spec:
+  instanceRef:
+    name: e2e-litellm
+  guardrailName: e2e-pii-detector
+  provider: aporia
+  mode: pre_call
+  apiBase: https://gr-prd-dc.aporia.com
+  apiKeySecretRef:
+    name: e2e-fake-api-key
+    key: OPENAI_API_KEY
+  defaultOn: false
 `
 
 var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
@@ -521,6 +547,7 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 				kinds := []string{
 					"litellminstance", "litellmorganization", "litellmmodel",
 					"litellmteam", "litellmuser", "litellmcustomer", "litellmvirtualkey",
+					"litellmguardrail",
 				}
 				for _, kind := range kinds {
 					cmd = exec.Command("kubectl", "get", kind, "-n", testNamespace, "-o", "yaml")
@@ -763,6 +790,63 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 			Expect(output).NotTo(BeEmpty(), "api_key should be populated in the Secret")
 		})
 
+		It("should create a LiteLLMGuardrail and wait for Ready", func() {
+			By("applying the LiteLLMGuardrail CR")
+			applyYAML(guardrailYAML)
+
+			By("waiting for the guardrail Ready condition")
+			verifyGuardrailReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmguardrail", guardrailName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyGuardrailReady, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying status.configured is true")
+			cmd := exec.Command("kubectl", "get", "litellmguardrail", guardrailName,
+				"-n", testNamespace, "-o", "jsonpath={.status.configured}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(strings.TrimSpace(output)).To(Equal("true"),
+				"status.configured should be true after guardrail validation")
+		})
+
+		It("should render the guardrail into the ConfigMap and inject the env var", func() {
+			By("waiting for the guardrail entry to appear in the instance ConfigMap")
+			verifyConfigMap := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", instanceName+"-config",
+					"-n", testNamespace, "-o", `jsonpath={.data.proxy_server_config\.yaml}`)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(ContainSubstring("guardrail_name: " + guardrailAlias),
+					"rendered config should contain the guardrail_name")
+				g.Expect(output).To(ContainSubstring("guardrail: aporia"),
+					"rendered config should contain the provider")
+				g.Expect(output).To(ContainSubstring("mode: pre_call"),
+					"rendered config should contain the execution mode")
+				g.Expect(output).To(ContainSubstring("os.environ/" + guardrailEnvVar),
+					"rendered config should reference the api_key via os.environ/…")
+			}
+			Eventually(verifyConfigMap, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the guardrail env var is injected into the Deployment")
+			verifyDeploymentEnvVar := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", instanceName,
+					"-n", testNamespace,
+					"-o", fmt.Sprintf(
+						"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='%s')].valueFrom.secretKeyRef.name}",
+						guardrailEnvVar))
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.TrimSpace(output)).To(Equal("e2e-fake-api-key"),
+					"env var should be backed by a secretKeyRef pointing at the fake-api-key Secret")
+			}
+			Eventually(verifyDeploymentEnvVar, 2*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
 		It("should delete VirtualKey and verify cleanup", func() {
 			By("deleting the LiteLLMVirtualKey")
 			cmd := exec.Command("kubectl", "delete", "litellmvirtualkey", virtualKeyName,
@@ -787,6 +871,50 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 				g.Expect(err).To(HaveOccurred())
 			}
 			Eventually(verifySecretDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should delete Guardrail and verify it is stripped from the ConfigMap", func() {
+			By("deleting the LiteLLMGuardrail")
+			cmd := exec.Command("kubectl", "delete", "litellmguardrail", guardrailName,
+				"-n", testNamespace, "--timeout=60s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying the Guardrail CR is gone")
+			verifyDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmguardrail", guardrailName,
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the guardrail entry is removed from the ConfigMap")
+			verifyConfigMapCleaned := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "configmap", instanceName+"-config",
+					"-n", testNamespace, "-o", `jsonpath={.data.proxy_server_config\.yaml}`)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).NotTo(ContainSubstring("guardrail_name: " + guardrailAlias),
+					"guardrail entry should be removed from rendered config")
+				g.Expect(output).NotTo(ContainSubstring("os.environ/" + guardrailEnvVar),
+					"guardrail env var reference should be removed from rendered config")
+			}
+			Eventually(verifyConfigMapCleaned, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the guardrail env var is removed from the Deployment")
+			verifyDeploymentEnvVarGone := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", instanceName,
+					"-n", testNamespace,
+					"-o", fmt.Sprintf(
+						"jsonpath={.spec.template.spec.containers[0].env[?(@.name=='%s')].name}",
+						guardrailEnvVar))
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.TrimSpace(output)).To(BeEmpty(),
+					"guardrail env var should no longer be present on the Deployment")
+			}
+			Eventually(verifyDeploymentEnvVarGone, 2*time.Minute, 5*time.Second).Should(Succeed())
 		})
 
 		It("should delete Customer and verify cleanup", func() {

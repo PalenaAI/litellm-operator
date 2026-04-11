@@ -52,7 +52,7 @@ func TestBuildDeployment_WithLicenseSecret(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "my-gateway-license", nil)
+	dep := BuildDeployment(instance, labels, "my-gateway-license", nil, nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -79,7 +79,7 @@ func TestBuildDeployment_WithoutLicenseSecret(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil)
+	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "LITELLM_LICENSE" {
@@ -92,8 +92,8 @@ func TestBuildDeployment_LicenseSecretChangesTemplate(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	depWithout := BuildDeployment(instance, labels, "", nil)
-	depWith := BuildDeployment(instance, labels, "my-license", nil)
+	depWithout := BuildDeployment(instance, labels, "", nil, nil)
+	depWith := BuildDeployment(instance, labels, "my-license", nil, nil)
 
 	envCountWithout := len(depWithout.Spec.Template.Spec.Containers[0].Env)
 	envCountWith := len(depWith.Spec.Template.Spec.Containers[0].Env)
@@ -107,7 +107,7 @@ func TestBuildDeployment_CachingDisabled(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil)
+	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "CACHE_REDIS_PASSWORD" || env.Name == "CACHE_S3_ACCESS_KEY_ID" || env.Name == "CACHE_QDRANT_API_KEY" {
@@ -131,7 +131,7 @@ func TestBuildDeployment_CachingRedisPassword(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil)
+	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -169,7 +169,7 @@ func TestBuildDeployment_CachingS3Credentials(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil)
+	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -205,7 +205,7 @@ func TestBuildDeployment_PassThroughSecretEnvVars(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil)
+	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -241,7 +241,7 @@ func TestBuildDeployment_PassThroughNoSecrets(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil)
+	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "PASSTHROUGH_BRIA_CONTENT_TYPE" {
@@ -276,7 +276,7 @@ func TestBuildDeployment_PassThroughMultipleEndpoints(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil)
+	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -307,7 +307,7 @@ func TestBuildDeployment_CachingQdrantAPIKey(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil)
+	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -341,7 +341,7 @@ func TestBuildDeployment_CredentialEnvVars(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, labels, "", credentials)
+	dep := BuildDeployment(instance, labels, "", credentials, nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -378,7 +378,7 @@ func TestBuildDeployment_CredentialEnvVarsFiltersOtherInstances(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, labels, "", credentials)
+	dep := BuildDeployment(instance, labels, "", credentials, nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "CREDENTIAL_OTHER_API_KEY" {
@@ -411,7 +411,7 @@ func TestBuildDeployment_CredentialEnvVarsDedup(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, labels, "", credentials)
+	dep := BuildDeployment(instance, labels, "", credentials, nil)
 
 	count := 0
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -421,5 +421,100 @@ func TestBuildDeployment_CredentialEnvVarsDedup(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("expected exactly 1 CREDENTIAL_SHARED_API_KEY env var, got %d", count)
+	}
+}
+
+func TestBuildDeployment_GuardrailEnvVarsFromSecretRef(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pii-detector", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName: "pii-detector",
+				Provider:      "aporia",
+				Mode:          "pre_call",
+				APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{
+					Name: "aporia-secret",
+					Key:  "api-key",
+				},
+			},
+		},
+	}
+
+	dep := BuildDeployment(instance, labels, "", nil, guardrails)
+
+	found := false
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "GUARDRAIL_PII_DETECTOR_API_KEY" {
+			found = true
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				t.Fatal("guardrail env var should use secretKeyRef")
+			}
+			if env.ValueFrom.SecretKeyRef.Name != "aporia-secret" {
+				t.Errorf("expected secret name 'aporia-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
+			}
+			if env.ValueFrom.SecretKeyRef.Key != "api-key" {
+				t.Errorf("expected secret key 'api-key', got %q", env.ValueFrom.SecretKeyRef.Key)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("GUARDRAIL_PII_DETECTOR_API_KEY env var not found")
+	}
+}
+
+func TestBuildDeployment_GuardrailEnvVarsFiltersOtherInstances(t *testing.T) {
+	instance := newTestInstance() // name: test-instance
+	labels := map[string]string{"app": "litellm"}
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "other-instance"},
+				GuardrailName: "other",
+				Provider:      "aporia",
+				Mode:          "pre_call",
+				APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{
+					Name: "s", Key: "k",
+				},
+			},
+		},
+	}
+
+	dep := BuildDeployment(instance, labels, "", nil, guardrails)
+
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "GUARDRAIL_OTHER_API_KEY" {
+			t.Error("guardrail bound to a different instance should not produce env vars on this deployment")
+		}
+	}
+}
+
+func TestBuildDeployment_GuardrailEnvVarsNoAPIKeyOK(t *testing.T) {
+	// Guardrails that don't declare an APIKeySecretRef (e.g. local presidio)
+	// should not produce any env var and must not crash.
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "presidio", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName: "presidio",
+				Provider:      "presidio",
+				Mode:          "pre_call",
+			},
+		},
+	}
+
+	dep := BuildDeployment(instance, labels, "", nil, guardrails)
+
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "GUARDRAIL_PRESIDIO_API_KEY" {
+			t.Error("guardrail without APIKeySecretRef should not produce an env var")
+		}
 	}
 }

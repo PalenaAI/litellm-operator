@@ -77,6 +77,7 @@ export default defineConfig({
           { text: 'LiteLLMUser', link: '/reference/litellmuser' },
           { text: 'LiteLLMCustomer', link: '/reference/litellmcustomer' },
           { text: 'LiteLLMCredential', link: '/reference/litellmcredential' },
+          { text: 'LiteLLMGuardrail', link: '/reference/litellmguardrail' },
           { text: 'LiteLLMVirtualKey', link: '/reference/litellmvirtualkey' },
         ],
       },

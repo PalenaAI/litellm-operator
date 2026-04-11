@@ -31,7 +31,7 @@ func TestGenerateProxyConfig_DefaultFallbacks(t *testing.T) {
 		DefaultFallbacks: []string{"gpt-4-mini", "claude-3-haiku"},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -54,7 +54,7 @@ func TestGenerateProxyConfig_ModelFallbacks(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -84,7 +84,7 @@ func TestGenerateProxyConfig_ContentPolicyFallbacks(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -110,7 +110,7 @@ func TestGenerateProxyConfig_ContextWindowFallbacks(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -135,7 +135,7 @@ func TestGenerateProxyConfig_MaxFallbacks(t *testing.T) {
 		MaxFallbacks: intPtr(5),
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -155,7 +155,7 @@ func TestGenerateProxyConfig_RetryPolicy(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -184,7 +184,7 @@ func TestGenerateProxyConfig_ModelGroupRetryPolicy(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -217,7 +217,7 @@ func TestGenerateProxyConfig_FallbacksWithExistingSettings(t *testing.T) {
 		MaxFallbacks: intPtr(2),
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	// litellm_settings should have both callbacks and default_fallbacks
 	ls := config["litellm_settings"].(map[string]interface{})
@@ -245,7 +245,7 @@ func TestGenerateProxyConfig_NoFallbacks(t *testing.T) {
 	instance := newTestInstance()
 	// No fallbacks set
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	if _, ok := config["litellm_settings"]; ok {
 		t.Error("litellm_settings should not be present when no fallbacks/callbacks/SSO set")
@@ -259,7 +259,7 @@ func TestGenerateProxyConfig_CachingDisabled(t *testing.T) {
 	instance := newTestInstance()
 	// No caching set at all
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	if _, ok := config["litellm_settings"]; ok {
 		t.Error("litellm_settings should not be present when caching is not configured")
@@ -273,7 +273,7 @@ func TestGenerateProxyConfig_CachingEnabledFalse(t *testing.T) {
 		Type:    "redis",
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	if _, ok := config["litellm_settings"]; ok {
 		t.Error("litellm_settings should not be present when caching.enabled is false")
@@ -302,7 +302,7 @@ func TestGenerateProxyConfig_CachingRedis(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -365,7 +365,7 @@ func TestGenerateProxyConfig_CachingRedisReusesInstanceRedis(t *testing.T) {
 		// No Redis block — should reuse instance Redis
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
@@ -396,7 +396,7 @@ func TestGenerateProxyConfig_CachingS3(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
@@ -430,7 +430,7 @@ func TestGenerateProxyConfig_CachingQdrant(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
@@ -458,7 +458,7 @@ func TestGenerateProxyConfig_CachingLocal(t *testing.T) {
 		TTL:     &ttl,
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
@@ -477,7 +477,7 @@ func TestGenerateProxyConfig_TagFilteringEnabled(t *testing.T) {
 		EnableTagFiltering: boolPtr(true),
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -498,7 +498,7 @@ func TestGenerateProxyConfig_TagFilteringMatchAny(t *testing.T) {
 		TagFilteringMatchAny: boolPtr(true),
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	rs := config["router_settings"].(map[string]interface{})
 	if rs["enable_tag_filtering"] != true {
@@ -515,7 +515,7 @@ func TestGenerateProxyConfig_TagFilteringDisabled(t *testing.T) {
 		EnableTagFiltering: boolPtr(false),
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	// enable_tag_filtering=false should not emit the key
 	if rs, ok := config["router_settings"].(map[string]interface{}); ok {
@@ -534,7 +534,7 @@ func TestGenerateProxyConfig_IPAllowlist(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -562,7 +562,7 @@ func TestGenerateProxyConfig_IPAllowlistWithXForwardedFor(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["use_x_forwarded_for"] != true {
@@ -583,7 +583,7 @@ func TestGenerateProxyConfig_IPAllowlistWithMaxSizes(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["max_request_size_mb"] != 10 {
@@ -603,7 +603,7 @@ func TestGenerateProxyConfig_IPAllowlistDisabled(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
 		if _, ok := gs["allowed_ips"]; ok {
@@ -624,7 +624,7 @@ func TestGenerateProxyConfig_IPAllowlistWithExistingGeneralSettings(t *testing.T
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["proxy_batch_write_at"] != 10 {
@@ -648,7 +648,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_Basic(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -693,7 +693,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_AllFields(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
@@ -737,7 +737,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_SecretHeaders(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
@@ -770,7 +770,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_MixedHeaders(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
@@ -796,7 +796,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_WithExistingGeneralSettings(t 
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["proxy_batch_write_at"] != 10 {
@@ -817,7 +817,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_OmitsOptionalFields(t *testing
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
@@ -870,7 +870,7 @@ func TestGenerateProxyConfig_CachingWithExistingSettings(t *testing.T) {
 		Type:    "local",
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	if _, ok := ls["success_callback"]; !ok {
@@ -890,7 +890,7 @@ func TestGenerateProxyConfig_GlobalBudget(t *testing.T) {
 		BudgetDuration: "30d",
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -910,7 +910,7 @@ func TestGenerateProxyConfig_GlobalMaxParallelRequests(t *testing.T) {
 		GlobalMaxParallelRequests: intPtr(100),
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -928,7 +928,7 @@ func TestGenerateProxyConfig_BudgetRescheduler(t *testing.T) {
 		BudgetReschedulerMaxTime: intPtr(600),
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -948,7 +948,7 @@ func TestGenerateProxyConfig_DefaultMaxParallelRequests(t *testing.T) {
 		DefaultMaxParallelRequests: intPtr(10),
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -974,7 +974,7 @@ func TestGenerateProxyConfig_ProviderBudgetConfig(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -1019,7 +1019,7 @@ func TestGenerateProxyConfig_AllBudgetSettings(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["max_budget"] != "5000.00" {
@@ -1055,7 +1055,7 @@ func TestGenerateProxyConfig_DefaultCustomerBudget_MaxBudget(t *testing.T) {
 		MaxBudget: &budget,
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -1075,7 +1075,7 @@ func TestGenerateProxyConfig_DefaultCustomerBudget_BudgetID(t *testing.T) {
 		BudgetID: "tier-free",
 	}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -1090,7 +1090,7 @@ func TestGenerateProxyConfig_DefaultCustomerBudget_Empty(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.DefaultCustomerBudget = &litellmv1alpha1.DefaultCustomerBudgetSpec{}
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	if ls, ok := config["litellm_settings"].(map[string]interface{}); ok {
 		if _, present := ls["max_end_user_budget"]; present {
@@ -1105,7 +1105,7 @@ func TestGenerateProxyConfig_DefaultCustomerBudget_Empty(t *testing.T) {
 func TestGenerateProxyConfig_CredentialListNoCredentials(t *testing.T) {
 	instance := newTestInstance()
 
-	config := GenerateProxyConfig(instance, nil)
+	config := GenerateProxyConfig(instance, nil, nil)
 
 	if _, present := config["credential_list"]; present {
 		t.Error("credential_list should be absent when no credentials are provided")
@@ -1128,7 +1128,7 @@ func TestGenerateProxyConfig_CredentialListSingleCredential(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, credentials)
+	config := GenerateProxyConfig(instance, credentials, nil)
 
 	entries, ok := config["credential_list"].([]map[string]interface{})
 	if !ok {
@@ -1169,7 +1169,7 @@ func TestGenerateProxyConfig_CredentialListWithAPIBaseAndParams(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, credentials)
+	config := GenerateProxyConfig(instance, credentials, nil)
 
 	entries, _ := config["credential_list"].([]map[string]interface{})
 	if len(entries) != 1 {
@@ -1209,7 +1209,7 @@ func TestGenerateProxyConfig_CredentialListFiltersByInstance(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, credentials)
+	config := GenerateProxyConfig(instance, credentials, nil)
 
 	entries, _ := config["credential_list"].([]map[string]interface{})
 	if len(entries) != 1 {
@@ -1232,6 +1232,186 @@ func TestCredentialEnvVarName_Sanitization(t *testing.T) {
 		got := CredentialEnvVarName(in)
 		if got != want {
 			t.Errorf("CredentialEnvVarName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestGenerateProxyConfig_GuardrailsNone(t *testing.T) {
+	instance := newTestInstance()
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	if _, present := config["guardrails"]; present {
+		t.Error("guardrails should be absent when no guardrails are provided")
+	}
+}
+
+func TestGenerateProxyConfig_GuardrailsSingleEntry(t *testing.T) {
+	instance := newTestInstance()
+	defaultOn := true
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pii-detector", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName: "pii-detector",
+				Provider:      "aporia",
+				Mode:          "pre_call",
+				APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{
+					Name: "aporia-secret",
+					Key:  "api-key",
+				},
+				APIBase:   "https://api.aporia.com",
+				DefaultOn: &defaultOn,
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, guardrails)
+
+	entries, ok := config["guardrails"].([]map[string]interface{})
+	if !ok {
+		t.Fatalf("guardrails should be []map[string]interface{}, got %T", config["guardrails"])
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 guardrail entry, got %d", len(entries))
+	}
+	if entries[0]["guardrail_name"] != "pii-detector" {
+		t.Errorf("expected guardrail_name=pii-detector, got %v", entries[0]["guardrail_name"])
+	}
+	params, ok := entries[0]["litellm_params"].(map[string]interface{})
+	if !ok {
+		t.Fatal("litellm_params should be a map")
+	}
+	if params["guardrail"] != "aporia" {
+		t.Errorf("expected guardrail=aporia, got %v", params["guardrail"])
+	}
+	if params["mode"] != "pre_call" {
+		t.Errorf("expected mode=pre_call, got %v", params["mode"])
+	}
+	if params["api_key"] != "os.environ/GUARDRAIL_PII_DETECTOR_API_KEY" {
+		t.Errorf("expected os.environ/GUARDRAIL_PII_DETECTOR_API_KEY, got %v", params["api_key"])
+	}
+	if params["api_base"] != "https://api.aporia.com" {
+		t.Errorf("expected api_base=https://api.aporia.com, got %v", params["api_base"])
+	}
+	if params["default_on"] != true {
+		t.Errorf("expected default_on=true, got %v", params["default_on"])
+	}
+}
+
+func TestGenerateProxyConfig_GuardrailsNoAPIKey(t *testing.T) {
+	// Some providers (local presidio, custom_guardrail pointing at an internal
+	// service) don't need an api key. Make sure api_key is omitted when
+	// APIKeySecretRef is nil.
+	instance := newTestInstance()
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "presidio", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName: "presidio",
+				Provider:      "presidio",
+				Mode:          "pre_call",
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, guardrails)
+
+	entries, _ := config["guardrails"].([]map[string]interface{})
+	params, _ := entries[0]["litellm_params"].(map[string]interface{})
+	if _, present := params["api_key"]; present {
+		t.Error("api_key should be absent when APIKeySecretRef is nil")
+	}
+}
+
+func TestGenerateProxyConfig_GuardrailsWithParamsNotOverridingReserved(t *testing.T) {
+	instance := newTestInstance()
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "bedrock-pii", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName:   "bedrock-pii",
+				Provider:        "bedrock",
+				Mode:            "post_call",
+				APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{Name: "aws-secret", Key: "key"},
+				Params: map[string]string{
+					"guardrailIdentifier": "abc123",
+					"guardrailVersion":    "DRAFT",
+					// reserved keys — should be rejected
+					"guardrail": "lakera",
+					"mode":      "during_call",
+				},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, guardrails)
+
+	entries, _ := config["guardrails"].([]map[string]interface{})
+	params, _ := entries[0]["litellm_params"].(map[string]interface{})
+
+	if params["guardrail"] != "bedrock" {
+		t.Errorf("reserved key `guardrail` was overridden by params: %v", params["guardrail"])
+	}
+	if params["mode"] != "post_call" {
+		t.Errorf("reserved key `mode` was overridden by params: %v", params["mode"])
+	}
+	if params["guardrailIdentifier"] != "abc123" {
+		t.Errorf("expected guardrailIdentifier passthrough, got %v", params["guardrailIdentifier"])
+	}
+	if params["guardrailVersion"] != "DRAFT" {
+		t.Errorf("expected guardrailVersion passthrough, got %v", params["guardrailVersion"])
+	}
+}
+
+func TestGenerateProxyConfig_GuardrailsFilterByInstance(t *testing.T) {
+	instance := newTestInstance() // name: test-instance
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "mine", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName: "mine",
+				Provider:      "presidio",
+				Mode:          "pre_call",
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "theirs", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "other-instance"},
+				GuardrailName: "theirs",
+				Provider:      "aporia",
+				Mode:          "pre_call",
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, guardrails)
+
+	entries, _ := config["guardrails"].([]map[string]interface{})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry (filtered), got %d", len(entries))
+	}
+	if entries[0]["guardrail_name"] != "mine" {
+		t.Errorf("expected mine, got %v", entries[0]["guardrail_name"])
+	}
+}
+
+func TestGuardrailEnvVarName_Sanitization(t *testing.T) {
+	cases := map[string]string{
+		"pii-detector":        "GUARDRAIL_PII_DETECTOR_API_KEY",
+		"aporia.prod.1":       "GUARDRAIL_APORIA_PROD_1_API_KEY",
+		"guard with spaces":   "GUARDRAIL_GUARD_WITH_SPACES_API_KEY",
+		"already_underscored": "GUARDRAIL_ALREADY_UNDERSCORED_API_KEY",
+	}
+	for in, want := range cases {
+		got := GuardrailEnvVarName(in)
+		if got != want {
+			t.Errorf("GuardrailEnvVarName(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

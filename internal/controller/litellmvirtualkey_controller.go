@@ -139,6 +139,7 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 			Metadata:            vk.Spec.Metadata,
 			ModelMaxBudget:      parseModelMaxBudget(vk.Spec.ModelMaxBudget),
 			MaxParallelRequests: vk.Spec.MaxParallelRequests,
+			Guardrails:          vk.Spec.Guardrails,
 		}
 
 		resp, err := apiClient.Keys().Generate(ctx, req)
@@ -215,6 +216,7 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 				Metadata:            vk.Spec.Metadata,
 				ModelMaxBudget:      parseModelMaxBudget(vk.Spec.ModelMaxBudget),
 				MaxParallelRequests: vk.Spec.MaxParallelRequests,
+				Guardrails:          vk.Spec.Guardrails,
 			}
 			if err := apiClient.Keys().Update(ctx, req); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update key: %w", err)

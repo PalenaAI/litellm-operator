@@ -131,6 +131,7 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 			MaxParallelRequests: team.Spec.MaxParallelRequests,
 			Metadata:            team.Spec.Metadata,
 			Tags:                team.Spec.Tags,
+			Guardrails:          team.Spec.Guardrails,
 		}
 		resp, err := apiClient.Teams().Create(ctx, req)
 		if err != nil {
@@ -164,6 +165,7 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 				MaxParallelRequests: team.Spec.MaxParallelRequests,
 				Metadata:            team.Spec.Metadata,
 				Tags:                team.Spec.Tags,
+				Guardrails:          team.Spec.Guardrails,
 			}
 			if err := apiClient.Teams().Update(ctx, req); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update team: %w", err)

@@ -6,8 +6,9 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 
 ## Features
 
-- **Declarative LiteLLM deployment** — manage proxy instances, organizations, models, teams, users, credentials, and API keys as Kubernetes custom resources
+- **Declarative LiteLLM deployment** — manage proxy instances, organizations, models, teams, users, credentials, guardrails, and API keys as Kubernetes custom resources
 - **Reusable provider credentials** — declare provider API keys once as `LiteLLMCredential` CRs and reference them from many `LiteLLMModel` resources via `credentialRef`; credentials are materialized into the proxy's `credential_list` and injected as env vars so secret values stay out of the operator's memory
+- **Guardrails (content moderation / safety)** — declare guardrail integrations (Aporia, Lakera, Presidio, AWS Bedrock, LLM Guard, Guardrails AI, Azure, Google Text Moderation, custom) as `LiteLLMGuardrail` CRs; each is rendered into the proxy's `guardrails` section with the API key injected via `secretKeyRef`. Per-key and per-team opt-in via `spec.guardrails` on `LiteLLMVirtualKey` and `LiteLLMTeam` (enterprise)
 - **Multi-tenancy** — full Organization > Team > User > Key hierarchy with org-scoped budgets, model access, and member management
 - **Bidirectional config sync** — reconciles CRD state with the LiteLLM REST API on every sync interval
 - **Team member management** — three modes: `crd` (CRD authoritative), `sso` (IdP authoritative), `mixed` (additive)
@@ -40,6 +41,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 | `LiteLLMUser` | `lu` | Creates a user (service accounts, bot users, non-SSO environments) |
 | `LiteLLMCustomer` | `lcust` | Manages an external end-user (SaaS customer) with budgets and rate limits |
 | `LiteLLMCredential` | `lc` | Defines a reusable provider credential (API key + optional base URL) shared across models |
+| `LiteLLMGuardrail` | `lg` | Defines a content moderation / safety integration (Aporia, Lakera, Presidio, Bedrock, etc.) |
 | `LiteLLMVirtualKey` | `lk` | Generates an API key scoped to a team/user with budget and rate limits |
 
 All secondary resources reference a `LiteLLMInstance` via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`.

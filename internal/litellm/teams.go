@@ -48,6 +48,7 @@ type TeamCreateRequest struct {
 	Metadata            map[string]string `json:"metadata,omitempty"`
 	Members             []MemberRequest   `json:"members_with_roles,omitempty"`
 	Tags                []string          `json:"tags,omitempty"`
+	Guardrails          []string          `json:"guardrails,omitempty"`
 }
 
 // MemberRequest defines a member to add to a team.
@@ -75,6 +76,7 @@ type TeamUpdateRequest struct {
 	MaxParallelRequests *int              `json:"max_parallel_requests,omitempty"`
 	Metadata            map[string]string `json:"metadata,omitempty"`
 	Tags                []string          `json:"tags,omitempty"`
+	Guardrails          []string          `json:"guardrails,omitempty"`
 }
 
 // TeamInfo is the response from getting team info.

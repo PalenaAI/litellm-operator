@@ -53,7 +53,9 @@ func podSecurityContext(nonRoot bool) *corev1.PodSecurityContext {
 // credentials are the LiteLLMCredential CRs bound to this instance whose
 // API keys need to be injected as env vars for the proxy to resolve them
 // via os.environ/… references in credential_list. Pass nil if none.
-func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential) *appsv1.Deployment {
+// guardrails are the LiteLLMGuardrail CRs bound to this instance whose API
+// keys and extra env vars need to be injected. Pass nil if none.
+func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) *appsv1.Deployment {
 	replicas := instance.Spec.Replicas
 	if replicas == 0 {
 		replicas = 1
@@ -80,6 +82,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 
 	envVars := buildEnvVars(instance, licenseSecretName)
 	envVars = append(envVars, credentialEnvVars(instance, credentials)...)
+	envVars = append(envVars, guardrailEnvVars(instance, guardrails)...)
 	envVars = append(envVars, instance.Spec.ExtraEnvVars...)
 
 	container := corev1.Container{
@@ -549,6 +552,46 @@ func startupFailureThreshold(instance *litellmv1alpha1.LiteLLMInstance) int32 {
 		return instance.Spec.HealthCheck.StartupFailureThreshold
 	}
 	return 30
+}
+
+// guardrailEnvVars injects API keys (and any additional EnvVars) from
+// LiteLLMGuardrail CRs bound to this instance so the proxy can resolve the
+// `os.environ/GUARDRAIL_{NAME}_API_KEY` references in the guardrails
+// config section. Guardrails whose InstanceRef points elsewhere are skipped.
+func guardrailEnvVars(instance *litellmv1alpha1.LiteLLMInstance, guardrails []litellmv1alpha1.LiteLLMGuardrail) []corev1.EnvVar {
+	if len(guardrails) == 0 {
+		return nil
+	}
+	var vars []corev1.EnvVar
+	seen := make(map[string]struct{})
+	for _, g := range guardrails {
+		if g.Spec.InstanceRef.Name != instance.Name {
+			continue
+		}
+		if g.Spec.APIKeySecretRef != nil {
+			envName := GuardrailEnvVarName(g.Spec.GuardrailName)
+			if _, dup := seen[envName]; !dup {
+				seen[envName] = struct{}{}
+				vars = append(vars, corev1.EnvVar{
+					Name: envName,
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: g.Spec.APIKeySecretRef.Name},
+							Key:                  g.Spec.APIKeySecretRef.Key,
+						},
+					},
+				})
+			}
+		}
+		for _, ev := range g.Spec.EnvVars {
+			if _, dup := seen[ev.Name]; dup {
+				continue
+			}
+			seen[ev.Name] = struct{}{}
+			vars = append(vars, ev)
+		}
+	}
+	return vars
 }
 
 // credentialEnvVars injects API keys from LiteLLMCredential CRs as env vars

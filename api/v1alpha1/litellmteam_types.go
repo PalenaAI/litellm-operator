@@ -85,6 +85,12 @@ type LiteLLMTeamSpec struct {
 	// Ignored when memberManagement is "sso".
 	// +optional
 	Members []TeamMember `json:"members,omitempty"`
+
+	// Guardrails to activate for this team. Each entry must match the
+	// guardrailName of a LiteLLMGuardrail CR bound to the same instance.
+	// Requires a LiteLLM Enterprise license.
+	// +optional
+	Guardrails []string `json:"guardrails,omitempty"`
 }
 
 // TeamMember defines a team member.

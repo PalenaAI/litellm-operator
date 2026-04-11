@@ -44,6 +44,7 @@ spec:
 | `metadata` | map[string]string | No | — | Custom metadata |
 | `modelMaxBudget` | map[string]string | No | — | Per-model spending limits in USD (enterprise) |
 | `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this key |
+| `guardrails` | []string | No | — | Names of [LiteLLMGuardrail](/reference/litellmguardrail) CRs this key opts into. Each entry must match `spec.guardrailName` on a guardrail bound to the same instance (enterprise) |
 | `keySecretName` | string | No | `{name}-key` | Name for the generated Secret |
 
 ## Status Fields
