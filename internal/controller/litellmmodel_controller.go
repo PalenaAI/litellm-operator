@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -40,6 +42,7 @@ import (
 type LiteLLMModelReconciler struct {
 	client.Client
 	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
 	LiteLLMClientFactory litellm.ClientFactory
 }
 
@@ -73,6 +76,8 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	resolved, err := resolveInstance(ctx, r.Client, model.Namespace, model.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
+		emitEvent(r.Recorder, &model, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Referenced LiteLLMInstance %q is not ready: %v", model.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 			Type:    ConditionSynced,
 			Status:  metav1.ConditionFalse,
@@ -87,6 +92,8 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	result, err := r.reconcileModel(ctx, &model, resolved)
 	if err != nil {
 		if isEnterpriseLicenseError(err) {
+			emitEvent(r.Recorder, &model, corev1.EventTypeWarning, EventReasonEnterpriseRequired,
+				"Model %q requires a LiteLLM Enterprise license", model.Spec.ModelName)
 			meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 				Type:               ConditionSynced,
 				Status:             metav1.ConditionFalse,
@@ -98,6 +105,8 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "failed to reconcile model")
+		emitEvent(r.Recorder, &model, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Failed to reconcile model %q: %v", model.Spec.ModelName, err)
 		meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 			Type:    ConditionSynced,
 			Status:  metav1.ConditionFalse,
@@ -190,6 +199,8 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			return ctrl.Result{}, err
 		}
 		log.Info("created model", "modelId", resp.ModelID)
+		emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonCreated,
+			"Model %q registered with LiteLLM (id=%s)", model.Spec.ModelName, resp.ModelID)
 	} else {
 		currentHash := computeSpecHash(model.Spec)
 		if model.Annotations[AnnotationSyncHash] != currentHash {
@@ -210,12 +221,54 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			}
 			model.Status.Synced = true
 			log.Info("updated model", "modelId", model.Status.LiteLLMModelID)
+			emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonUpdated,
+				"Model %q updated in LiteLLM", model.Spec.ModelName)
 		}
 	}
+
+	// Poll /health to report operand health into model status. Failure is
+	// non-fatal — the model sync is still considered successful even if the
+	// health endpoint is slow or unreachable on this reconcile.
+	r.updateModelHealth(ctx, apiClient, model)
 
 	now := metav1.Now()
 	model.Status.LastSyncTime = &now
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+// updateModelHealth asks the LiteLLM proxy for its /health report and
+// records whether this model shows up as healthy, unhealthy, or missing.
+// It intentionally never returns an error so health probe flakes do not
+// flip the Synced condition or trigger requeue storms.
+func (r *LiteLLMModelReconciler) updateModelHealth(ctx context.Context, apiClient litellm.Client, model *litellmv1alpha1.LiteLLMModel) {
+	log := logf.FromContext(ctx)
+	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	report, err := apiClient.Health().Check(probeCtx)
+	if err != nil {
+		log.V(1).Info("model health probe failed", "error", err)
+		model.Status.Health = "unknown"
+		return
+	}
+	for _, ep := range report.HealthyEndpoints {
+		if ep.ModelID == model.Status.LiteLLMModelID || ep.Model == model.Spec.ModelName {
+			model.Status.Health = "healthy"
+			return
+		}
+	}
+	for _, ep := range report.UnhealthyEndpoints {
+		if ep.ModelID == model.Status.LiteLLMModelID || ep.Model == model.Spec.ModelName {
+			model.Status.Health = "unhealthy"
+			if ep.Error != "" {
+				emitEvent(r.Recorder, model, corev1.EventTypeWarning, EventReasonHealthDegraded,
+					"Model %q reported unhealthy by LiteLLM: %s", model.Spec.ModelName, ep.Error)
+			}
+			return
+		}
+	}
+	// Not present in either list — treat as unknown rather than unhealthy
+	// so a silently-dropped model doesn't get false-flagged.
+	model.Status.Health = "unknown"
 }
 
 // resolveCredentialName fetches the LiteLLMCredential referenced by the model's
@@ -248,6 +301,11 @@ func (r *LiteLLMModelReconciler) handleDeletion(
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 			if err := apiClient.Models().Delete(ctx, model.Status.LiteLLMModelID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete model from LiteLLM", "modelId", model.Status.LiteLLMModelID)
+				emitEvent(r.Recorder, model, corev1.EventTypeWarning, EventReasonReconcileFailed,
+					"Failed to delete model %q from LiteLLM: %v", model.Spec.ModelName, err)
+			} else {
+				emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonDeleted,
+					"Model %q deleted from LiteLLM", model.Spec.ModelName)
 			}
 		}
 	}

@@ -358,6 +358,8 @@ func (m *MockCustomerService) List(ctx context.Context) ([]CustomerInfo, error) 
 type MockHealthService struct {
 	CheckLivenessFunc  func(ctx context.Context) error
 	CheckReadinessFunc func(ctx context.Context) error
+	ReadinessFunc      func(ctx context.Context) (*ReadinessResponse, error)
+	CheckFunc          func(ctx context.Context) (*HealthCheckResponse, error)
 }
 
 func (m *MockHealthService) CheckLiveness(ctx context.Context) error {
@@ -372,4 +374,18 @@ func (m *MockHealthService) CheckReadiness(ctx context.Context) error {
 		return m.CheckReadinessFunc(ctx)
 	}
 	return nil
+}
+
+func (m *MockHealthService) Readiness(ctx context.Context) (*ReadinessResponse, error) {
+	if m.ReadinessFunc != nil {
+		return m.ReadinessFunc(ctx)
+	}
+	return &ReadinessResponse{Status: "connected", RedisConnected: true}, nil
+}
+
+func (m *MockHealthService) Check(ctx context.Context) (*HealthCheckResponse, error) {
+	if m.CheckFunc != nil {
+		return m.CheckFunc(ctx)
+	}
+	return &HealthCheckResponse{}, nil
 }

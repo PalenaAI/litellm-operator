@@ -21,9 +21,11 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -37,6 +39,7 @@ import (
 type LiteLLMOrganizationReconciler struct {
 	client.Client
 	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
 	LiteLLMClientFactory litellm.ClientFactory
 }
 
@@ -66,6 +69,8 @@ func (r *LiteLLMOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.
 	resolved, err := resolveInstance(ctx, r.Client, org.Namespace, org.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
+		emitEvent(r.Recorder, &org, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Referenced LiteLLMInstance %q is not ready: %v", org.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&org.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
 			ObservedGeneration: org.Generation,
@@ -77,6 +82,8 @@ func (r *LiteLLMOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.
 	result, err := r.reconcileOrganization(ctx, &org, resolved)
 	if err != nil {
 		if isEnterpriseLicenseError(err) {
+			emitEvent(r.Recorder, &org, corev1.EventTypeWarning, EventReasonEnterpriseRequired,
+				"Organization %q requires a LiteLLM Enterprise license", org.Spec.OrganizationAlias)
 			meta.SetStatusCondition(&org.Status.Conditions, metav1.Condition{
 				Type:               ConditionSynced,
 				Status:             metav1.ConditionFalse,
@@ -88,6 +95,8 @@ func (r *LiteLLMOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "failed to reconcile organization")
+		emitEvent(r.Recorder, &org, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Failed to reconcile organization %q: %v", org.Spec.OrganizationAlias, err)
 		meta.SetStatusCondition(&org.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "SyncFailed", Message: err.Error(),
 			ObservedGeneration: org.Generation,
@@ -140,6 +149,8 @@ func (r *LiteLLMOrganizationReconciler) reconcileOrganization(
 			return ctrl.Result{}, err
 		}
 		log.Info("created organization", "organizationId", resp.OrganizationID)
+		emitEvent(r.Recorder, org, corev1.EventTypeNormal, EventReasonCreated,
+			"Organization %q registered with LiteLLM (id=%s)", org.Spec.OrganizationAlias, resp.OrganizationID)
 	} else {
 		currentHash := computeSpecHash(org.Spec)
 		if org.Annotations[AnnotationSyncHash] != currentHash {
@@ -165,6 +176,8 @@ func (r *LiteLLMOrganizationReconciler) reconcileOrganization(
 			}
 			org.Status.Synced = true
 			log.Info("updated organization", "organizationId", org.Status.LiteLLMOrganizationID)
+			emitEvent(r.Recorder, org, corev1.EventTypeNormal, EventReasonUpdated,
+				"Organization %q updated in LiteLLM", org.Spec.OrganizationAlias)
 		}
 	}
 
@@ -257,6 +270,11 @@ func (r *LiteLLMOrganizationReconciler) handleDeletion(ctx context.Context, org 
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 			if err := apiClient.Organizations().Delete(ctx, org.Status.LiteLLMOrganizationID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete organization from LiteLLM")
+				emitEvent(r.Recorder, org, corev1.EventTypeWarning, EventReasonReconcileFailed,
+					"Failed to delete organization %q from LiteLLM: %v", org.Spec.OrganizationAlias, err)
+			} else {
+				emitEvent(r.Recorder, org, corev1.EventTypeNormal, EventReasonDeleted,
+					"Organization %q deleted from LiteLLM", org.Spec.OrganizationAlias)
 			}
 		}
 	}

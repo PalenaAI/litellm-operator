@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -45,7 +46,8 @@ import (
 // instance controller, so we do not need to poke it from here.
 type LiteLLMCredentialReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmcredentials,verbs=get;list;watch;create;update;patch;delete
@@ -82,6 +84,8 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if apierrors.IsNotFound(err) {
 			reason = "InstanceNotFound"
 		}
+		emitEvent(r.Recorder, &cred, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Credential %q: %s: %v", cred.Spec.CredentialName, reason, err)
 		meta.SetStatusCondition(&cred.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
 			Status:             metav1.ConditionFalse,
@@ -104,6 +108,8 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		if apierrors.IsNotFound(err) {
 			reason = "SecretNotFound"
 		}
+		emitEvent(r.Recorder, &cred, corev1.EventTypeWarning, EventReasonSecretNotFound,
+			"Credential %q API key Secret %q: %v", cred.Spec.CredentialName, cred.Spec.APIKeySecretRef.Name, err)
 		meta.SetStatusCondition(&cred.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
 			Status:             metav1.ConditionFalse,
@@ -116,6 +122,8 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 	if _, ok := secret.Data[cred.Spec.APIKeySecretRef.Key]; !ok {
+		emitEvent(r.Recorder, &cred, corev1.EventTypeWarning, EventReasonValidationFailed,
+			"Credential %q: key %q not found in Secret %q", cred.Spec.CredentialName, cred.Spec.APIKeySecretRef.Key, cred.Spec.APIKeySecretRef.Name)
 		meta.SetStatusCondition(&cred.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
 			Status:             metav1.ConditionFalse,
@@ -136,6 +144,7 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		cred.Status.ReferencedByModels = refCount
 	}
 
+	wasReady := meta.IsStatusConditionTrue(cred.Status.Conditions, ConditionReady)
 	cred.Status.Configured = true
 	now := metav1.Now()
 	cred.Status.LastSyncTime = &now
@@ -146,6 +155,10 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		Message:            "Credential is valid; referenced Secret exists",
 		ObservedGeneration: cred.Generation,
 	})
+	if !wasReady {
+		emitEvent(r.Recorder, &cred, corev1.EventTypeNormal, EventReasonSynced,
+			"Credential %q validated (referenced by %d model(s))", cred.Spec.CredentialName, cred.Status.ReferencedByModels)
+	}
 
 	if err := r.Status().Update(ctx, &cred); err != nil {
 		log.Error(err, "failed to update credential status")

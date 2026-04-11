@@ -25,6 +25,39 @@ import (
 type HealthService interface {
 	CheckLiveness(ctx context.Context) error
 	CheckReadiness(ctx context.Context) error
+	// Readiness returns the structured readiness payload (status + redis state).
+	Readiness(ctx context.Context) (*ReadinessResponse, error)
+	// Check returns the per-model health list from GET /health. Used to
+	// populate LiteLLMModel.status.health and operand performance metrics.
+	Check(ctx context.Context) (*HealthCheckResponse, error)
+}
+
+// ReadinessResponse is the structured payload returned by /health/readiness.
+// Fields are inlined as `map[string]interface{}` because LiteLLM has changed
+// the shape a few times — we only extract what we need and tolerate extras.
+type ReadinessResponse struct {
+	Status         string `json:"status,omitempty"`
+	DBHealth       string `json:"db,omitempty"`
+	CacheHealth    string `json:"cache,omitempty"`
+	RedisConnected bool   `json:"redis,omitempty"`
+	LiteLLMVersion string `json:"litellm_version,omitempty"`
+}
+
+// HealthCheckResponse is the payload returned by /health.
+type HealthCheckResponse struct {
+	HealthyEndpoints   []HealthEndpoint `json:"healthy_endpoints,omitempty"`
+	UnhealthyEndpoints []HealthEndpoint `json:"unhealthy_endpoints,omitempty"`
+	HealthyCount       int              `json:"healthy_count,omitempty"`
+	UnhealthyCount     int              `json:"unhealthy_count,omitempty"`
+}
+
+// HealthEndpoint identifies a single model deployment in health output.
+type HealthEndpoint struct {
+	Model    string `json:"model,omitempty"`
+	ModelID  string `json:"model_id,omitempty"`
+	APIBase  string `json:"api_base,omitempty"`
+	Error    string `json:"error,omitempty"`
+	Response string `json:"response,omitempty"`
 }
 
 type healthService struct {
@@ -37,4 +70,20 @@ func (s *healthService) CheckLiveness(ctx context.Context) error {
 
 func (s *healthService) CheckReadiness(ctx context.Context) error {
 	return s.client.do(ctx, http.MethodGet, "/health/readiness", nil, nil)
+}
+
+func (s *healthService) Readiness(ctx context.Context) (*ReadinessResponse, error) {
+	var resp ReadinessResponse
+	if err := s.client.do(ctx, http.MethodGet, "/health/readiness", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+func (s *healthService) Check(ctx context.Context) (*HealthCheckResponse, error) {
+	var resp HealthCheckResponse
+	if err := s.client.do(ctx, http.MethodGet, "/health", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }

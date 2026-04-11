@@ -57,6 +57,12 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 		runbook     string
 	}
 
+	// runbookBase points at operator-maintained SOPs. Each alert appends
+	// its own anchor — the Prometheus `runbook_url` annotation convention
+	// lets Alertmanager receivers (Slack, PagerDuty, etc.) render a link
+	// directly from the alert payload.
+	const runbookBase = "https://github.com/PalenaAI/litellm-operator/blob/main/docs/RUNBOOKS.md"
+
 	alerts := []alertDef{
 		{
 			name:        "LiteLLMInstanceDown",
@@ -65,7 +71,7 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 			severity:    "critical",
 			summary:     fmt.Sprintf("LiteLLM instance %s/%s has no available replicas", ns, name),
 			description: "All replicas are down. No requests can be served.",
-			runbook:     "Check pod status with: kubectl get pods -n " + ns + " -l app.kubernetes.io/name=litellm",
+			runbook:     runbookBase + "#litellminstancedown",
 		},
 		{
 			name:        "LiteLLMInstanceDegraded",
@@ -74,7 +80,7 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 			severity:    "warning",
 			summary:     fmt.Sprintf("LiteLLM instance %s/%s has fewer replicas than desired", ns, name),
 			description: "Some replicas are not available. Capacity may be reduced.",
-			runbook:     "Check pod events: kubectl describe pods -n " + ns + " -l app.kubernetes.io/name=litellm",
+			runbook:     runbookBase + "#litellminstancedegraded",
 		},
 		{
 			name:        "LiteLLMPodRestarting",
@@ -83,7 +89,7 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 			severity:    "warning",
 			summary:     fmt.Sprintf("LiteLLM pod in %s is restarting frequently", ns),
 			description: "A LiteLLM pod has restarted more than 3 times in the last hour.",
-			runbook:     "Check logs: kubectl logs -n " + ns + " -l app.kubernetes.io/name=litellm --previous",
+			runbook:     runbookBase + "#litellmpodrestarting",
 		},
 		{
 			name:        "LiteLLMPodNotReady",
@@ -92,7 +98,7 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 			severity:    "warning",
 			summary:     fmt.Sprintf("LiteLLM pod in %s is not ready", ns),
 			description: "A LiteLLM pod has been not ready for more than 10 minutes.",
-			runbook:     "Check readiness probe: kubectl describe pod -n " + ns + " -l app.kubernetes.io/name=litellm",
+			runbook:     runbookBase + "#litellmpodnotready",
 		},
 		{
 			name:        "LiteLLMHighMemoryUsage",
@@ -101,7 +107,7 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 			severity:    "warning",
 			summary:     fmt.Sprintf("LiteLLM instance %s/%s is using over 90%% of memory limit", ns, name),
 			description: "Memory usage is critically high. The pod may be OOM killed.",
-			runbook:     "Consider increasing spec.resources.limits.memory or scaling out with more replicas.",
+			runbook:     runbookBase + "#litellmhighmemoryusage",
 		},
 		{
 			name:        "LiteLLMHighCPUUsage",
@@ -110,7 +116,25 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 			severity:    "warning",
 			summary:     fmt.Sprintf("LiteLLM instance %s/%s is using over 90%% of CPU limit", ns, name),
 			description: "CPU usage is critically high. Requests may be throttled.",
-			runbook:     "Consider increasing spec.resources.limits.cpu or enabling autoscaling.",
+			runbook:     runbookBase + "#litellmhighcpuusage",
+		},
+		{
+			name:        "LiteLLMRedisDisconnected",
+			expr:        fmt.Sprintf(`litellm_redis_connection_status{namespace="%s",instance="%s"} == 0`, ns, name),
+			forDuration: "5m",
+			severity:    "warning",
+			summary:     fmt.Sprintf("LiteLLM instance %s/%s lost Redis connectivity", ns, name),
+			description: "Redis is configured for caching / rate limiting but the proxy reports it as disconnected.",
+			runbook:     runbookBase + "#litellmredisdisconnected",
+		},
+		{
+			name:        "LiteLLMHighErrorRate",
+			expr:        fmt.Sprintf(`sum(rate(litellm_requests_total{namespace="%s",instance="%s",status=~"5.."}[5m])) / sum(rate(litellm_requests_total{namespace="%s",instance="%s"}[5m])) > 0.05`, ns, name, ns, name),
+			forDuration: "10m",
+			severity:    "critical",
+			summary:     fmt.Sprintf("LiteLLM instance %s/%s error rate exceeds 5%%", ns, name),
+			description: "More than 5% of requests are returning 5xx errors over the last 5 minutes.",
+			runbook:     runbookBase + "#litellmhigherrorrate",
 		},
 	}
 
@@ -131,7 +155,7 @@ func BuildPrometheusRule(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 			"annotations": map[string]interface{}{
 				"summary":     a.summary,
 				"description": a.description,
-				"runbook":     a.runbook,
+				"runbook_url": a.runbook,
 			},
 		}
 		rules = append(rules, rule)

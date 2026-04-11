@@ -408,7 +408,7 @@ metadata:
           }
         }
       ]
-    capabilities: Full Lifecycle
+    capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.7.0
     createdAt: "2026-04-11T13:41:19Z"
@@ -449,11 +449,103 @@ spec:
       kind: LiteLLMInstance
       name: litellminstances.litellm.palena.ai
       version: v1alpha1
+      statusDescriptors:
+      - description: Whether the instance is fully ready.
+        displayName: Ready
+        path: ready
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Internal cluster endpoint URL.
+        displayName: Endpoint
+        path: endpoint
+        x-descriptors:
+        - urn:alm:descriptor:org.w3:link
+      - description: Current LiteLLM version running.
+        displayName: LiteLLM Version
+        path: version
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Total replicas running for this instance.
+        displayName: Replicas
+        path: replicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: Ready replicas serving traffic.
+        displayName: Ready Replicas
+        path: readyReplicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: Whether the backing database is reachable.
+        displayName: Database Connected
+        path: database.connected
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Whether Redis is reachable (if configured).
+        displayName: Redis Connected
+        path: redis.connected
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Whether a LiteLLM Enterprise license is active.
+        displayName: License Active
+        path: license.active
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Last successful deployment revision (used for auto-rollback).
+        displayName: Last Successful Revision
+        path: lastSuccessfulRevision
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Current health and readiness conditions.
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
     - description: LiteLLMModel is the Schema for the litellmmodels API.
       displayName: LiteLLM Model
       kind: LiteLLMModel
       name: litellmmodels.litellm.palena.ai
       version: v1alpha1
+      statusDescriptors:
+      - description: Whether the model is synced to the LiteLLM proxy.
+        displayName: Synced
+        path: synced
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: LiteLLM-assigned model ID.
+        displayName: LiteLLM Model ID
+        path: litellmModelId
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Model health as reported by the LiteLLM /health endpoint.
+        displayName: Health
+        path: health
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: P50 latency in milliseconds observed from LiteLLM metrics.
+        displayName: P50 Latency (ms)
+        path: latencyP50Ms
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: P95 latency in milliseconds observed from LiteLLM metrics.
+        displayName: P95 Latency (ms)
+        path: latencyP95Ms
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Total requests served by this model in the last 24 hours.
+        displayName: Requests (24h)
+        path: requestsLast24h
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Last successful sync time with the LiteLLM proxy.
+        displayName: Last Sync Time
+        path: lastSyncTime
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Standard Kubernetes conditions.
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
     - description: LiteLLMOrganization is the Schema for the litellmorganizations
         API.
       displayName: LiteLLM Organization

@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -38,6 +40,7 @@ import (
 type LiteLLMTeamReconciler struct {
 	client.Client
 	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
 	LiteLLMClientFactory litellm.ClientFactory
 }
 
@@ -67,6 +70,8 @@ func (r *LiteLLMTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	resolved, err := resolveInstance(ctx, r.Client, team.Namespace, team.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
+		emitEvent(r.Recorder, &team, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Referenced LiteLLMInstance %q is not ready: %v", team.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&team.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
 		})
@@ -77,6 +82,8 @@ func (r *LiteLLMTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	result, err := r.reconcileTeam(ctx, &team, resolved)
 	if err != nil {
 		if isEnterpriseLicenseError(err) {
+			emitEvent(r.Recorder, &team, corev1.EventTypeWarning, EventReasonEnterpriseRequired,
+				"Team %q requires a LiteLLM Enterprise license", team.Spec.TeamAlias)
 			meta.SetStatusCondition(&team.Status.Conditions, metav1.Condition{
 				Type:               ConditionSynced,
 				Status:             metav1.ConditionFalse,
@@ -88,6 +95,8 @@ func (r *LiteLLMTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "failed to reconcile team")
+		emitEvent(r.Recorder, &team, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Failed to reconcile team %q: %v", team.Spec.TeamAlias, err)
 		meta.SetStatusCondition(&team.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "SyncFailed", Message: err.Error(),
 		})
@@ -150,6 +159,8 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 			return ctrl.Result{}, err
 		}
 		log.Info("created team", "teamId", resp.TeamID)
+		emitEvent(r.Recorder, team, corev1.EventTypeNormal, EventReasonCreated,
+			"Team %q registered with LiteLLM (id=%s)", team.Spec.TeamAlias, resp.TeamID)
 	} else {
 		currentHash := computeSpecHash(team.Spec)
 		if team.Annotations[AnnotationSyncHash] != currentHash {
@@ -179,6 +190,8 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 			}
 			team.Status.Synced = true
 			log.Info("updated team", "teamId", team.Status.LiteLLMTeamID)
+			emitEvent(r.Recorder, team, corev1.EventTypeNormal, EventReasonUpdated,
+				"Team %q updated in LiteLLM", team.Spec.TeamAlias)
 		}
 	}
 
@@ -320,6 +333,11 @@ func (r *LiteLLMTeamReconciler) handleDeletion(ctx context.Context, team *litell
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 			if err := apiClient.Teams().Delete(ctx, team.Status.LiteLLMTeamID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete team from LiteLLM")
+				emitEvent(r.Recorder, team, corev1.EventTypeWarning, EventReasonReconcileFailed,
+					"Failed to delete team %q from LiteLLM: %v", team.Spec.TeamAlias, err)
+			} else {
+				emitEvent(r.Recorder, team, corev1.EventTypeNormal, EventReasonDeleted,
+					"Team %q deleted from LiteLLM", team.Spec.TeamAlias)
 			}
 		}
 	}

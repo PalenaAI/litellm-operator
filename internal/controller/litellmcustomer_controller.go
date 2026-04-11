@@ -21,9 +21,11 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -37,6 +39,7 @@ import (
 type LiteLLMCustomerReconciler struct {
 	client.Client
 	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
 	LiteLLMClientFactory litellm.ClientFactory
 }
 
@@ -66,6 +69,8 @@ func (r *LiteLLMCustomerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	resolved, err := resolveInstance(ctx, r.Client, customer.Namespace, customer.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
+		emitEvent(r.Recorder, &customer, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Referenced LiteLLMInstance %q is not ready: %v", customer.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&customer.Status.Conditions, metav1.Condition{
 			Type:               ConditionSynced,
 			Status:             metav1.ConditionFalse,
@@ -80,6 +85,8 @@ func (r *LiteLLMCustomerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	result, err := r.reconcileCustomer(ctx, &customer, resolved)
 	if err != nil {
 		if isEnterpriseLicenseError(err) {
+			emitEvent(r.Recorder, &customer, corev1.EventTypeWarning, EventReasonEnterpriseRequired,
+				"Customer %q requires a LiteLLM Enterprise license", customer.Spec.CustomerID)
 			meta.SetStatusCondition(&customer.Status.Conditions, metav1.Condition{
 				Type:               ConditionSynced,
 				Status:             metav1.ConditionFalse,
@@ -91,6 +98,8 @@ func (r *LiteLLMCustomerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "failed to reconcile customer")
+		emitEvent(r.Recorder, &customer, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Failed to reconcile customer %q: %v", customer.Spec.CustomerID, err)
 		meta.SetStatusCondition(&customer.Status.Conditions, metav1.Condition{
 			Type:               ConditionSynced,
 			Status:             metav1.ConditionFalse,
@@ -155,6 +164,8 @@ func (r *LiteLLMCustomerReconciler) reconcileCustomer(
 			return ctrl.Result{}, err
 		}
 		log.Info("created customer", "customerId", customer.Spec.CustomerID)
+		emitEvent(r.Recorder, customer, corev1.EventTypeNormal, EventReasonCreated,
+			"Customer %q registered with LiteLLM", customer.Spec.CustomerID)
 	} else {
 		currentHash := computeSpecHash(customer.Spec)
 		if customer.Annotations[AnnotationSyncHash] != currentHash {
@@ -184,6 +195,8 @@ func (r *LiteLLMCustomerReconciler) reconcileCustomer(
 				return ctrl.Result{}, err
 			}
 			log.Info("updated customer", "customerId", customer.Spec.CustomerID)
+			emitEvent(r.Recorder, customer, corev1.EventTypeNormal, EventReasonUpdated,
+				"Customer %q updated in LiteLLM", customer.Spec.CustomerID)
 		}
 	}
 
@@ -214,6 +227,11 @@ func (r *LiteLLMCustomerReconciler) handleDeletion(
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 			if err := apiClient.Customers().Delete(ctx, customer.Spec.CustomerID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete customer from LiteLLM")
+				emitEvent(r.Recorder, customer, corev1.EventTypeWarning, EventReasonReconcileFailed,
+					"Failed to delete customer %q from LiteLLM: %v", customer.Spec.CustomerID, err)
+			} else {
+				emitEvent(r.Recorder, customer, corev1.EventTypeNormal, EventReasonDeleted,
+					"Customer %q deleted from LiteLLM", customer.Spec.CustomerID)
 			}
 		}
 	}

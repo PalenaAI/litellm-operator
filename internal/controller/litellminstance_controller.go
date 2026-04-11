@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,13 +49,16 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
+	"github.com/PalenaAI/litellm-operator/internal/litellm"
 	"github.com/PalenaAI/litellm-operator/internal/resources"
 )
 
 // LiteLLMInstanceReconciler reconciles a LiteLLMInstance object.
 type LiteLLMInstanceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
+	LiteLLMClientFactory litellm.ClientFactory
 }
 
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances,verbs=get;list;watch;create;update;patch;delete
@@ -898,6 +902,8 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 			Message:            reconcileErr.Error(),
 			ObservedGeneration: instance.Generation,
 		})
+		emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Reconcile failed: %v", reconcileErr)
 	} else if instance.Status.Ready {
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
@@ -916,7 +922,117 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 		})
 	}
 
+	// Probe the LiteLLM health endpoints once the deployment has at least
+	// one ready replica. This populates operand-level health into status,
+	// sets the RedisReady condition when caching is wired to Redis, and
+	// emits HealthDegraded / HealthRestored events so operators are
+	// notified without tailing logs.
+	if instance.Status.Ready && r.LiteLLMClientFactory != nil {
+		r.probeInstanceHealth(ctx, instance)
+	}
+
 	_ = r.Status().Update(ctx, instance)
+}
+
+// probeInstanceHealth calls /health/liveliness and /health/readiness on the
+// running proxy, updates the Ready / RedisReady conditions, and emits
+// Kubernetes Events on transitions. The master key is resolved the same way
+// downstream controllers resolve it so the probe works with both auto-
+// generated and user-provided keys.
+func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) {
+	log := logf.FromContext(ctx)
+
+	masterKeyRef := instance.Spec.MasterKey.SecretRef
+	if masterKeyRef == nil && instance.Spec.MasterKey.AutoGenerate {
+		masterKeyRef = &litellmv1alpha1.SecretKeyRef{
+			Name: instance.Name + "-master-key",
+			Key:  "master-key",
+		}
+	}
+	if masterKeyRef == nil {
+		return
+	}
+	masterKey, err := getSecretValue(ctx, r.Client, instance.Namespace, masterKeyRef)
+	if err != nil {
+		log.V(1).Info("health probe skipped, cannot resolve master key", "error", err)
+		return
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	api := r.LiteLLMClientFactory(instance.Status.Endpoint, masterKey)
+
+	previouslyHealthy := meta.IsStatusConditionTrue(instance.Status.Conditions, ConditionReady)
+
+	if err := api.Health().CheckLiveness(probeCtx); err != nil {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "LivenessProbeFailed",
+			Message:            fmt.Sprintf("LiteLLM liveness probe failed: %v", err),
+			ObservedGeneration: instance.Generation,
+		})
+		if previouslyHealthy {
+			emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonHealthDegraded,
+				"LiteLLM liveness probe failed: %v", err)
+		}
+		return
+	}
+
+	readiness, err := api.Health().Readiness(probeCtx)
+	if err != nil {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "ReadinessProbeFailed",
+			Message:            fmt.Sprintf("LiteLLM readiness probe failed: %v", err),
+			ObservedGeneration: instance.Generation,
+		})
+		if previouslyHealthy {
+			emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonHealthDegraded,
+				"LiteLLM readiness probe failed: %v", err)
+		}
+		return
+	}
+
+	if !previouslyHealthy {
+		emitEvent(r.Recorder, instance, corev1.EventTypeNormal, EventReasonHealthRestored,
+			"LiteLLM instance is healthy again")
+	}
+
+	// Redis status: only set if Redis is configured on the spec; otherwise
+	// an absent RedisStatus is the correct signal ("not applicable").
+	if instance.Spec.Redis != nil {
+		prevConnected := instance.Status.Redis != nil && instance.Status.Redis.Connected
+		instance.Status.Redis = &litellmv1alpha1.RedisStatus{
+			Connected: readiness.RedisConnected,
+		}
+		if readiness.RedisConnected {
+			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+				Type:               ConditionRedisReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "RedisConnected",
+				Message:            "Redis connection is healthy",
+				ObservedGeneration: instance.Generation,
+			})
+			if !prevConnected {
+				emitEvent(r.Recorder, instance, corev1.EventTypeNormal, EventReasonRedisConnected,
+					"Redis connection restored")
+			}
+		} else {
+			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+				Type:               ConditionRedisReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "RedisDisconnected",
+				Message:            "Redis connection is not healthy",
+				ObservedGeneration: instance.Generation,
+			})
+			if prevConnected {
+				emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonRedisDisconnected,
+					"Redis connection lost")
+			}
+		}
+	}
 }
 
 // createOrUpdate creates a resource if it doesn't exist, or updates it if it does.

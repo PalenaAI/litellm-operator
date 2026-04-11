@@ -21,10 +21,12 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -38,6 +40,7 @@ import (
 type LiteLLMUserReconciler struct {
 	client.Client
 	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
 	LiteLLMClientFactory litellm.ClientFactory
 }
 
@@ -67,6 +70,8 @@ func (r *LiteLLMUserReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	resolved, err := resolveInstance(ctx, r.Client, user.Namespace, user.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
+		emitEvent(r.Recorder, &user, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Referenced LiteLLMInstance %q is not ready: %v", user.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&user.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
 		})
@@ -77,6 +82,8 @@ func (r *LiteLLMUserReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	result, err := r.reconcileUser(ctx, &user, resolved)
 	if err != nil {
 		if isEnterpriseLicenseError(err) {
+			emitEvent(r.Recorder, &user, corev1.EventTypeWarning, EventReasonEnterpriseRequired,
+				"User %q requires a LiteLLM Enterprise license", user.Spec.UserEmail)
 			meta.SetStatusCondition(&user.Status.Conditions, metav1.Condition{
 				Type:               ConditionSynced,
 				Status:             metav1.ConditionFalse,
@@ -88,6 +95,8 @@ func (r *LiteLLMUserReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "failed to reconcile user")
+		emitEvent(r.Recorder, &user, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Failed to reconcile user %q: %v", user.Spec.UserEmail, err)
 		meta.SetStatusCondition(&user.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "SyncFailed", Message: err.Error(),
 		})
@@ -147,6 +156,8 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 			return ctrl.Result{}, err
 		}
 		log.Info("created user", "userId", resp.UserID)
+		emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonCreated,
+			"User %q registered with LiteLLM (id=%s)", user.Spec.UserEmail, resp.UserID)
 	} else {
 		currentHash := computeSpecHash(user.Spec)
 		if user.Annotations[AnnotationSyncHash] != currentHash {
@@ -162,6 +173,8 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 			}
 			user.Status.Synced = true
 			log.Info("updated user", "userId", user.Status.LiteLLMUserID)
+			emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonUpdated,
+				"User %q updated in LiteLLM", user.Spec.UserEmail)
 		}
 	}
 
@@ -213,6 +226,11 @@ func (r *LiteLLMUserReconciler) handleDeletion(ctx context.Context, user *litell
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 			if err := apiClient.Users().Delete(ctx, user.Status.LiteLLMUserID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete user from LiteLLM")
+				emitEvent(r.Recorder, user, corev1.EventTypeWarning, EventReasonReconcileFailed,
+					"Failed to delete user %q from LiteLLM: %v", user.Spec.UserEmail, err)
+			} else {
+				emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonDeleted,
+					"User %q deleted from LiteLLM", user.Spec.UserEmail)
 			}
 		}
 	}

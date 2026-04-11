@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -46,7 +47,8 @@ import (
 // poke it from here.
 type LiteLLMGuardrailReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme   *runtime.Scheme
+	Recorder record.EventRecorder
 }
 
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmguardrails,verbs=get;list;watch;create;update;patch;delete
@@ -81,6 +83,8 @@ func (r *LiteLLMGuardrailReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		if apierrors.IsNotFound(err) {
 			reason = "InstanceNotFound"
 		}
+		emitEvent(r.Recorder, &g, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Guardrail %q: %s: %v", g.Spec.GuardrailName, reason, err)
 		meta.SetStatusCondition(&g.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
 			Status:             metav1.ConditionFalse,
@@ -106,6 +110,8 @@ func (r *LiteLLMGuardrailReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			if apierrors.IsNotFound(err) {
 				reason = "SecretNotFound"
 			}
+			emitEvent(r.Recorder, &g, corev1.EventTypeWarning, EventReasonSecretNotFound,
+				"Guardrail %q API key Secret %q: %v", g.Spec.GuardrailName, g.Spec.APIKeySecretRef.Name, err)
 			meta.SetStatusCondition(&g.Status.Conditions, metav1.Condition{
 				Type:               ConditionReady,
 				Status:             metav1.ConditionFalse,
@@ -118,6 +124,8 @@ func (r *LiteLLMGuardrailReconciler) Reconcile(ctx context.Context, req ctrl.Req
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 		if _, ok := secret.Data[g.Spec.APIKeySecretRef.Key]; !ok {
+			emitEvent(r.Recorder, &g, corev1.EventTypeWarning, EventReasonValidationFailed,
+				"Guardrail %q: key %q not found in Secret %q", g.Spec.GuardrailName, g.Spec.APIKeySecretRef.Key, g.Spec.APIKeySecretRef.Name)
 			meta.SetStatusCondition(&g.Status.Conditions, metav1.Condition{
 				Type:               ConditionReady,
 				Status:             metav1.ConditionFalse,
@@ -131,6 +139,7 @@ func (r *LiteLLMGuardrailReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	wasReady := meta.IsStatusConditionTrue(g.Status.Conditions, ConditionReady)
 	g.Status.Configured = true
 	now := metav1.Now()
 	g.Status.LastSyncTime = &now
@@ -141,6 +150,10 @@ func (r *LiteLLMGuardrailReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		Message:            "Guardrail spec is valid; waiting for instance controller to render config",
 		ObservedGeneration: g.Generation,
 	})
+	if !wasReady {
+		emitEvent(r.Recorder, &g, corev1.EventTypeNormal, EventReasonSynced,
+			"Guardrail %q validated", g.Spec.GuardrailName)
+	}
 
 	if err := r.Status().Update(ctx, &g); err != nil {
 		log.Error(err, "failed to update guardrail status")
