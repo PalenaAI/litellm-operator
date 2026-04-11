@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-11
+
 ### Added
 
 - **Guardrails (content moderation / safety)** — new `LiteLLMGuardrail` CRD (short name `lg`) declaratively manages guardrail integrations for content moderation, PII detection, jailbreak prevention, and prompt injection defence. Supports 10 providers (`aporia`, `lakera`, `bedrock`, `presidio`, `guardrails_ai`, `azure`, `llm_guard`, `llamaguard`, `google_text_moderation`, `custom_guardrail`) and all four execution modes (`pre_call`, `post_call`, `during_call`, `logging_only`). Each guardrail references an optional `apiKeySecretRef` for the provider credentials, an optional `apiBase`, a `defaultOn` flag, free-form provider `params`, and additional `envVars`. Guardrails are **config-level resources** materialized by the instance controller: each entry is rendered into the `guardrails` section of the generated `proxy_server_config.yaml`, and the API key is injected into the pod via a `secretKeyRef`-backed env var (`GUARDRAIL_{NAME}_API_KEY`) referenced from config as `os.environ/…`. The instance controller watches `LiteLLMGuardrail` CRs and rebuilds the ConfigMap + Deployment when they change. New `spec.guardrails []string` field on `LiteLLMVirtualKey` and `LiteLLMTeam` lets keys and teams opt into specific guardrails (enterprise feature) — the list is forwarded to `/key/generate`, `/key/update`, `/team/new`, and `/team/update`. Includes a dedicated validation controller that checks the instance reference and the API key Secret, sample CR with three example providers (Aporia, local Presidio, AWS Bedrock), RBAC, Helm chart CRD, and unit tests for config generation, env var collection, instance filtering, and env var sanitization.
@@ -89,7 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows for tests, linting, and releases
 - OLM bundle and catalog manifests for OperatorHub distribution
 
-[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.7.0...v0.9.0
 [0.7.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/PalenaAI/litellm-operator/releases/tag/v0.5.0
