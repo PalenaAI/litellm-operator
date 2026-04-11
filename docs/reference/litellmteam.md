@@ -38,6 +38,7 @@ spec:
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `instanceRef` | InstanceRef | Yes | — | Reference to the LiteLLMInstance |
+| `organizationRef` | *OrganizationRef | No | — | Reference to a [LiteLLMOrganization](/reference/litellmorganization) in the same namespace |
 | `teamAlias` | string | Yes | — | Human-readable team name |
 | `models` | []string | No | — | Models this team can access |
 | `maxBudgetMonthly` | *float64 | No | — | Maximum monthly budget in USD |
@@ -49,6 +50,7 @@ spec:
 | `metadata` | map[string]string | No | — | Custom metadata |
 | `tags` | []string | No | — | Tags for tag-based routing (keys inherit these tags) |
 | `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this team |
+| `guardrails` | []string | No | — | Names of [LiteLLMGuardrail](/reference/litellmguardrail) CRs this team opts into. Each entry must match `spec.guardrailName` on a guardrail bound to the same instance (enterprise) |
 | `memberManagement` | string | No | `mixed` | `crd`, `sso`, or `mixed` |
 | `members` | []TeamMember | No | — | Team members list |
 

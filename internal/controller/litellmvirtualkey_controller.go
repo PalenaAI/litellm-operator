@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -41,6 +42,7 @@ import (
 type LiteLLMVirtualKeyReconciler struct {
 	client.Client
 	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
 	LiteLLMClientFactory litellm.ClientFactory
 }
 
@@ -70,6 +72,8 @@ func (r *LiteLLMVirtualKeyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	resolved, err := resolveInstance(ctx, r.Client, vk.Namespace, vk.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
+		emitEvent(r.Recorder, &vk, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Referenced LiteLLMInstance %q is not ready: %v", vk.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&vk.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
 		})
@@ -80,6 +84,8 @@ func (r *LiteLLMVirtualKeyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	result, err := r.reconcileKey(ctx, &vk, resolved)
 	if err != nil {
 		if isEnterpriseLicenseError(err) {
+			emitEvent(r.Recorder, &vk, corev1.EventTypeWarning, EventReasonEnterpriseRequired,
+				"VirtualKey %q requires a LiteLLM Enterprise license", vk.Spec.KeyAlias)
 			meta.SetStatusCondition(&vk.Status.Conditions, metav1.Condition{
 				Type:               ConditionSynced,
 				Status:             metav1.ConditionFalse,
@@ -91,6 +97,8 @@ func (r *LiteLLMVirtualKeyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "failed to reconcile virtual key")
+		emitEvent(r.Recorder, &vk, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Failed to reconcile virtual key %q: %v", vk.Spec.KeyAlias, err)
 		meta.SetStatusCondition(&vk.Status.Conditions, metav1.Condition{
 			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "SyncFailed", Message: err.Error(),
 		})
@@ -139,6 +147,7 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 			Metadata:            vk.Spec.Metadata,
 			ModelMaxBudget:      parseModelMaxBudget(vk.Spec.ModelMaxBudget),
 			MaxParallelRequests: vk.Spec.MaxParallelRequests,
+			Guardrails:          vk.Spec.Guardrails,
 		}
 
 		resp, err := apiClient.Keys().Generate(ctx, req)
@@ -201,6 +210,8 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 			return ctrl.Result{}, err
 		}
 		log.Info("generated virtual key", "alias", vk.Spec.KeyAlias, "secret", secretName)
+		emitEvent(r.Recorder, vk, corev1.EventTypeNormal, EventReasonCreated,
+			"Virtual key %q generated, stored in Secret %q", vk.Spec.KeyAlias, secretName)
 	} else {
 		// Update key if spec changed
 		currentHash := computeSpecHash(vk.Spec)
@@ -215,6 +226,7 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 				Metadata:            vk.Spec.Metadata,
 				ModelMaxBudget:      parseModelMaxBudget(vk.Spec.ModelMaxBudget),
 				MaxParallelRequests: vk.Spec.MaxParallelRequests,
+				Guardrails:          vk.Spec.Guardrails,
 			}
 			if err := apiClient.Keys().Update(ctx, req); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update key: %w", err)
@@ -227,6 +239,8 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 				return ctrl.Result{}, err
 			}
 			log.Info("updated virtual key", "alias", vk.Spec.KeyAlias)
+			emitEvent(r.Recorder, vk, corev1.EventTypeNormal, EventReasonUpdated,
+				"Virtual key %q updated in LiteLLM", vk.Spec.KeyAlias)
 		}
 
 		// Refresh spend info
@@ -280,6 +294,11 @@ func (r *LiteLLMVirtualKeyReconciler) handleDeletion(ctx context.Context, vk *li
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 			if err := apiClient.Keys().Delete(ctx, vk.Status.LiteLLMKeyToken); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete key from LiteLLM")
+				emitEvent(r.Recorder, vk, corev1.EventTypeWarning, EventReasonReconcileFailed,
+					"Failed to delete virtual key %q from LiteLLM: %v", vk.Spec.KeyAlias, err)
+			} else {
+				emitEvent(r.Recorder, vk, corev1.EventTypeNormal, EventReasonDeleted,
+					"Virtual key %q deleted from LiteLLM", vk.Spec.KeyAlias)
 			}
 		}
 	}

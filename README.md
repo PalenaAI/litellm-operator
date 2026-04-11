@@ -6,7 +6,10 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 
 ## Features
 
-- **Declarative LiteLLM deployment** — manage proxy instances, models, teams, users, and API keys as Kubernetes custom resources
+- **Declarative LiteLLM deployment** — manage proxy instances, organizations, models, teams, users, credentials, guardrails, and API keys as Kubernetes custom resources
+- **Reusable provider credentials** — declare provider API keys once as `LiteLLMCredential` CRs and reference them from many `LiteLLMModel` resources via `credentialRef`; credentials are materialized into the proxy's `credential_list` and injected as env vars so secret values stay out of the operator's memory
+- **Guardrails (content moderation / safety)** — declare guardrail integrations (Aporia, Lakera, Presidio, AWS Bedrock, LLM Guard, Guardrails AI, Azure, Google Text Moderation, custom) as `LiteLLMGuardrail` CRs; each is rendered into the proxy's `guardrails` section with the API key injected via `secretKeyRef`. Per-key and per-team opt-in via `spec.guardrails` on `LiteLLMVirtualKey` and `LiteLLMTeam` (enterprise)
+- **Multi-tenancy** — full Organization > Team > User > Key hierarchy with org-scoped budgets, model access, and member management
 - **Bidirectional config sync** — reconciles CRD state with the LiteLLM REST API on every sync interval
 - **Team member management** — three modes: `crd` (CRD authoritative), `sso` (IdP authoritative), `mixed` (additive)
 - **VirtualKey secret management** — generated API keys are stored in Kubernetes Secrets with owner references for automatic cleanup
@@ -32,12 +35,16 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 | CRD | Short Name | Description |
 | --- | ---------- | ----------- |
 | `LiteLLMInstance` | `li` | Deploys a LiteLLM proxy with database, Redis, networking, and SSO |
+| `LiteLLMOrganization` | `lo` | Creates an organization for multi-tenant isolation with budget and model access |
 | `LiteLLMModel` | `lm` | Registers a model (e.g., `openai/gpt-4o`) with the proxy |
 | `LiteLLMTeam` | `lt` | Creates a team with budget limits and member management |
 | `LiteLLMUser` | `lu` | Creates a user (service accounts, bot users, non-SSO environments) |
+| `LiteLLMCustomer` | `lcust` | Manages an external end-user (SaaS customer) with budgets and rate limits |
+| `LiteLLMCredential` | `lc` | Defines a reusable provider credential (API key + optional base URL) shared across models |
+| `LiteLLMGuardrail` | `lg` | Defines a content moderation / safety integration (Aporia, Lakera, Presidio, Bedrock, etc.) |
 | `LiteLLMVirtualKey` | `lk` | Generates an API key scoped to a team/user with budget and rate limits |
 
-All secondary resources (`LiteLLMModel`, `LiteLLMTeam`, `LiteLLMUser`, `LiteLLMVirtualKey`) reference a `LiteLLMInstance` via `spec.instanceRef`.
+All secondary resources reference a `LiteLLMInstance` via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`.
 
 ## Prerequisites
 
@@ -107,6 +114,52 @@ spec:
       key: OPENAI_API_KEY
 ```
 
+### Reusable Credentials
+
+When many models share the same provider API key (e.g., several OpenAI deployments), define the credential once and reference it from each `LiteLLMModel` via `credentialRef`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: openai-credentials
+type: Opaque
+stringData:
+  api-key: sk-...
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMCredential
+metadata:
+  name: openai-prod
+spec:
+  instanceRef:
+    name: my-gateway
+  # The name used under `credential_list` in the generated proxy config.
+  # Models reference this via `litellm_params.litellm_credential_name`.
+  credentialName: openai-prod
+  apiKeySecretRef:
+    name: openai-credentials
+    key: api-key
+  # Optional extras merged into credential_info (api_base / api_version /
+  # free-form params are supported — params cannot override reserved keys).
+  apiBase: https://api.openai.com/v1
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMModel
+metadata:
+  name: gpt4o
+spec:
+  instanceRef:
+    name: my-gateway
+  modelName: gpt-4o
+  litellmParams:
+    model: openai/gpt-4o
+    credentialRef:
+      name: openai-prod   # takes precedence over inline apiKeySecretRef/apiBase
+```
+
+The operator injects the API key into the proxy pod via a `secretKeyRef`-backed env var (`CREDENTIAL_OPENAI_PROD_API_KEY`) and writes a matching `os.environ/…` reference to the generated `proxy_server_config.yaml` — the key value itself is never read into the operator's memory. Rotating the key is a Secret update: the operator rolls out a new Deployment pod to pick up the new value.
+
 ### 6. Create a team and API key
 
 ```yaml
@@ -137,6 +190,41 @@ spec:
     name: engineering
   models: [gpt-4o]
   maxBudget: "100"
+```
+
+### Multi-Tenant Organizations
+
+Create an organization to group teams under a shared budget and model access policy:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMOrganization
+metadata:
+  name: acme-corp
+spec:
+  instanceRef:
+    name: my-gateway
+  organizationAlias: acme-corp
+  models: [gpt-4o, claude-4-sonnet]
+  maxBudget: 5000
+  budgetDuration: "30d"
+  members:
+    - email: admin@acme.com
+      role: org_admin
+    - email: user@acme.com
+      role: internal_user
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: acme-engineering
+spec:
+  instanceRef:
+    name: my-gateway
+  organizationRef:
+    name: acme-corp
+  teamAlias: acme-engineering
+  models: [gpt-4o]
 ```
 
 ### OpenShift / Non-Root Environments
@@ -513,7 +601,7 @@ make run           # Run operator outside the cluster
 Key design points:
 
 - **LiteLLMInstance** controller manages Deployment, ConfigMap, Service, Secrets, Ingress, HPA, PDB, NetworkPolicy, migration Jobs, ServiceMonitor, PrometheusRule, Grafana dashboard ConfigMaps, and CNPG ScheduledBackups
-- **Secondary controllers** (Model, Team, User, VirtualKey) resolve their `instanceRef` to discover the LiteLLM API endpoint and master key, then sync state via the REST API
+- **Secondary controllers** (Organization, Model, Team, User, VirtualKey) resolve their `instanceRef` to discover the LiteLLM API endpoint and master key, then sync state via the REST API
 - **Finalizers** ensure cleanup: deleting a CRD calls the corresponding LiteLLM API delete endpoint before removing the Kubernetes resource
 - **Spec hash annotations** (`litellm.palena.ai/sync-hash`) enable change detection to avoid unnecessary API calls
 

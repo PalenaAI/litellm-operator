@@ -232,18 +232,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	clientFactory := litellm.ClientFactory(litellm.NewClient)
+
 	if err := (&controller.LiteLLMInstanceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("litellminstance-controller"),
+		LiteLLMClientFactory: clientFactory,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMInstance")
 		os.Exit(1)
 	}
-	clientFactory := litellm.ClientFactory(litellm.NewClient)
 
 	if err := (&controller.LiteLLMModelReconciler{
 		Client:               mgr.GetClient(),
 		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("litellmmodel-controller"),
 		LiteLLMClientFactory: clientFactory,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMModel")
@@ -252,6 +256,7 @@ func main() {
 	if err := (&controller.LiteLLMTeamReconciler{
 		Client:               mgr.GetClient(),
 		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("litellmteam-controller"),
 		LiteLLMClientFactory: clientFactory,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMTeam")
@@ -260,6 +265,7 @@ func main() {
 	if err := (&controller.LiteLLMUserReconciler{
 		Client:               mgr.GetClient(),
 		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("litellmuser-controller"),
 		LiteLLMClientFactory: clientFactory,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMUser")
@@ -268,9 +274,44 @@ func main() {
 	if err := (&controller.LiteLLMVirtualKeyReconciler{
 		Client:               mgr.GetClient(),
 		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("litellmvirtualkey-controller"),
 		LiteLLMClientFactory: clientFactory,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMVirtualKey")
+		os.Exit(1)
+	}
+	if err := (&controller.LiteLLMOrganizationReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("litellmorganization-controller"),
+		LiteLLMClientFactory: clientFactory,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMOrganization")
+		os.Exit(1)
+	}
+	if err := (&controller.LiteLLMCustomerReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("litellmcustomer-controller"),
+		LiteLLMClientFactory: clientFactory,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMCustomer")
+		os.Exit(1)
+	}
+	if err := (&controller.LiteLLMCredentialReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("litellmcredential-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMCredential")
+		os.Exit(1)
+	}
+	if err := (&controller.LiteLLMGuardrailReconciler{
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		Recorder: mgr.GetEventRecorderFor("litellmguardrail-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMGuardrail")
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder

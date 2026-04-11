@@ -37,6 +37,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,18 +49,23 @@ import (
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
+	"github.com/PalenaAI/litellm-operator/internal/litellm"
 	"github.com/PalenaAI/litellm-operator/internal/resources"
 )
 
 // LiteLLMInstanceReconciler reconciles a LiteLLMInstance object.
 type LiteLLMInstanceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
+	LiteLLMClientFactory litellm.ClientFactory
 }
 
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/finalizers,verbs=update
+// +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmcredentials,verbs=get;list;watch
+// +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmguardrails,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=configmaps;services;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -94,11 +100,26 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Detect license Secret
 	licenseSecretName := r.reconcileLicense(ctx, &instance)
 
+	// Fetch LiteLLMCredential CRs bound to this instance. A list failure
+	// is non-fatal — we proceed with an empty list and let the instance
+	// reconcile without credentials.
+	credentials, err := r.listCredentialsForInstance(ctx, &instance)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "failed to list credentials for instance")
+	}
+
+	// Fetch LiteLLMGuardrail CRs bound to this instance. Failure is
+	// non-fatal — guardrails are an optional config-level feature.
+	guardrails, err := r.listGuardrailsForInstance(ctx, &instance)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "failed to list guardrails for instance")
+	}
+
 	// Reconcile database migration status
 	r.reconcileMigrationStatus(ctx, &instance, labels)
 
 	// Reconcile all managed resources
-	reconcileErr := r.reconcileResources(ctx, &instance, labels, licenseSecretName)
+	reconcileErr := r.reconcileResources(ctx, &instance, labels, licenseSecretName, credentials, guardrails)
 
 	// Auto-rollback: track successful deployment revision and rollback on failure
 	r.reconcileAutoRollback(ctx, &instance)
@@ -159,8 +180,41 @@ func (r *LiteLLMInstanceReconciler) reconcileMigrationStatus(ctx context.Context
 	}
 }
 
+// listCredentialsForInstance returns every LiteLLMCredential in the instance's
+// namespace whose spec.instanceRef.name matches the instance. Returned items
+// are filtered client-side so we keep a single cached list per namespace.
+func (r *LiteLLMInstanceReconciler) listCredentialsForInstance(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) ([]litellmv1alpha1.LiteLLMCredential, error) {
+	var list litellmv1alpha1.LiteLLMCredentialList
+	if err := r.List(ctx, &list, client.InNamespace(instance.Namespace)); err != nil {
+		return nil, err
+	}
+	filtered := make([]litellmv1alpha1.LiteLLMCredential, 0, len(list.Items))
+	for _, c := range list.Items {
+		if c.Spec.InstanceRef.Name == instance.Name {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered, nil
+}
+
+// listGuardrailsForInstance returns every LiteLLMGuardrail in the instance's
+// namespace whose spec.instanceRef.name matches the instance.
+func (r *LiteLLMInstanceReconciler) listGuardrailsForInstance(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) ([]litellmv1alpha1.LiteLLMGuardrail, error) {
+	var list litellmv1alpha1.LiteLLMGuardrailList
+	if err := r.List(ctx, &list, client.InNamespace(instance.Namespace)); err != nil {
+		return nil, err
+	}
+	filtered := make([]litellmv1alpha1.LiteLLMGuardrail, 0, len(list.Items))
+	for _, g := range list.Items {
+		if g.Spec.InstanceRef.Name == instance.Name {
+			filtered = append(filtered, g)
+		}
+	}
+	return filtered, nil
+}
+
 // reconcileResources reconciles all managed sub-resources for the instance.
-func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string) error {
+func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
 	log := logf.FromContext(ctx)
 	var reconcileErr error
 
@@ -169,7 +223,7 @@ func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, inst
 		log.Error(err, "failed to reconcile secrets")
 	}
 
-	if err := r.reconcileConfigMap(ctx, instance, labels); err != nil {
+	if err := r.reconcileConfigMap(ctx, instance, labels, credentials, guardrails); err != nil {
 		reconcileErr = err
 		log.Error(err, "failed to reconcile ConfigMap")
 	}
@@ -179,7 +233,7 @@ func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, inst
 		log.Error(err, "failed to reconcile ServiceAccount")
 	}
 
-	if err := r.reconcileDeployment(ctx, instance, labels, licenseSecretName); err != nil {
+	if err := r.reconcileDeployment(ctx, instance, labels, licenseSecretName, credentials, guardrails); err != nil {
 		reconcileErr = err
 		log.Error(err, "failed to reconcile Deployment")
 	}
@@ -462,8 +516,8 @@ func (r *LiteLLMInstanceReconciler) ensureGeneratedSecret(ctx context.Context, i
 	return r.Create(ctx, secret)
 }
 
-func (r *LiteLLMInstanceReconciler) reconcileConfigMap(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
-	desired, err := resources.BuildConfigMap(instance, labels)
+func (r *LiteLLMInstanceReconciler) reconcileConfigMap(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
+	desired, err := resources.BuildConfigMap(instance, labels, credentials, guardrails)
 	if err != nil {
 		return err
 	}
@@ -515,8 +569,8 @@ func (r *LiteLLMInstanceReconciler) reconcileMigrationJob(ctx context.Context, i
 	return false, nil // still running
 }
 
-func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string) error {
-	desired := resources.BuildDeployment(instance, labels, licenseSecretName)
+func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
+	desired := resources.BuildDeployment(instance, labels, licenseSecretName, credentials, guardrails)
 	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
 		return err
 	}
@@ -848,6 +902,8 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 			Message:            reconcileErr.Error(),
 			ObservedGeneration: instance.Generation,
 		})
+		emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Reconcile failed: %v", reconcileErr)
 	} else if instance.Status.Ready {
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
@@ -866,7 +922,117 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 		})
 	}
 
+	// Probe the LiteLLM health endpoints once the deployment has at least
+	// one ready replica. This populates operand-level health into status,
+	// sets the RedisReady condition when caching is wired to Redis, and
+	// emits HealthDegraded / HealthRestored events so operators are
+	// notified without tailing logs.
+	if instance.Status.Ready && r.LiteLLMClientFactory != nil {
+		r.probeInstanceHealth(ctx, instance)
+	}
+
 	_ = r.Status().Update(ctx, instance)
+}
+
+// probeInstanceHealth calls /health/liveliness and /health/readiness on the
+// running proxy, updates the Ready / RedisReady conditions, and emits
+// Kubernetes Events on transitions. The master key is resolved the same way
+// downstream controllers resolve it so the probe works with both auto-
+// generated and user-provided keys.
+func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) {
+	log := logf.FromContext(ctx)
+
+	masterKeyRef := instance.Spec.MasterKey.SecretRef
+	if masterKeyRef == nil && instance.Spec.MasterKey.AutoGenerate {
+		masterKeyRef = &litellmv1alpha1.SecretKeyRef{
+			Name: instance.Name + "-master-key",
+			Key:  "master-key",
+		}
+	}
+	if masterKeyRef == nil {
+		return
+	}
+	masterKey, err := getSecretValue(ctx, r.Client, instance.Namespace, masterKeyRef)
+	if err != nil {
+		log.V(1).Info("health probe skipped, cannot resolve master key", "error", err)
+		return
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	api := r.LiteLLMClientFactory(instance.Status.Endpoint, masterKey)
+
+	previouslyHealthy := meta.IsStatusConditionTrue(instance.Status.Conditions, ConditionReady)
+
+	if err := api.Health().CheckLiveness(probeCtx); err != nil {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "LivenessProbeFailed",
+			Message:            fmt.Sprintf("LiteLLM liveness probe failed: %v", err),
+			ObservedGeneration: instance.Generation,
+		})
+		if previouslyHealthy {
+			emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonHealthDegraded,
+				"LiteLLM liveness probe failed: %v", err)
+		}
+		return
+	}
+
+	readiness, err := api.Health().Readiness(probeCtx)
+	if err != nil {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "ReadinessProbeFailed",
+			Message:            fmt.Sprintf("LiteLLM readiness probe failed: %v", err),
+			ObservedGeneration: instance.Generation,
+		})
+		if previouslyHealthy {
+			emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonHealthDegraded,
+				"LiteLLM readiness probe failed: %v", err)
+		}
+		return
+	}
+
+	if !previouslyHealthy {
+		emitEvent(r.Recorder, instance, corev1.EventTypeNormal, EventReasonHealthRestored,
+			"LiteLLM instance is healthy again")
+	}
+
+	// Redis status: only set if Redis is configured on the spec; otherwise
+	// an absent RedisStatus is the correct signal ("not applicable").
+	if instance.Spec.Redis != nil {
+		prevConnected := instance.Status.Redis != nil && instance.Status.Redis.Connected
+		instance.Status.Redis = &litellmv1alpha1.RedisStatus{
+			Connected: readiness.RedisConnected,
+		}
+		if readiness.RedisConnected {
+			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+				Type:               ConditionRedisReady,
+				Status:             metav1.ConditionTrue,
+				Reason:             "RedisConnected",
+				Message:            "Redis connection is healthy",
+				ObservedGeneration: instance.Generation,
+			})
+			if !prevConnected {
+				emitEvent(r.Recorder, instance, corev1.EventTypeNormal, EventReasonRedisConnected,
+					"Redis connection restored")
+			}
+		} else {
+			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+				Type:               ConditionRedisReady,
+				Status:             metav1.ConditionFalse,
+				Reason:             "RedisDisconnected",
+				Message:            "Redis connection is not healthy",
+				ObservedGeneration: instance.Generation,
+			})
+			if prevConnected {
+				emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonRedisDisconnected,
+					"Redis connection lost")
+			}
+		}
+	}
 }
 
 // createOrUpdate creates a resource if it doesn't exist, or updates it if it does.
@@ -893,6 +1059,38 @@ func generateRandomToken(length int) string {
 	return hex.EncodeToString(b)
 }
 
+// findInstanceForCredential maps a LiteLLMCredential event to the LiteLLMInstance
+// it references, so credential CRUD triggers an instance reconcile that rewrites
+// the ConfigMap and Deployment.
+func (r *LiteLLMInstanceReconciler) findInstanceForCredential(_ context.Context, obj client.Object) []reconcile.Request {
+	cred, ok := obj.(*litellmv1alpha1.LiteLLMCredential)
+	if !ok || cred.Spec.InstanceRef.Name == "" {
+		return nil
+	}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      cred.Spec.InstanceRef.Name,
+			Namespace: cred.Namespace,
+		},
+	}}
+}
+
+// findInstanceForGuardrail maps a LiteLLMGuardrail event to the LiteLLMInstance
+// it references, so guardrail CRUD triggers an instance reconcile that rewrites
+// the ConfigMap and Deployment.
+func (r *LiteLLMInstanceReconciler) findInstanceForGuardrail(_ context.Context, obj client.Object) []reconcile.Request {
+	g, ok := obj.(*litellmv1alpha1.LiteLLMGuardrail)
+	if !ok || g.Spec.InstanceRef.Name == "" {
+		return nil
+	}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      g.Spec.InstanceRef.Name,
+			Namespace: g.Namespace,
+		},
+	}}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *LiteLLMInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -907,6 +1105,19 @@ func (r *LiteLLMInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findInstanceForLicenseSecret),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
+		// Credentials are referenced from this instance's ConfigMap /
+		// Deployment, so mutations must trigger an instance reconcile.
+		Watches(
+			&litellmv1alpha1.LiteLLMCredential{},
+			handler.EnqueueRequestsFromMapFunc(r.findInstanceForCredential),
+		).
+		// Guardrails are also config-level and must trigger an instance
+		// reconcile whenever any CR changes so the `guardrails` config
+		// section and guardrail env vars stay in sync with the Deployment.
+		Watches(
+			&litellmv1alpha1.LiteLLMGuardrail{},
+			handler.EnqueueRequestsFromMapFunc(r.findInstanceForGuardrail),
 		).
 		Named("litellminstance").
 		Complete(r)

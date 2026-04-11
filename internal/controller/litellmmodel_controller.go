@@ -21,13 +21,18 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 	"github.com/PalenaAI/litellm-operator/internal/litellm"
@@ -37,12 +42,14 @@ import (
 type LiteLLMModelReconciler struct {
 	client.Client
 	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
 	LiteLLMClientFactory litellm.ClientFactory
 }
 
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmmodels,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmmodels/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmmodels/finalizers,verbs=update
+// +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmcredentials,verbs=get;list;watch
 
 func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -69,6 +76,8 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	resolved, err := resolveInstance(ctx, r.Client, model.Namespace, model.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
+		emitEvent(r.Recorder, &model, corev1.EventTypeWarning, EventReasonInstanceNotReady,
+			"Referenced LiteLLMInstance %q is not ready: %v", model.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 			Type:    ConditionSynced,
 			Status:  metav1.ConditionFalse,
@@ -83,6 +92,8 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	result, err := r.reconcileModel(ctx, &model, resolved)
 	if err != nil {
 		if isEnterpriseLicenseError(err) {
+			emitEvent(r.Recorder, &model, corev1.EventTypeWarning, EventReasonEnterpriseRequired,
+				"Model %q requires a LiteLLM Enterprise license", model.Spec.ModelName)
 			meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 				Type:               ConditionSynced,
 				Status:             metav1.ConditionFalse,
@@ -94,6 +105,8 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, nil
 		}
 		log.Error(err, "failed to reconcile model")
+		emitEvent(r.Recorder, &model, corev1.EventTypeWarning, EventReasonReconcileFailed,
+			"Failed to reconcile model %q: %v", model.Spec.ModelName, err)
 		meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 			Type:    ConditionSynced,
 			Status:  metav1.ConditionFalse,
@@ -124,29 +137,40 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 	log := logf.FromContext(ctx)
 	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 
-	// Resolve API key from secret if specified
-	var apiKey string
-	if model.Spec.LiteLLMParams.APIKeySecretRef != nil {
-		var err error
-		apiKey, err = getSecretValue(ctx, r.Client, model.Namespace, model.Spec.LiteLLMParams.APIKeySecretRef)
+	params := litellm.ModelParams{
+		Model:         model.Spec.LiteLLMParams.Model,
+		RPM:           model.Spec.LiteLLMParams.RPM,
+		TPM:           model.Spec.LiteLLMParams.TPM,
+		Timeout:       model.Spec.LiteLLMParams.Timeout,
+		StreamTimeout: model.Spec.LiteLLMParams.StreamTimeout,
+		MaxRetries:    model.Spec.LiteLLMParams.MaxRetries,
+		Tags:          model.Spec.Tags,
+	}
+
+	// credentialRef takes precedence over inline apiBase/apiKeySecretRef.
+	// When set, the model is registered against an entry in the proxy's
+	// credential_list via litellm_credential_name — api_base/api_key come
+	// from the LiteLLMCredential, not from this spec.
+	if model.Spec.LiteLLMParams.CredentialRef != nil {
+		credName, err := r.resolveCredentialName(ctx, model)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("resolve API key: %w", err)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+		params.LiteLLMCredentialName = credName
+	} else {
+		params.APIBase = model.Spec.LiteLLMParams.APIBase
+		if model.Spec.LiteLLMParams.APIKeySecretRef != nil {
+			apiKey, err := getSecretValue(ctx, r.Client, model.Namespace, model.Spec.LiteLLMParams.APIKeySecretRef)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("resolve API key: %w", err)
+			}
+			params.APIKey = apiKey
 		}
 	}
 
 	req := litellm.ModelCreateRequest{
-		ModelName: model.Spec.ModelName,
-		LiteLLMParams: litellm.ModelParams{
-			Model:         model.Spec.LiteLLMParams.Model,
-			APIBase:       model.Spec.LiteLLMParams.APIBase,
-			APIKey:        apiKey,
-			RPM:           model.Spec.LiteLLMParams.RPM,
-			TPM:           model.Spec.LiteLLMParams.TPM,
-			Timeout:       model.Spec.LiteLLMParams.Timeout,
-			StreamTimeout: model.Spec.LiteLLMParams.StreamTimeout,
-			MaxRetries:    model.Spec.LiteLLMParams.MaxRetries,
-			Tags:          model.Spec.Tags,
-		},
+		ModelName:     model.Spec.ModelName,
+		LiteLLMParams: params,
 	}
 	if model.Spec.ModelInfo != nil {
 		req.ModelInfo = &litellm.ModelInfoReq{
@@ -175,6 +199,8 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			return ctrl.Result{}, err
 		}
 		log.Info("created model", "modelId", resp.ModelID)
+		emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonCreated,
+			"Model %q registered with LiteLLM (id=%s)", model.Spec.ModelName, resp.ModelID)
 	} else {
 		currentHash := computeSpecHash(model.Spec)
 		if model.Annotations[AnnotationSyncHash] != currentHash {
@@ -195,12 +221,70 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			}
 			model.Status.Synced = true
 			log.Info("updated model", "modelId", model.Status.LiteLLMModelID)
+			emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonUpdated,
+				"Model %q updated in LiteLLM", model.Spec.ModelName)
 		}
 	}
+
+	// Poll /health to report operand health into model status. Failure is
+	// non-fatal — the model sync is still considered successful even if the
+	// health endpoint is slow or unreachable on this reconcile.
+	r.updateModelHealth(ctx, apiClient, model)
 
 	now := metav1.Now()
 	model.Status.LastSyncTime = &now
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+// updateModelHealth asks the LiteLLM proxy for its /health report and
+// records whether this model shows up as healthy, unhealthy, or missing.
+// It intentionally never returns an error so health probe flakes do not
+// flip the Synced condition or trigger requeue storms.
+func (r *LiteLLMModelReconciler) updateModelHealth(ctx context.Context, apiClient litellm.Client, model *litellmv1alpha1.LiteLLMModel) {
+	log := logf.FromContext(ctx)
+	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	report, err := apiClient.Health().Check(probeCtx)
+	if err != nil {
+		log.V(1).Info("model health probe failed", "error", err)
+		model.Status.Health = "unknown"
+		return
+	}
+	for _, ep := range report.HealthyEndpoints {
+		if ep.ModelID == model.Status.LiteLLMModelID || ep.Model == model.Spec.ModelName {
+			model.Status.Health = "healthy"
+			return
+		}
+	}
+	for _, ep := range report.UnhealthyEndpoints {
+		if ep.ModelID == model.Status.LiteLLMModelID || ep.Model == model.Spec.ModelName {
+			model.Status.Health = "unhealthy"
+			if ep.Error != "" {
+				emitEvent(r.Recorder, model, corev1.EventTypeWarning, EventReasonHealthDegraded,
+					"Model %q reported unhealthy by LiteLLM: %s", model.Spec.ModelName, ep.Error)
+			}
+			return
+		}
+	}
+	// Not present in either list — treat as unknown rather than unhealthy
+	// so a silently-dropped model doesn't get false-flagged.
+	model.Status.Health = "unknown"
+}
+
+// resolveCredentialName fetches the LiteLLMCredential referenced by the model's
+// credentialRef and returns its spec.credentialName (the key that matches an
+// entry in the proxy's credential_list). The credential must live in the same
+// namespace as the model.
+func (r *LiteLLMModelReconciler) resolveCredentialName(ctx context.Context, model *litellmv1alpha1.LiteLLMModel) (string, error) {
+	var cred litellmv1alpha1.LiteLLMCredential
+	key := client.ObjectKey{Name: model.Spec.LiteLLMParams.CredentialRef.Name, Namespace: model.Namespace}
+	if err := r.Get(ctx, key, &cred); err != nil {
+		return "", fmt.Errorf("resolve credentialRef %q: %w", model.Spec.LiteLLMParams.CredentialRef.Name, err)
+	}
+	if cred.Spec.CredentialName == "" {
+		return "", fmt.Errorf("credential %q has empty credentialName", cred.Name)
+	}
+	return cred.Spec.CredentialName, nil
 }
 
 func (r *LiteLLMModelReconciler) handleDeletion(
@@ -217,6 +301,11 @@ func (r *LiteLLMModelReconciler) handleDeletion(
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 			if err := apiClient.Models().Delete(ctx, model.Status.LiteLLMModelID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete model from LiteLLM", "modelId", model.Status.LiteLLMModelID)
+				emitEvent(r.Recorder, model, corev1.EventTypeWarning, EventReasonReconcileFailed,
+					"Failed to delete model %q from LiteLLM: %v", model.Spec.ModelName, err)
+			} else {
+				emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonDeleted,
+					"Model %q deleted from LiteLLM", model.Spec.ModelName)
 			}
 		}
 	}
@@ -225,10 +314,37 @@ func (r *LiteLLMModelReconciler) handleDeletion(
 	return ctrl.Result{}, r.Update(ctx, model)
 }
 
+// findModelsForCredential maps a LiteLLMCredential event to the LiteLLMModel
+// CRs that reference it via credentialRef, so rename/params changes on a
+// credential re-reconcile dependent models.
+func (r *LiteLLMModelReconciler) findModelsForCredential(ctx context.Context, obj client.Object) []reconcile.Request {
+	cred, ok := obj.(*litellmv1alpha1.LiteLLMCredential)
+	if !ok {
+		return nil
+	}
+	var models litellmv1alpha1.LiteLLMModelList
+	if err := r.List(ctx, &models, client.InNamespace(cred.Namespace)); err != nil {
+		return nil
+	}
+	var requests []reconcile.Request
+	for _, m := range models.Items {
+		if m.Spec.LiteLLMParams.CredentialRef != nil && m.Spec.LiteLLMParams.CredentialRef.Name == cred.Name {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: m.Name, Namespace: m.Namespace},
+			})
+		}
+	}
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *LiteLLMModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&litellmv1alpha1.LiteLLMModel{}).
+		Watches(
+			&litellmv1alpha1.LiteLLMCredential{},
+			handler.EnqueueRequestsFromMapFunc(r.findModelsForCredential),
+		).
 		Named("litellmmodel").
 		Complete(r)
 }

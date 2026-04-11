@@ -20,29 +20,35 @@ import "context"
 
 // MockClient implements Client for testing.
 type MockClient struct {
-	MockModels *MockModelService
-	MockTeams  *MockTeamService
-	MockUsers  *MockUserService
-	MockKeys   *MockKeyService
-	MockHealth *MockHealthService
+	MockModels        *MockModelService
+	MockTeams         *MockTeamService
+	MockUsers         *MockUserService
+	MockKeys          *MockKeyService
+	MockOrganizations *MockOrganizationService
+	MockCustomers     *MockCustomerService
+	MockHealth        *MockHealthService
 }
 
 // NewMockClient creates a new MockClient with default implementations.
 func NewMockClient() *MockClient {
 	return &MockClient{
-		MockModels: &MockModelService{},
-		MockTeams:  &MockTeamService{},
-		MockUsers:  &MockUserService{},
-		MockKeys:   &MockKeyService{},
-		MockHealth: &MockHealthService{},
+		MockModels:        &MockModelService{},
+		MockTeams:         &MockTeamService{},
+		MockUsers:         &MockUserService{},
+		MockKeys:          &MockKeyService{},
+		MockOrganizations: &MockOrganizationService{},
+		MockCustomers:     &MockCustomerService{},
+		MockHealth:        &MockHealthService{},
 	}
 }
 
-func (m *MockClient) Models() ModelService  { return m.MockModels }
-func (m *MockClient) Teams() TeamService    { return m.MockTeams }
-func (m *MockClient) Users() UserService    { return m.MockUsers }
-func (m *MockClient) Keys() KeyService      { return m.MockKeys }
-func (m *MockClient) Health() HealthService { return m.MockHealth }
+func (m *MockClient) Models() ModelService               { return m.MockModels }
+func (m *MockClient) Teams() TeamService                 { return m.MockTeams }
+func (m *MockClient) Users() UserService                 { return m.MockUsers }
+func (m *MockClient) Keys() KeyService                   { return m.MockKeys }
+func (m *MockClient) Organizations() OrganizationService { return m.MockOrganizations }
+func (m *MockClient) Customers() CustomerService         { return m.MockCustomers }
+func (m *MockClient) Health() HealthService              { return m.MockHealth }
 
 // MockModelService records calls and returns configured responses.
 type MockModelService struct {
@@ -244,10 +250,116 @@ func (m *MockKeyService) List(ctx context.Context) ([]KeyInfo, error) {
 	return nil, nil
 }
 
+// MockOrganizationService records calls and returns configured responses.
+type MockOrganizationService struct {
+	CreateFunc       func(ctx context.Context, req OrganizationCreateRequest) (*OrganizationCreateResponse, error)
+	UpdateFunc       func(ctx context.Context, req OrganizationUpdateRequest) error
+	DeleteFunc       func(ctx context.Context, organizationID string) error
+	GetFunc          func(ctx context.Context, organizationID string) (*OrganizationInfo, error)
+	ListFunc         func(ctx context.Context) ([]OrganizationInfo, error)
+	AddMemberFunc    func(ctx context.Context, req OrgMemberAddRequest) error
+	DeleteMemberFunc func(ctx context.Context, organizationID, userID string) error
+}
+
+func (m *MockOrganizationService) Create(ctx context.Context, req OrganizationCreateRequest) (*OrganizationCreateResponse, error) {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(ctx, req)
+	}
+	return &OrganizationCreateResponse{OrganizationID: "mock-org-id", OrganizationAlias: req.OrganizationAlias}, nil
+}
+
+func (m *MockOrganizationService) Update(ctx context.Context, req OrganizationUpdateRequest) error {
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(ctx, req)
+	}
+	return nil
+}
+
+func (m *MockOrganizationService) Delete(ctx context.Context, organizationID string) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, organizationID)
+	}
+	return nil
+}
+
+func (m *MockOrganizationService) Get(ctx context.Context, organizationID string) (*OrganizationInfo, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, organizationID)
+	}
+	return &OrganizationInfo{OrganizationID: organizationID}, nil
+}
+
+func (m *MockOrganizationService) List(ctx context.Context) ([]OrganizationInfo, error) {
+	if m.ListFunc != nil {
+		return m.ListFunc(ctx)
+	}
+	return nil, nil
+}
+
+func (m *MockOrganizationService) AddMember(ctx context.Context, req OrgMemberAddRequest) error {
+	if m.AddMemberFunc != nil {
+		return m.AddMemberFunc(ctx, req)
+	}
+	return nil
+}
+
+func (m *MockOrganizationService) DeleteMember(ctx context.Context, organizationID, userID string) error {
+	if m.DeleteMemberFunc != nil {
+		return m.DeleteMemberFunc(ctx, organizationID, userID)
+	}
+	return nil
+}
+
+// MockCustomerService records calls and returns configured responses.
+type MockCustomerService struct {
+	CreateFunc func(ctx context.Context, req CustomerCreateRequest) (*CustomerInfo, error)
+	UpdateFunc func(ctx context.Context, req CustomerUpdateRequest) (*CustomerInfo, error)
+	DeleteFunc func(ctx context.Context, customerID string) error
+	GetFunc    func(ctx context.Context, customerID string) (*CustomerInfo, error)
+	ListFunc   func(ctx context.Context) ([]CustomerInfo, error)
+}
+
+func (m *MockCustomerService) Create(ctx context.Context, req CustomerCreateRequest) (*CustomerInfo, error) {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(ctx, req)
+	}
+	return &CustomerInfo{UserID: req.UserID, Alias: req.Alias, MaxBudget: req.MaxBudget}, nil
+}
+
+func (m *MockCustomerService) Update(ctx context.Context, req CustomerUpdateRequest) (*CustomerInfo, error) {
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(ctx, req)
+	}
+	return &CustomerInfo{UserID: req.UserID, Alias: req.Alias, MaxBudget: req.MaxBudget}, nil
+}
+
+func (m *MockCustomerService) Delete(ctx context.Context, customerID string) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, customerID)
+	}
+	return nil
+}
+
+func (m *MockCustomerService) Get(ctx context.Context, customerID string) (*CustomerInfo, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, customerID)
+	}
+	return &CustomerInfo{UserID: customerID}, nil
+}
+
+func (m *MockCustomerService) List(ctx context.Context) ([]CustomerInfo, error) {
+	if m.ListFunc != nil {
+		return m.ListFunc(ctx)
+	}
+	return nil, nil
+}
+
 // MockHealthService records calls and returns configured responses.
 type MockHealthService struct {
 	CheckLivenessFunc  func(ctx context.Context) error
 	CheckReadinessFunc func(ctx context.Context) error
+	ReadinessFunc      func(ctx context.Context) (*ReadinessResponse, error)
+	CheckFunc          func(ctx context.Context) (*HealthCheckResponse, error)
 }
 
 func (m *MockHealthService) CheckLiveness(ctx context.Context) error {
@@ -262,4 +374,18 @@ func (m *MockHealthService) CheckReadiness(ctx context.Context) error {
 		return m.CheckReadinessFunc(ctx)
 	}
 	return nil
+}
+
+func (m *MockHealthService) Readiness(ctx context.Context) (*ReadinessResponse, error) {
+	if m.ReadinessFunc != nil {
+		return m.ReadinessFunc(ctx)
+	}
+	return &ReadinessResponse{Status: "connected", RedisConnected: true}, nil
+}
+
+func (m *MockHealthService) Check(ctx context.Context) (*HealthCheckResponse, error) {
+	if m.CheckFunc != nil {
+		return m.CheckFunc(ctx)
+	}
+	return &HealthCheckResponse{}, nil
 }

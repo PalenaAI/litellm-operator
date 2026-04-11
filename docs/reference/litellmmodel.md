@@ -47,13 +47,35 @@ spec:
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `model` | string | Yes | Provider/model string (e.g., `openai/gpt-4o`, `anthropic/claude-sonnet-4-20250514`) |
-| `apiBase` | string | No | API base URL for the provider |
-| `apiKeySecretRef` | *SecretKeyRef | No | Secret containing the provider API key |
+| `credentialRef` | *CredentialRef | No | Reference to a [LiteLLMCredential](./litellmcredential) in the same namespace. Takes precedence over inline `apiBase` / `apiKeySecretRef` |
+| `apiBase` | string | No | API base URL for the provider. Ignored if `credentialRef` is set |
+| `apiKeySecretRef` | *SecretKeyRef | No | Secret containing the provider API key. Ignored if `credentialRef` is set |
 | `rpm` | *int | No | Requests per minute limit |
 | `tpm` | *int | No | Tokens per minute limit |
 | `timeout` | *int | No | Request timeout in seconds |
 | `streamTimeout` | *int | No | Stream timeout in seconds |
 | `maxRetries` | *int | No | Max retries for failed requests |
+
+#### Using a shared credential
+
+Instead of repeating `apiKeySecretRef` and `apiBase` in every model, declare a [LiteLLMCredential](./litellmcredential) once and reference it by name:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMModel
+metadata:
+  name: gpt4o
+spec:
+  instanceRef:
+    name: my-gateway
+  modelName: gpt-4o
+  litellmParams:
+    model: openai/gpt-4o
+    credentialRef:
+      name: openai-prod   # → LiteLLMCredential in the same namespace
+```
+
+The operator sends `litellm_credential_name: openai-prod` to LiteLLM, which looks up the credential from the proxy's `credential_list`. See [LiteLLMCredential](./litellmcredential) for how credentials are declared.
 
 ### `modelInfo`
 

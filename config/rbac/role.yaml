@@ -76,8 +76,12 @@ rules:
 - apiGroups:
   - litellm.palena.ai
   resources:
+  - litellmcredentials
+  - litellmcustomers
+  - litellmguardrails
   - litellminstances
   - litellmmodels
+  - litellmorganizations
   - litellmteams
   - litellmusers
   - litellmvirtualkeys
@@ -92,8 +96,12 @@ rules:
 - apiGroups:
   - litellm.palena.ai
   resources:
+  - litellmcredentials/finalizers
+  - litellmcustomers/finalizers
+  - litellmguardrails/finalizers
   - litellminstances/finalizers
   - litellmmodels/finalizers
+  - litellmorganizations/finalizers
   - litellmteams/finalizers
   - litellmusers/finalizers
   - litellmvirtualkeys/finalizers
@@ -102,8 +110,12 @@ rules:
 - apiGroups:
   - litellm.palena.ai
   resources:
+  - litellmcredentials/status
+  - litellmcustomers/status
+  - litellmguardrails/status
   - litellminstances/status
   - litellmmodels/status
+  - litellmorganizations/status
   - litellmteams/status
   - litellmusers/status
   - litellmvirtualkeys/status

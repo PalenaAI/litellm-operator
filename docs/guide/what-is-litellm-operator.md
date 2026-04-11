@@ -20,18 +20,23 @@ Both the CRDs and the Admin UI write to the same backing store, so they coexist 
 
 ## CRD Hierarchy
 
-The operator introduces five Custom Resource Definitions:
+The operator introduces nine Custom Resource Definitions:
 
-```
+```text
 LiteLLMInstance (primary — deploys infrastructure)
-├── LiteLLMModel (registers AI models)
-├── LiteLLMTeam (creates teams with budgets and members)
+├── LiteLLMOrganization (multi-tenant isolation with budgets)
+│   └── LiteLLMTeam (organizationRef — scoped to an org)
+├── LiteLLMCredential (reusable provider credentials)
+├── LiteLLMGuardrail (content moderation / safety integrations)
+├── LiteLLMModel (registers AI models, may reference a credential)
+├── LiteLLMTeam (creates teams with budgets and members; opts in to guardrails)
 │   └── members (inline, managed by memberManagement policy)
 ├── LiteLLMUser (manages users for non-SSO environments)
-└── LiteLLMVirtualKey (generates scoped API keys)
+├── LiteLLMCustomer (tracks external end-users with per-user budgets)
+└── LiteLLMVirtualKey (generates scoped API keys; opts in to guardrails)
 ```
 
-All secondary CRDs reference a `LiteLLMInstance` via `spec.instanceRef`. The operator resolves this to find the LiteLLM API endpoint and master key.
+All secondary CRDs reference a `LiteLLMInstance` via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`. Models can reference a `LiteLLMCredential` via `spec.litellmParams.credentialRef` to reuse shared provider credentials. Teams and virtual keys can opt in to specific `LiteLLMGuardrail` resources via `spec.guardrails []string` (enterprise). The operator resolves these to find the LiteLLM API endpoint, master key, and organization ID.
 
 ## Key Features
 

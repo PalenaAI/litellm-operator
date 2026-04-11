@@ -54,6 +54,13 @@ type LiteLLMModelParams struct {
 	// +optional
 	APIKeySecretRef *SecretKeyRef `json:"apiKeySecretRef,omitempty"`
 
+	// Reference to a LiteLLMCredential CR for provider authentication.
+	// When set, the model is registered with `litellm_credential_name`
+	// pointing at the credential, and apiKeySecretRef / apiBase on this
+	// model are ignored in favor of the credential's values.
+	// +optional
+	CredentialRef *CredentialRef `json:"credentialRef,omitempty"`
+
 	// Rate limit: requests per minute.
 	// +optional
 	RPM *int `json:"rpm,omitempty"`

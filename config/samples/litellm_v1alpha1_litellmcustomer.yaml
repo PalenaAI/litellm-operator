@@ -1,0 +1,22 @@
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMCustomer
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: sample-customer
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  customerId: customer-42
+  alias: "Acme End-User"
+  maxBudget: 100
+  budgetDuration: "30d"
+  tpmLimit: 50000
+  rpmLimit: 500
+  models:
+    - gpt-4o
+    - claude-4-sonnet
+  metadata:
+    source: crm
+    tier: premium

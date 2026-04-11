@@ -59,8 +59,10 @@ rules:
   - apiGroups:
       - litellm.palena.ai
     resources:
+      - litellmcustomers
       - litellminstances
       - litellmmodels
+      - litellmorganizations
       - litellmteams
       - litellmusers
       - litellmvirtualkeys
@@ -75,8 +77,10 @@ rules:
   - apiGroups:
       - litellm.palena.ai
     resources:
+      - litellmcustomers/finalizers
       - litellminstances/finalizers
       - litellmmodels/finalizers
+      - litellmorganizations/finalizers
       - litellmteams/finalizers
       - litellmusers/finalizers
       - litellmvirtualkeys/finalizers
@@ -85,8 +89,10 @@ rules:
   - apiGroups:
       - litellm.palena.ai
     resources:
+      - litellmcustomers/status
       - litellminstances/status
       - litellmmodels/status
+      - litellmorganizations/status
       - litellmteams/status
       - litellmusers/status
       - litellmvirtualkeys/status

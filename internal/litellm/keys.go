@@ -46,6 +46,7 @@ type KeyGenerateRequest struct {
 	Metadata            map[string]string  `json:"metadata,omitempty"`
 	ModelMaxBudget      map[string]float64 `json:"model_max_budget,omitempty"`
 	MaxParallelRequests *int               `json:"max_parallel_requests,omitempty"`
+	Guardrails          []string           `json:"guardrails,omitempty"`
 }
 
 // KeyGenerateResponse is the response from generating a key.
@@ -65,6 +66,7 @@ type KeyUpdateRequest struct {
 	Metadata            map[string]string  `json:"metadata,omitempty"`
 	ModelMaxBudget      map[string]float64 `json:"model_max_budget,omitempty"`
 	MaxParallelRequests *int               `json:"max_parallel_requests,omitempty"`
+	Guardrails          []string           `json:"guardrails,omitempty"`
 }
 
 // KeyInfo is the response from getting key info.

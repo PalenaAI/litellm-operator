@@ -7,28 +7,36 @@
 │                     LiteLLM Operator                            │
 │                                                                 │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │    Instance       │  │     Model        │  │    Team      │  │
+│  │    Instance       │  │  Organization    │  │    Team      │  │
 │  │   Controller      │  │   Controller     │  │  Controller  │  │
 │  │                   │  │                  │  │              │  │
-│  │ - Deployment      │  │ - POST /model/*  │  │ - POST /team │  │
-│  │ - ConfigMap       │  │ - Health check   │  │ - Members    │  │
-│  │ - Service         │  │ - Status sync    │  │ - Budgets    │  │
+│  │ - Deployment      │  │ - POST /org/*    │  │ - POST /team │  │
+│  │ - ConfigMap       │  │ - Members        │  │ - Members    │  │
+│  │ - Service         │  │ - Budget mgmt   │  │ - Budgets    │  │
 │  │ - Ingress/Route   │  │                  │  │              │  │
 │  │ - HPA, PDB        │  └────────┬─────────┘  └──────┬───────┘  │
 │  │ - Migration Job   │           │                    │          │
 │  │ - SSO/SCIM config │  ┌────────┴────────┐  ┌───────┴───────┐  │
-│  │ - License Secret  │  │     User        │  │  VirtualKey   │  │
-│  │ - Config Sync     │  │   Controller    │  │  Controller   │  │
+│  │ - License Secret  │  │     Model       │  │     User      │  │
+│  │ - Config Sync     │  │   Controller    │  │   Controller  │  │
 │  └────────┬──────────┘  │                 │  │               │  │
-│           │             │                 │  │               │  │
-│           │             │ - POST /user/*  │  │ - POST /key/* │  │
-│           │             │ - Budget mgmt   │  │ - Secret mgmt │  │
+│           │             │ - POST /model/* │  │ - POST /user/*│  │
+│           │             │ - Health check  │  │ - Budget mgmt │  │
 │           │             └────────┬────────┘  └───────┬───────┘  │
 │           │                      │                    │          │
-│  ┌────────▼──────────────────────▼────────────────────▼───────┐  │
+│           │             ┌────────┴────────────────────┘          │
+│           │             │                                        │
+│           │    ┌────────┴────────┐                               │
+│           │    │  VirtualKey     │                               │
+│           │    │  Controller     │                               │
+│           │    │ - POST /key/*   │                               │
+│           │    │ - Secret mgmt   │                               │
+│           │    └────────┬────────┘                               │
+│           │             │                                        │
+│  ┌────────▼─────────────▼────────────────────────────────────┐  │
 │  │                    LiteLLM API Client                      │  │
-│  │  ModelService · TeamService · UserService                  │  │
-│  │  KeyService · HealthService                                │  │
+│  │  OrganizationService · ModelService · TeamService          │  │
+│  │  UserService · KeyService · HealthService                  │  │
 │  └────────────────────────┬───────────────────────────────────┘  │
 │                           │                                      │
 └───────────────────────────┼──────────────────────────────────────┘
@@ -70,7 +78,7 @@ The most complex controller. It manages all Kubernetes infrastructure for a Lite
 
 ### Secondary Controllers
 
-All secondary controllers (Model, Team, User, VirtualKey) follow the same pattern:
+Most secondary controllers (Organization, Model, Team, User, Customer, VirtualKey) follow the same pattern:
 
 ```
 CR created/updated/deleted
@@ -84,6 +92,14 @@ CR created/updated/deleted
 ```
 
 **Change detection** uses a spec hash stored in the `litellm.palena.ai/sync-hash` annotation. On each reconciliation, the current spec hash is compared to the stored hash — if different, an update is sent to the LiteLLM API.
+
+### Credential Controller
+
+The Credential controller is different: `LiteLLMCredential` is a **config-level** resource, not an API-level one. There is no `POST /credential/new` equivalent — credentials live in the proxy's `credential_list` config section. The controller validates the referenced Secret and counts consuming models, but the actual materialization happens in the Instance controller, which watches LiteLLMCredential and rebuilds the ConfigMap + rolls the Deployment whenever a credential changes. API keys are injected as `CREDENTIAL_{NAME}_API_KEY` env vars via `secretKeyRef`, and the ConfigMap uses `os.environ/...` placeholders so plaintext keys never land on disk.
+
+### Guardrail Controller
+
+Like the Credential controller, the Guardrail controller manages a **config-level** resource. `LiteLLMGuardrail` CRs are rendered into the `guardrails` section of `proxy_server_config.yaml` by the Instance controller — there is no API-level create/update. The Guardrail controller validates that the referenced instance and (if declared) API key Secret exist, and reports `Ready` / `SecretNotFound` / `InstanceNotFound` conditions. The Instance controller watches LiteLLMGuardrail CRs and rebuilds the ConfigMap + rolls the Deployment whenever a guardrail is created, updated, or deleted. Provider API keys are injected as `GUARDRAIL_{NAME}_API_KEY` env vars via `secretKeyRef`, referenced from the config as `os.environ/...`. Per-key/per-team guardrail assignment via `spec.guardrails []string` on `LiteLLMVirtualKey` / `LiteLLMTeam` is a LiteLLM Enterprise feature.
 
 ## Reconciliation Model
 

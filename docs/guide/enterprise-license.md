@@ -95,6 +95,8 @@ The following CRD fields configure LiteLLM Enterprise features and require an ac
 
 - **IP allowlisting** — `spec.security.ipAllowlist` restricts API access to specific IPs/CIDRs
 - **Max request/response size** — `spec.security.ipAllowlist.maxRequestSizeMB` / `maxResponseSizeMB`
+- **Per-model spending limits on virtual keys** — `spec.modelMaxBudget` on `LiteLLMVirtualKey`
+- **Per-key / per-team guardrail assignment** — `spec.guardrails []string` on `LiteLLMVirtualKey` and `LiteLLMTeam`. Declaring `LiteLLMGuardrail` CRs and rendering them into the proxy config works on open-source LiteLLM; opting a specific key or team into a guardrail is enterprise-only and will surface as `EnterpriseLicenseRequired` if no license is active. See [LiteLLMGuardrail](/reference/litellmguardrail) for details.
 
 ## Removing a License
 

@@ -1,0 +1,23 @@
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMOrganization
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: acme-corp
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  organizationAlias: acme-corp
+  models:
+    - gpt-4o
+    - claude-4-sonnet
+  maxBudget: 5000
+  budgetDuration: "30d"
+  rpmLimit: 1000
+  tpmLimit: 200000
+  members:
+    - email: admin@acme.com
+      role: org_admin
+    - email: user@acme.com
+      role: internal_user

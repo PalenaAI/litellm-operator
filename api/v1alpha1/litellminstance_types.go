@@ -135,6 +135,24 @@ type LiteLLMInstanceSpec struct {
 	// Allows proxying arbitrary API requests to upstream services through LiteLLM.
 	// +optional
 	PassThroughEndpoints []PassThroughEndpoint `json:"passThroughEndpoints,omitempty"`
+
+	// Default budget settings applied to all end-users/customers.
+	// Written to litellm_settings.max_end_user_budget / max_end_user_budget_id.
+	// +optional
+	DefaultCustomerBudget *DefaultCustomerBudgetSpec `json:"defaultCustomerBudget,omitempty"`
+}
+
+// DefaultCustomerBudgetSpec sets platform-wide defaults for new end-users.
+type DefaultCustomerBudgetSpec struct {
+	// Default maximum budget (USD) applied to new customers.
+	// Written to litellm_settings.max_end_user_budget.
+	// +optional
+	MaxBudget *float64 `json:"maxBudget,omitempty"`
+
+	// Default predefined budget tier ID.
+	// Written to litellm_settings.max_end_user_budget_id.
+	// +optional
+	BudgetID string `json:"budgetId,omitempty"`
 }
 
 // ImageSpec defines the container image for LiteLLM.

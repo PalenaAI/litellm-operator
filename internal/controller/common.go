@@ -26,7 +26,9 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	runtime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
@@ -61,7 +63,34 @@ const (
 	ConditionRedisReady    = "RedisReady"
 	ConditionConfigSynced  = "ConfigSynced"
 	ConditionSynced        = "Synced"
+
+	// Event reasons — kept in one place so operators and alerting tooling
+	// can filter on them reliably.
+	EventReasonCreated            = "Created"
+	EventReasonUpdated            = "Updated"
+	EventReasonDeleted            = "Deleted"
+	EventReasonSynced             = "Synced"
+	EventReasonReconcileFailed    = "ReconcileFailed"
+	EventReasonInstanceNotReady   = "InstanceNotReady"
+	EventReasonSecretNotFound     = "SecretNotFound"
+	EventReasonValidationFailed   = "ValidationFailed"
+	EventReasonEnterpriseRequired = "EnterpriseLicenseRequired"
+	EventReasonHealthDegraded     = "HealthDegraded"
+	EventReasonHealthRestored     = "HealthRestored"
+	EventReasonRedisDisconnected  = "RedisDisconnected"
+	EventReasonRedisConnected     = "RedisConnected"
 )
+
+// emitEvent records a Kubernetes Event on an object if the recorder is set.
+// Recorder is nil in tests where the reconciler is constructed directly,
+// so we guard every call site with this helper rather than passing a fake
+// everywhere.
+func emitEvent(r record.EventRecorder, obj runtime.Object, eventType, reason, messageFmt string, args ...interface{}) {
+	if r == nil || obj == nil {
+		return
+	}
+	r.Eventf(obj, eventType, reason, messageFmt, args...)
+}
 
 // ResolvedInstance contains resolved instance information needed by secondary controllers.
 type ResolvedInstance struct {

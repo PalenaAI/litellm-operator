@@ -6,6 +6,157 @@ metadata:
       [
         {
           "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMCredential",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "azure-east"
+          },
+          "spec": {
+            "apiBase": "https://azure-east.openai.azure.com",
+            "apiKeySecretRef": {
+              "key": "AZURE_API_KEY",
+              "name": "azure-credentials"
+            },
+            "apiVersion": "2024-02-01",
+            "credentialName": "azure-east",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            }
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMCredential",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "openai-prod"
+          },
+          "spec": {
+            "apiBase": "https://api.openai.com/v1",
+            "apiKeySecretRef": {
+              "key": "OPENAI_API_KEY",
+              "name": "openai-credentials"
+            },
+            "credentialName": "openai-prod",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            }
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMCustomer",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "sample-customer"
+          },
+          "spec": {
+            "alias": "Acme End-User",
+            "budgetDuration": "30d",
+            "customerId": "customer-42",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            },
+            "maxBudget": 100,
+            "metadata": {
+              "source": "crm",
+              "tier": "premium"
+            },
+            "models": [
+              "gpt-4o",
+              "claude-4-sonnet"
+            ],
+            "rpmLimit": 500,
+            "tpmLimit": 50000
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMGuardrail",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "bedrock-pii"
+          },
+          "spec": {
+            "apiKeySecretRef": {
+              "key": "AWS_SECRET_ACCESS_KEY",
+              "name": "aws-credentials"
+            },
+            "guardrailName": "bedrock-pii",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            },
+            "mode": "post_call",
+            "params": {
+              "aws_region_name": "us-east-1",
+              "guardrailIdentifier": "abc123",
+              "guardrailVersion": "DRAFT"
+            },
+            "provider": "bedrock"
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMGuardrail",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "pii-detector"
+          },
+          "spec": {
+            "apiBase": "https://gr-prd-dc.aporia.com",
+            "apiKeySecretRef": {
+              "key": "APORIA_API_KEY",
+              "name": "aporia-credentials"
+            },
+            "defaultOn": false,
+            "guardrailName": "pii-detector",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            },
+            "mode": "pre_call",
+            "provider": "aporia"
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMGuardrail",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "presidio-redact"
+          },
+          "spec": {
+            "guardrailName": "presidio-redact",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            },
+            "mode": "pre_call",
+            "params": {
+              "presidio_analyzer_api_base": "http://presidio-analyzer.guardrails.svc.cluster.local:3000",
+              "presidio_anonymizer_api_base": "http://presidio-anonymizer.guardrails.svc.cluster.local:3000"
+            },
+            "provider": "presidio"
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
           "kind": "LiteLLMInstance",
           "metadata": {
             "labels": {
@@ -124,6 +275,41 @@ metadata:
         },
         {
           "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMOrganization",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "acme-corp"
+          },
+          "spec": {
+            "budgetDuration": "30d",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            },
+            "maxBudget": 5000,
+            "members": [
+              {
+                "email": "admin@acme.com",
+                "role": "org_admin"
+              },
+              {
+                "email": "user@acme.com",
+                "role": "internal_user"
+              }
+            ],
+            "models": [
+              "gpt-4o",
+              "claude-4-sonnet"
+            ],
+            "organizationAlias": "acme-corp",
+            "rpmLimit": 1000,
+            "tpmLimit": 200000
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
           "kind": "LiteLLMTeam",
           "metadata": {
             "labels": {
@@ -222,10 +408,10 @@ metadata:
           }
         }
       ]
-    capabilities: Seamless Upgrades
+    capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.7.0
-    createdAt: "2026-04-06T16:22:28Z"
+    createdAt: "2026-04-11T13:41:19Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -238,28 +424,146 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: LiteLLMCredential is the Schema for the litellmcredentials API
+        — reusable provider credentials rendered into the proxy config.
+      displayName: LiteLLM Credential
+      kind: LiteLLMCredential
+      name: litellmcredentials.litellm.palena.ai
+      version: v1alpha1
+    - description: |-
+        LiteLLMCustomer is the Schema for the litellmcustomers API.
+        A Customer represents an external end-user of the AI gateway with its own
+        spending, rate, and access policies.
+      displayName: LiteLLM Customer
+      kind: LiteLLMCustomer
+      name: litellmcustomers.litellm.palena.ai
+      version: v1alpha1
+    - description: LiteLLMGuardrail is the Schema for the litellmguardrails API —
+        content moderation and safety integrations rendered into the proxy config.
+      displayName: LiteLLM Guardrail
+      kind: LiteLLMGuardrail
+      name: litellmguardrails.litellm.palena.ai
+      version: v1alpha1
     - description: LiteLLMInstance is the Schema for the litellminstances API.
-      displayName: Lite LLMInstance
+      displayName: LiteLLM Instance
       kind: LiteLLMInstance
       name: litellminstances.litellm.palena.ai
       version: v1alpha1
+      statusDescriptors:
+      - description: Whether the instance is fully ready.
+        displayName: Ready
+        path: ready
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Internal cluster endpoint URL.
+        displayName: Endpoint
+        path: endpoint
+        x-descriptors:
+        - urn:alm:descriptor:org.w3:link
+      - description: Current LiteLLM version running.
+        displayName: LiteLLM Version
+        path: version
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Total replicas running for this instance.
+        displayName: Replicas
+        path: replicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: Ready replicas serving traffic.
+        displayName: Ready Replicas
+        path: readyReplicas
+        x-descriptors:
+        - urn:alm:descriptor:com.tectonic.ui:podCount
+      - description: Whether the backing database is reachable.
+        displayName: Database Connected
+        path: database.connected
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Whether Redis is reachable (if configured).
+        displayName: Redis Connected
+        path: redis.connected
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Whether a LiteLLM Enterprise license is active.
+        displayName: License Active
+        path: license.active
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Last successful deployment revision (used for auto-rollback).
+        displayName: Last Successful Revision
+        path: lastSuccessfulRevision
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Current health and readiness conditions.
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
     - description: LiteLLMModel is the Schema for the litellmmodels API.
-      displayName: Lite LLMModel
+      displayName: LiteLLM Model
       kind: LiteLLMModel
       name: litellmmodels.litellm.palena.ai
       version: v1alpha1
+      statusDescriptors:
+      - description: Whether the model is synced to the LiteLLM proxy.
+        displayName: Synced
+        path: synced
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: LiteLLM-assigned model ID.
+        displayName: LiteLLM Model ID
+        path: litellmModelId
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Model health as reported by the LiteLLM /health endpoint.
+        displayName: Health
+        path: health
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: P50 latency in milliseconds observed from LiteLLM metrics.
+        displayName: P50 Latency (ms)
+        path: latencyP50Ms
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: P95 latency in milliseconds observed from LiteLLM metrics.
+        displayName: P95 Latency (ms)
+        path: latencyP95Ms
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Total requests served by this model in the last 24 hours.
+        displayName: Requests (24h)
+        path: requestsLast24h
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Last successful sync time with the LiteLLM proxy.
+        displayName: Last Sync Time
+        path: lastSyncTime
+        x-descriptors:
+        - urn:alm:descriptor:text
+      - description: Standard Kubernetes conditions.
+        displayName: Conditions
+        path: conditions
+        x-descriptors:
+        - urn:alm:descriptor:io.kubernetes.conditions
+    - description: LiteLLMOrganization is the Schema for the litellmorganizations
+        API.
+      displayName: LiteLLM Organization
+      kind: LiteLLMOrganization
+      name: litellmorganizations.litellm.palena.ai
+      version: v1alpha1
     - description: LiteLLMTeam is the Schema for the litellmteams API.
-      displayName: Lite LLMTeam
+      displayName: LiteLLM Team
       kind: LiteLLMTeam
       name: litellmteams.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMUser is the Schema for the litellmusers API.
-      displayName: Lite LLMUser
+      displayName: LiteLLM User
       kind: LiteLLMUser
       name: litellmusers.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMVirtualKey is the Schema for the litellmvirtualkeys API.
-      displayName: Lite LLMVirtual Key
+      displayName: LiteLLM Virtual Key
       kind: LiteLLMVirtualKey
       name: litellmvirtualkeys.litellm.palena.ai
       version: v1alpha1
@@ -272,12 +576,16 @@ spec:
 
     ## Features
 
-    - **Declarative LiteLLM deployment** — manage proxy instances, models, teams, users, and API keys as Kubernetes custom resources
+    - **Declarative LiteLLM deployment** — manage proxy instances, organizations, models, teams, users, customers, credentials, guardrails, and virtual keys as Kubernetes custom resources
     - **Bidirectional config sync** — reconciles CRD state with the LiteLLM REST API on every sync interval
     - **Team member management** — three modes: CRD authoritative, SSO authoritative, and mixed
     - **VirtualKey secret management** — generated API keys stored in Kubernetes Secrets with owner references
+    - **Reusable credentials** — `LiteLLMCredential` CRs produce a shared `credential_list` referenced by any model, with API keys injected from Secrets as env vars
+    - **Content moderation** — `LiteLLMGuardrail` CRs configure Aporia, Lakera, Bedrock, Presidio, and other guardrail providers with per-key and per-team opt-in
+    - **Customer / end-user billing** — `LiteLLMCustomer` CRs manage external end-user budgets, rate limits, and model access for multi-tenant applications
+    - **Organization hierarchy** — `LiteLLMOrganization` groups teams under a shared budget and rate limit envelope
     - **SSO/SCIM support** — configure Azure Entra ID, Okta, Google, or generic OIDC providers declaratively
-    - **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts
+    - **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts, ServiceMonitor, PrometheusRule, Grafana dashboard
 
     ## Prerequisites
 
@@ -365,8 +673,12 @@ spec:
         - apiGroups:
           - litellm.palena.ai
           resources:
+          - litellmcredentials
+          - litellmcustomers
+          - litellmguardrails
           - litellminstances
           - litellmmodels
+          - litellmorganizations
           - litellmteams
           - litellmusers
           - litellmvirtualkeys
@@ -381,8 +693,12 @@ spec:
         - apiGroups:
           - litellm.palena.ai
           resources:
+          - litellmcredentials/finalizers
+          - litellmcustomers/finalizers
+          - litellmguardrails/finalizers
           - litellminstances/finalizers
           - litellmmodels/finalizers
+          - litellmorganizations/finalizers
           - litellmteams/finalizers
           - litellmusers/finalizers
           - litellmvirtualkeys/finalizers
@@ -391,8 +707,12 @@ spec:
         - apiGroups:
           - litellm.palena.ai
           resources:
+          - litellmcredentials/status
+          - litellmcustomers/status
+          - litellmguardrails/status
           - litellminstances/status
           - litellmmodels/status
+          - litellmorganizations/status
           - litellmteams/status
           - litellmusers/status
           - litellmvirtualkeys/status
@@ -503,7 +823,7 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
-                image: ghcr.io/palenaai/litellm-operator:v0.7.0
+                image: controller:latest
                 livenessProbe:
                   httpGet:
                     path: /healthz

@@ -60,6 +60,14 @@ spec:
               budgetDuration:
                 description: Budget reset duration (e.g., "30d", "7d").
                 type: string
+              guardrails:
+                description: |-
+                  Guardrails to activate for this team. Each entry must match the
+                  guardrailName of a LiteLLMGuardrail CR bound to the same instance.
+                  Requires a LiteLLM Enterprise license.
+                items:
+                  type: string
+                type: array
               instanceRef:
                 description: Reference to the LiteLLMInstance.
                 properties:
@@ -118,6 +126,15 @@ spec:
                 items:
                   type: string
                 type: array
+              organizationRef:
+                description: Reference to the organization this team belongs to.
+                properties:
+                  name:
+                    description: Name of the LiteLLMOrganization CR.
+                    type: string
+                required:
+                - name
+                type: object
               rpmLimit:
                 description: RPM limit for the team.
                 type: integer

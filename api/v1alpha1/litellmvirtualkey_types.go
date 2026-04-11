@@ -77,6 +77,12 @@ type LiteLLMVirtualKeySpec struct {
 	// Defaults to "{name}-key".
 	// +optional
 	KeySecretName string `json:"keySecretName,omitempty"`
+
+	// Guardrails to activate for this key. Each entry must match the
+	// guardrailName of a LiteLLMGuardrail CR bound to the same instance.
+	// Requires a LiteLLM Enterprise license.
+	// +optional
+	Guardrails []string `json:"guardrails,omitempty"`
 }
 
 // LiteLLMVirtualKeyStatus defines the observed state of LiteLLMVirtualKey.

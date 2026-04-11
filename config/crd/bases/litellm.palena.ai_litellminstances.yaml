@@ -488,6 +488,22 @@ spec:
                     - enabled
                     type: object
                 type: object
+              defaultCustomerBudget:
+                description: |-
+                  Default budget settings applied to all end-users/customers.
+                  Written to litellm_settings.max_end_user_budget / max_end_user_budget_id.
+                properties:
+                  budgetId:
+                    description: |-
+                      Default predefined budget tier ID.
+                      Written to litellm_settings.max_end_user_budget_id.
+                    type: string
+                  maxBudget:
+                    description: |-
+                      Default maximum budget (USD) applied to new customers.
+                      Written to litellm_settings.max_end_user_budget.
+                    type: number
+                type: object
               extraEnvFrom:
                 description: Extra environment variable sources.
                 items:
