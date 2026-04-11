@@ -60,6 +60,7 @@ type LiteLLMInstanceReconciler struct {
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellminstances/finalizers,verbs=update
+// +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmcredentials,verbs=get;list;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=configmaps;services;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -94,11 +95,19 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Detect license Secret
 	licenseSecretName := r.reconcileLicense(ctx, &instance)
 
+	// Fetch LiteLLMCredential CRs bound to this instance. A list failure
+	// is non-fatal — we proceed with an empty list and let the instance
+	// reconcile without credentials.
+	credentials, err := r.listCredentialsForInstance(ctx, &instance)
+	if err != nil {
+		logf.FromContext(ctx).Error(err, "failed to list credentials for instance")
+	}
+
 	// Reconcile database migration status
 	r.reconcileMigrationStatus(ctx, &instance, labels)
 
 	// Reconcile all managed resources
-	reconcileErr := r.reconcileResources(ctx, &instance, labels, licenseSecretName)
+	reconcileErr := r.reconcileResources(ctx, &instance, labels, licenseSecretName, credentials)
 
 	// Auto-rollback: track successful deployment revision and rollback on failure
 	r.reconcileAutoRollback(ctx, &instance)
@@ -159,8 +168,25 @@ func (r *LiteLLMInstanceReconciler) reconcileMigrationStatus(ctx context.Context
 	}
 }
 
+// listCredentialsForInstance returns every LiteLLMCredential in the instance's
+// namespace whose spec.instanceRef.name matches the instance. Returned items
+// are filtered client-side so we keep a single cached list per namespace.
+func (r *LiteLLMInstanceReconciler) listCredentialsForInstance(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) ([]litellmv1alpha1.LiteLLMCredential, error) {
+	var list litellmv1alpha1.LiteLLMCredentialList
+	if err := r.List(ctx, &list, client.InNamespace(instance.Namespace)); err != nil {
+		return nil, err
+	}
+	filtered := make([]litellmv1alpha1.LiteLLMCredential, 0, len(list.Items))
+	for _, c := range list.Items {
+		if c.Spec.InstanceRef.Name == instance.Name {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered, nil
+}
+
 // reconcileResources reconciles all managed sub-resources for the instance.
-func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string) error {
+func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential) error {
 	log := logf.FromContext(ctx)
 	var reconcileErr error
 
@@ -169,7 +195,7 @@ func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, inst
 		log.Error(err, "failed to reconcile secrets")
 	}
 
-	if err := r.reconcileConfigMap(ctx, instance, labels); err != nil {
+	if err := r.reconcileConfigMap(ctx, instance, labels, credentials); err != nil {
 		reconcileErr = err
 		log.Error(err, "failed to reconcile ConfigMap")
 	}
@@ -179,7 +205,7 @@ func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, inst
 		log.Error(err, "failed to reconcile ServiceAccount")
 	}
 
-	if err := r.reconcileDeployment(ctx, instance, labels, licenseSecretName); err != nil {
+	if err := r.reconcileDeployment(ctx, instance, labels, licenseSecretName, credentials); err != nil {
 		reconcileErr = err
 		log.Error(err, "failed to reconcile Deployment")
 	}
@@ -462,8 +488,8 @@ func (r *LiteLLMInstanceReconciler) ensureGeneratedSecret(ctx context.Context, i
 	return r.Create(ctx, secret)
 }
 
-func (r *LiteLLMInstanceReconciler) reconcileConfigMap(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
-	desired, err := resources.BuildConfigMap(instance, labels)
+func (r *LiteLLMInstanceReconciler) reconcileConfigMap(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, credentials []litellmv1alpha1.LiteLLMCredential) error {
+	desired, err := resources.BuildConfigMap(instance, labels, credentials)
 	if err != nil {
 		return err
 	}
@@ -515,8 +541,8 @@ func (r *LiteLLMInstanceReconciler) reconcileMigrationJob(ctx context.Context, i
 	return false, nil // still running
 }
 
-func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string) error {
-	desired := resources.BuildDeployment(instance, labels, licenseSecretName)
+func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential) error {
+	desired := resources.BuildDeployment(instance, labels, licenseSecretName, credentials)
 	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
 		return err
 	}
@@ -893,6 +919,22 @@ func generateRandomToken(length int) string {
 	return hex.EncodeToString(b)
 }
 
+// findInstanceForCredential maps a LiteLLMCredential event to the LiteLLMInstance
+// it references, so credential CRUD triggers an instance reconcile that rewrites
+// the ConfigMap and Deployment.
+func (r *LiteLLMInstanceReconciler) findInstanceForCredential(_ context.Context, obj client.Object) []reconcile.Request {
+	cred, ok := obj.(*litellmv1alpha1.LiteLLMCredential)
+	if !ok || cred.Spec.InstanceRef.Name == "" {
+		return nil
+	}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      cred.Spec.InstanceRef.Name,
+			Namespace: cred.Namespace,
+		},
+	}}
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *LiteLLMInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -907,6 +949,12 @@ func (r *LiteLLMInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			&corev1.Secret{},
 			handler.EnqueueRequestsFromMapFunc(r.findInstanceForLicenseSecret),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
+		).
+		// Credentials are referenced from this instance's ConfigMap /
+		// Deployment, so mutations must trigger an instance reconcile.
+		Watches(
+			&litellmv1alpha1.LiteLLMCredential{},
+			handler.EnqueueRequestsFromMapFunc(r.findInstanceForCredential),
 		).
 		Named("litellminstance").
 		Complete(r)

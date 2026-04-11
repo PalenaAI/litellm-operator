@@ -40,6 +40,9 @@ resources:
 - litellmcustomer_admin_role.yaml
 - litellmcustomer_editor_role.yaml
 - litellmcustomer_viewer_role.yaml
+- litellmcredential_admin_role.yaml
+- litellmcredential_editor_role.yaml
+- litellmcredential_viewer_role.yaml
 - litellminstance_admin_role.yaml
 - litellminstance_editor_role.yaml
 - litellminstance_viewer_role.yaml

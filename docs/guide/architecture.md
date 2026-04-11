@@ -78,7 +78,7 @@ The most complex controller. It manages all Kubernetes infrastructure for a Lite
 
 ### Secondary Controllers
 
-All secondary controllers (Organization, Model, Team, User, VirtualKey) follow the same pattern:
+Most secondary controllers (Organization, Model, Team, User, Customer, VirtualKey) follow the same pattern:
 
 ```
 CR created/updated/deleted
@@ -92,6 +92,10 @@ CR created/updated/deleted
 ```
 
 **Change detection** uses a spec hash stored in the `litellm.palena.ai/sync-hash` annotation. On each reconciliation, the current spec hash is compared to the stored hash — if different, an update is sent to the LiteLLM API.
+
+### Credential Controller
+
+The Credential controller is different: `LiteLLMCredential` is a **config-level** resource, not an API-level one. There is no `POST /credential/new` equivalent — credentials live in the proxy's `credential_list` config section. The controller validates the referenced Secret and counts consuming models, but the actual materialization happens in the Instance controller, which watches LiteLLMCredential and rebuilds the ConfigMap + rolls the Deployment whenever a credential changes. API keys are injected as `CREDENTIAL_{NAME}_API_KEY` env vars via `secretKeyRef`, and the ConfigMap uses `os.environ/...` placeholders so plaintext keys never land on disk.
 
 ## Reconciliation Model
 

@@ -7,4 +7,5 @@ resources:
 - litellm_v1alpha1_litellmvirtualkey.yaml
 - litellm_v1alpha1_litellmorganization.yaml
 - litellm_v1alpha1_litellmcustomer.yaml
+- litellm_v1alpha1_litellmcredential.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

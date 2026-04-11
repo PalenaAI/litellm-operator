@@ -30,8 +30,10 @@ import (
 )
 
 // BuildConfigMap creates the ConfigMap containing proxy_server_config.yaml.
-func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) (*corev1.ConfigMap, error) {
-	config := GenerateProxyConfig(instance)
+// credentials are the LiteLLMCredential CRs bound to this instance (used to
+// populate the `credential_list` section); pass nil if none.
+func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, credentials []litellmv1alpha1.LiteLLMCredential) (*corev1.ConfigMap, error) {
+	config := GenerateProxyConfig(instance, credentials)
 	configYAML, err := yaml.Marshal(config)
 	if err != nil {
 		return nil, err
@@ -50,7 +52,8 @@ func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string
 }
 
 // GenerateProxyConfig generates the proxy_server_config structure from the instance spec.
-func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]interface{} {
+// credentials, when non-empty, are serialized into the top-level `credential_list` section.
+func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials []litellmv1alpha1.LiteLLMCredential) map[string]interface{} {
 	config := map[string]interface{}{
 		"model_list": []interface{}{},
 	}
@@ -201,7 +204,58 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		buildDefaultCustomerBudget(instance.Spec.DefaultCustomerBudget, config)
 	}
 
+	// credential_list — centralized provider credentials referenced by models.
+	buildCredentialList(instance, credentials, config)
+
 	return config
+}
+
+// buildCredentialList serializes LiteLLMCredential CRs bound to this instance
+// into the list-of-maps format LiteLLM expects for `credential_list`, and
+// writes the result under config["credential_list"] when any entries match.
+// Each credential's API key is referenced by env var (see CredentialEnvVarName).
+// Credentials bound to other instances or an empty slice are a no-op.
+func buildCredentialList(instance *litellmv1alpha1.LiteLLMInstance, credentials []litellmv1alpha1.LiteLLMCredential, config map[string]interface{}) {
+	if len(credentials) == 0 {
+		return
+	}
+	entries := make([]map[string]interface{}, 0, len(credentials))
+	for _, c := range credentials {
+		if c.Spec.InstanceRef.Name != instance.Name {
+			continue
+		}
+		info := map[string]interface{}{
+			"api_key": fmt.Sprintf("os.environ/%s", CredentialEnvVarName(c.Spec.CredentialName)),
+		}
+		if c.Spec.APIBase != "" {
+			info["api_base"] = c.Spec.APIBase
+		}
+		if c.Spec.APIVersion != "" {
+			info["api_version"] = c.Spec.APIVersion
+		}
+		for k, v := range c.Spec.Params {
+			// Don't let params override the keys we set explicitly.
+			if _, reserved := info[k]; reserved {
+				continue
+			}
+			info[k] = v
+		}
+		entries = append(entries, map[string]interface{}{
+			"credential_name": c.Spec.CredentialName,
+			"credential_info": info,
+		})
+	}
+	if len(entries) > 0 {
+		config["credential_list"] = entries
+	}
+}
+
+// CredentialEnvVarName returns the env var name the operator uses to inject a
+// LiteLLMCredential's API key into the proxy Deployment. The same name is
+// referenced from the generated `credential_list` config.
+func CredentialEnvVarName(credentialName string) string {
+	sanitized := sanitizeEnvVarSegment.ReplaceAllString(credentialName, "_")
+	return strings.ToUpper("CREDENTIAL_" + sanitized + "_API_KEY")
 }
 
 // buildDefaultCustomerBudget writes default end-user budget settings into litellm_settings.

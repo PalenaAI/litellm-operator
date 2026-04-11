@@ -24,10 +24,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 	"github.com/PalenaAI/litellm-operator/internal/litellm"
@@ -43,6 +46,7 @@ type LiteLLMModelReconciler struct {
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmmodels,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmmodels/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmmodels/finalizers,verbs=update
+// +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmcredentials,verbs=get;list;watch
 
 func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -124,29 +128,40 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 	log := logf.FromContext(ctx)
 	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
 
-	// Resolve API key from secret if specified
-	var apiKey string
-	if model.Spec.LiteLLMParams.APIKeySecretRef != nil {
-		var err error
-		apiKey, err = getSecretValue(ctx, r.Client, model.Namespace, model.Spec.LiteLLMParams.APIKeySecretRef)
+	params := litellm.ModelParams{
+		Model:         model.Spec.LiteLLMParams.Model,
+		RPM:           model.Spec.LiteLLMParams.RPM,
+		TPM:           model.Spec.LiteLLMParams.TPM,
+		Timeout:       model.Spec.LiteLLMParams.Timeout,
+		StreamTimeout: model.Spec.LiteLLMParams.StreamTimeout,
+		MaxRetries:    model.Spec.LiteLLMParams.MaxRetries,
+		Tags:          model.Spec.Tags,
+	}
+
+	// credentialRef takes precedence over inline apiBase/apiKeySecretRef.
+	// When set, the model is registered against an entry in the proxy's
+	// credential_list via litellm_credential_name — api_base/api_key come
+	// from the LiteLLMCredential, not from this spec.
+	if model.Spec.LiteLLMParams.CredentialRef != nil {
+		credName, err := r.resolveCredentialName(ctx, model)
 		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("resolve API key: %w", err)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+		params.LiteLLMCredentialName = credName
+	} else {
+		params.APIBase = model.Spec.LiteLLMParams.APIBase
+		if model.Spec.LiteLLMParams.APIKeySecretRef != nil {
+			apiKey, err := getSecretValue(ctx, r.Client, model.Namespace, model.Spec.LiteLLMParams.APIKeySecretRef)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("resolve API key: %w", err)
+			}
+			params.APIKey = apiKey
 		}
 	}
 
 	req := litellm.ModelCreateRequest{
-		ModelName: model.Spec.ModelName,
-		LiteLLMParams: litellm.ModelParams{
-			Model:         model.Spec.LiteLLMParams.Model,
-			APIBase:       model.Spec.LiteLLMParams.APIBase,
-			APIKey:        apiKey,
-			RPM:           model.Spec.LiteLLMParams.RPM,
-			TPM:           model.Spec.LiteLLMParams.TPM,
-			Timeout:       model.Spec.LiteLLMParams.Timeout,
-			StreamTimeout: model.Spec.LiteLLMParams.StreamTimeout,
-			MaxRetries:    model.Spec.LiteLLMParams.MaxRetries,
-			Tags:          model.Spec.Tags,
-		},
+		ModelName:     model.Spec.ModelName,
+		LiteLLMParams: params,
 	}
 	if model.Spec.ModelInfo != nil {
 		req.ModelInfo = &litellm.ModelInfoReq{
@@ -203,6 +218,22 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 }
 
+// resolveCredentialName fetches the LiteLLMCredential referenced by the model's
+// credentialRef and returns its spec.credentialName (the key that matches an
+// entry in the proxy's credential_list). The credential must live in the same
+// namespace as the model.
+func (r *LiteLLMModelReconciler) resolveCredentialName(ctx context.Context, model *litellmv1alpha1.LiteLLMModel) (string, error) {
+	var cred litellmv1alpha1.LiteLLMCredential
+	key := client.ObjectKey{Name: model.Spec.LiteLLMParams.CredentialRef.Name, Namespace: model.Namespace}
+	if err := r.Get(ctx, key, &cred); err != nil {
+		return "", fmt.Errorf("resolve credentialRef %q: %w", model.Spec.LiteLLMParams.CredentialRef.Name, err)
+	}
+	if cred.Spec.CredentialName == "" {
+		return "", fmt.Errorf("credential %q has empty credentialName", cred.Name)
+	}
+	return cred.Spec.CredentialName, nil
+}
+
 func (r *LiteLLMModelReconciler) handleDeletion(
 	ctx context.Context,
 	model *litellmv1alpha1.LiteLLMModel,
@@ -225,10 +256,37 @@ func (r *LiteLLMModelReconciler) handleDeletion(
 	return ctrl.Result{}, r.Update(ctx, model)
 }
 
+// findModelsForCredential maps a LiteLLMCredential event to the LiteLLMModel
+// CRs that reference it via credentialRef, so rename/params changes on a
+// credential re-reconcile dependent models.
+func (r *LiteLLMModelReconciler) findModelsForCredential(ctx context.Context, obj client.Object) []reconcile.Request {
+	cred, ok := obj.(*litellmv1alpha1.LiteLLMCredential)
+	if !ok {
+		return nil
+	}
+	var models litellmv1alpha1.LiteLLMModelList
+	if err := r.List(ctx, &models, client.InNamespace(cred.Namespace)); err != nil {
+		return nil
+	}
+	var requests []reconcile.Request
+	for _, m := range models.Items {
+		if m.Spec.LiteLLMParams.CredentialRef != nil && m.Spec.LiteLLMParams.CredentialRef.Name == cred.Name {
+			requests = append(requests, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: m.Name, Namespace: m.Namespace},
+			})
+		}
+	}
+	return requests
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *LiteLLMModelReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&litellmv1alpha1.LiteLLMModel{}).
+		Watches(
+			&litellmv1alpha1.LiteLLMCredential{},
+			handler.EnqueueRequestsFromMapFunc(r.findModelsForCredential),
+		).
 		Named("litellmmodel").
 		Complete(r)
 }

@@ -20,20 +20,22 @@ Both the CRDs and the Admin UI write to the same backing store, so they coexist 
 
 ## CRD Hierarchy
 
-The operator introduces six Custom Resource Definitions:
+The operator introduces eight Custom Resource Definitions:
 
 ```text
 LiteLLMInstance (primary — deploys infrastructure)
 ├── LiteLLMOrganization (multi-tenant isolation with budgets)
 │   └── LiteLLMTeam (organizationRef — scoped to an org)
-├── LiteLLMModel (registers AI models)
+├── LiteLLMCredential (reusable provider credentials)
+├── LiteLLMModel (registers AI models, may reference a credential)
 ├── LiteLLMTeam (creates teams with budgets and members)
 │   └── members (inline, managed by memberManagement policy)
 ├── LiteLLMUser (manages users for non-SSO environments)
+├── LiteLLMCustomer (tracks external end-users with per-user budgets)
 └── LiteLLMVirtualKey (generates scoped API keys)
 ```
 
-All secondary CRDs reference a `LiteLLMInstance` via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`. The operator resolves these to find the LiteLLM API endpoint, master key, and organization ID.
+All secondary CRDs reference a `LiteLLMInstance` via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`. Models can reference a `LiteLLMCredential` via `spec.litellmParams.credentialRef` to reuse shared provider credentials. The operator resolves these to find the LiteLLM API endpoint, master key, and organization ID.
 
 ## Key Features
 

@@ -52,7 +52,7 @@ func TestBuildDeployment_WithLicenseSecret(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "my-gateway-license")
+	dep := BuildDeployment(instance, labels, "my-gateway-license", nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -79,7 +79,7 @@ func TestBuildDeployment_WithoutLicenseSecret(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "")
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "LITELLM_LICENSE" {
@@ -92,8 +92,8 @@ func TestBuildDeployment_LicenseSecretChangesTemplate(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	depWithout := BuildDeployment(instance, labels, "")
-	depWith := BuildDeployment(instance, labels, "my-license")
+	depWithout := BuildDeployment(instance, labels, "", nil)
+	depWith := BuildDeployment(instance, labels, "my-license", nil)
 
 	envCountWithout := len(depWithout.Spec.Template.Spec.Containers[0].Env)
 	envCountWith := len(depWith.Spec.Template.Spec.Containers[0].Env)
@@ -107,7 +107,7 @@ func TestBuildDeployment_CachingDisabled(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "")
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "CACHE_REDIS_PASSWORD" || env.Name == "CACHE_S3_ACCESS_KEY_ID" || env.Name == "CACHE_QDRANT_API_KEY" {
@@ -131,7 +131,7 @@ func TestBuildDeployment_CachingRedisPassword(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "")
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -169,7 +169,7 @@ func TestBuildDeployment_CachingS3Credentials(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "")
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -205,7 +205,7 @@ func TestBuildDeployment_PassThroughSecretEnvVars(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "")
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -241,7 +241,7 @@ func TestBuildDeployment_PassThroughNoSecrets(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "")
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "PASSTHROUGH_BRIA_CONTENT_TYPE" {
@@ -276,7 +276,7 @@ func TestBuildDeployment_PassThroughMultipleEndpoints(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "")
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -307,7 +307,7 @@ func TestBuildDeployment_CachingQdrantAPIKey(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "")
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -321,5 +321,105 @@ func TestBuildDeployment_CachingQdrantAPIKey(t *testing.T) {
 	}
 	if !found {
 		t.Error("CACHE_QDRANT_API_KEY env var not found")
+	}
+}
+
+func TestBuildDeployment_CredentialEnvVars(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+	credentials := []litellmv1alpha1.LiteLLMCredential{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "openai-prod", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
+				InstanceRef:    litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				CredentialName: "openai-prod",
+				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{
+					Name: "openai-secret",
+					Key:  "api-key",
+				},
+			},
+		},
+	}
+
+	dep := BuildDeployment(instance, labels, "", credentials)
+
+	found := false
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "CREDENTIAL_OPENAI_PROD_API_KEY" {
+			found = true
+			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
+				t.Fatal("credential env var should use secretKeyRef")
+			}
+			if env.ValueFrom.SecretKeyRef.Name != "openai-secret" {
+				t.Errorf("expected secret name 'openai-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
+			}
+			if env.ValueFrom.SecretKeyRef.Key != "api-key" {
+				t.Errorf("expected secret key 'api-key', got %q", env.ValueFrom.SecretKeyRef.Key)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("CREDENTIAL_OPENAI_PROD_API_KEY env var not found")
+	}
+}
+
+func TestBuildDeployment_CredentialEnvVarsFiltersOtherInstances(t *testing.T) {
+	instance := newTestInstance() // name: test-instance
+	labels := map[string]string{"app": "litellm"}
+	credentials := []litellmv1alpha1.LiteLLMCredential{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
+				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "other-instance"},
+				CredentialName:  "other",
+				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "s", Key: "k"},
+			},
+		},
+	}
+
+	dep := BuildDeployment(instance, labels, "", credentials)
+
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "CREDENTIAL_OTHER_API_KEY" {
+			t.Error("credential bound to a different instance should not produce env vars on this deployment")
+		}
+	}
+}
+
+func TestBuildDeployment_CredentialEnvVarsDedup(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+	// Two credentials with the same credentialName (e.g. duplicate definition)
+	// should only produce one env var.
+	credentials := []litellmv1alpha1.LiteLLMCredential{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
+				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				CredentialName:  "shared",
+				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "secret-a", Key: "k"},
+			},
+		},
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
+				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				CredentialName:  "shared",
+				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "secret-b", Key: "k"},
+			},
+		},
+	}
+
+	dep := BuildDeployment(instance, labels, "", credentials)
+
+	count := 0
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "CREDENTIAL_SHARED_API_KEY" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected exactly 1 CREDENTIAL_SHARED_API_KEY env var, got %d", count)
 	}
 }

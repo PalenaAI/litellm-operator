@@ -41,3 +41,9 @@ type OrganizationRef struct {
 	// Name of the LiteLLMOrganization CR.
 	Name string `json:"name"`
 }
+
+// CredentialRef references a LiteLLMCredential CR in the same namespace.
+type CredentialRef struct {
+	// Name of the LiteLLMCredential CR.
+	Name string `json:"name"`
+}
