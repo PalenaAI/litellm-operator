@@ -75,6 +75,7 @@ export default defineConfig({
           { text: 'LiteLLMModel', link: '/reference/litellmmodel' },
           { text: 'LiteLLMTeam', link: '/reference/litellmteam' },
           { text: 'LiteLLMUser', link: '/reference/litellmuser' },
+          { text: 'LiteLLMCustomer', link: '/reference/litellmcustomer' },
           { text: 'LiteLLMVirtualKey', link: '/reference/litellmvirtualkey' },
         ],
       },

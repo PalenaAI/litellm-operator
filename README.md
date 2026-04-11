@@ -37,6 +37,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 | `LiteLLMModel` | `lm` | Registers a model (e.g., `openai/gpt-4o`) with the proxy |
 | `LiteLLMTeam` | `lt` | Creates a team with budget limits and member management |
 | `LiteLLMUser` | `lu` | Creates a user (service accounts, bot users, non-SSO environments) |
+| `LiteLLMCustomer` | `lcust` | Manages an external end-user (SaaS customer) with budgets and rate limits |
 | `LiteLLMVirtualKey` | `lk` | Generates an API key scoped to a team/user with budget and rate limits |
 
 All secondary resources reference a `LiteLLMInstance` via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`.

@@ -56,4 +56,13 @@ resources:
   kind: LiteLLMVirtualKey
   path: github.com/PalenaAI/litellm-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: palena.ai
+  group: litellm
+  kind: LiteLLMCustomer
+  path: github.com/PalenaAI/litellm-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

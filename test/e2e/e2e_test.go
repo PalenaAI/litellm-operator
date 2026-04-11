@@ -52,6 +52,8 @@ const (
 	teamName         = "e2e-team"
 	orgTeamName      = "e2e-org-team"
 	userName         = "e2e-user"
+	customerName     = "e2e-customer"
+	customerID       = "e2e-customer-42"
 	virtualKeyName   = "e2e-vk"
 	litellmTestImage = "ghcr.io/berriai/litellm:main-v1.60.0"
 )
@@ -219,6 +221,28 @@ spec:
   userId: e2e-test@example.com
   userEmail: e2e-test@example.com
   userRole: internal_user
+`
+
+const customerYAML = `
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMCustomer
+metadata:
+  name: e2e-customer
+  namespace: e2e-fullstack
+spec:
+  instanceRef:
+    name: e2e-litellm
+  customerId: e2e-customer-42
+  alias: e2e-test-customer
+  maxBudget: 100
+  budgetDuration: "30d"
+  tpmLimit: 50000
+  rpmLimit: 500
+  models:
+    - e2e-gpt-4o
+  metadata:
+    source: e2e
+    tier: test
 `
 
 const virtualKeyYAML = `
@@ -496,7 +520,7 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 
 				kinds := []string{
 					"litellminstance", "litellmorganization", "litellmmodel",
-					"litellmteam", "litellmuser", "litellmvirtualkey",
+					"litellmteam", "litellmuser", "litellmcustomer", "litellmvirtualkey",
 				}
 				for _, kind := range kinds {
 					cmd = exec.Command("kubectl", "get", kind, "-n", testNamespace, "-o", "yaml")
@@ -693,6 +717,29 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 			Expect(output).NotTo(BeEmpty(), "litellmUserId should be set after sync")
 		})
 
+		It("should create a LiteLLMCustomer and wait for Synced", func() {
+			By("applying the LiteLLMCustomer CR")
+			applyYAML(customerYAML)
+
+			By("waiting for the customer to be synced")
+			verifyCustomerSynced := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmcustomer", customerName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyCustomerSynced, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			By("verifying the customer status.synced flag is set")
+			cmd := exec.Command("kubectl", "get", "litellmcustomer", customerName,
+				"-n", testNamespace, "-o", "jsonpath={.status.synced}")
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(strings.TrimSpace(output)).To(Equal("true"), "status.synced should be true after sync")
+		})
+
 		It("should create a LiteLLMVirtualKey and wait for Synced", func() {
 			By("applying the LiteLLMVirtualKey CR")
 			applyYAML(virtualKeyYAML)
@@ -740,6 +787,21 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 				g.Expect(err).To(HaveOccurred())
 			}
 			Eventually(verifySecretDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
+		})
+
+		It("should delete Customer and verify cleanup", func() {
+			cmd := exec.Command("kubectl", "delete", "litellmcustomer", customerName,
+				"-n", testNamespace, "--timeout=60s")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			verifyDeleted := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellmcustomer", customerName,
+					"-n", testNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).To(HaveOccurred())
+			}
+			Eventually(verifyDeleted, 1*time.Minute, 5*time.Second).Should(Succeed())
 		})
 
 		It("should delete User and verify cleanup", func() {

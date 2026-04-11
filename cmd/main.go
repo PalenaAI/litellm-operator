@@ -281,6 +281,14 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMOrganization")
 		os.Exit(1)
 	}
+	if err := (&controller.LiteLLMCustomerReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		LiteLLMClientFactory: clientFactory,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMCustomer")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

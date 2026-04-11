@@ -1046,3 +1046,57 @@ func TestGenerateProxyConfig_AllBudgetSettings(t *testing.T) {
 		t.Error("expected openai in provider_budget_config")
 	}
 }
+
+func TestGenerateProxyConfig_DefaultCustomerBudget_MaxBudget(t *testing.T) {
+	instance := newTestInstance()
+	budget := 25.0
+	instance.Spec.DefaultCustomerBudget = &litellmv1alpha1.DefaultCustomerBudgetSpec{
+		MaxBudget: &budget,
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	ls, ok := config["litellm_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected litellm_settings to be present")
+	}
+	if ls["max_end_user_budget"] != 25.0 {
+		t.Errorf("expected max_end_user_budget=25.0, got %v", ls["max_end_user_budget"])
+	}
+	if _, present := ls["max_end_user_budget_id"]; present {
+		t.Error("expected max_end_user_budget_id to be absent when only MaxBudget is set")
+	}
+}
+
+func TestGenerateProxyConfig_DefaultCustomerBudget_BudgetID(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.DefaultCustomerBudget = &litellmv1alpha1.DefaultCustomerBudgetSpec{
+		BudgetID: "tier-free",
+	}
+
+	config := GenerateProxyConfig(instance)
+
+	ls, ok := config["litellm_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected litellm_settings to be present")
+	}
+	if ls["max_end_user_budget_id"] != "tier-free" {
+		t.Errorf("expected max_end_user_budget_id=tier-free, got %v", ls["max_end_user_budget_id"])
+	}
+}
+
+func TestGenerateProxyConfig_DefaultCustomerBudget_Empty(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.DefaultCustomerBudget = &litellmv1alpha1.DefaultCustomerBudgetSpec{}
+
+	config := GenerateProxyConfig(instance)
+
+	if ls, ok := config["litellm_settings"].(map[string]interface{}); ok {
+		if _, present := ls["max_end_user_budget"]; present {
+			t.Error("expected no max_end_user_budget when spec is empty")
+		}
+		if _, present := ls["max_end_user_budget_id"]; present {
+			t.Error("expected no max_end_user_budget_id when spec is empty")
+		}
+	}
+}

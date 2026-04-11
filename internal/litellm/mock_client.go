@@ -25,6 +25,7 @@ type MockClient struct {
 	MockUsers         *MockUserService
 	MockKeys          *MockKeyService
 	MockOrganizations *MockOrganizationService
+	MockCustomers     *MockCustomerService
 	MockHealth        *MockHealthService
 }
 
@@ -36,6 +37,7 @@ func NewMockClient() *MockClient {
 		MockUsers:         &MockUserService{},
 		MockKeys:          &MockKeyService{},
 		MockOrganizations: &MockOrganizationService{},
+		MockCustomers:     &MockCustomerService{},
 		MockHealth:        &MockHealthService{},
 	}
 }
@@ -45,6 +47,7 @@ func (m *MockClient) Teams() TeamService                 { return m.MockTeams }
 func (m *MockClient) Users() UserService                 { return m.MockUsers }
 func (m *MockClient) Keys() KeyService                   { return m.MockKeys }
 func (m *MockClient) Organizations() OrganizationService { return m.MockOrganizations }
+func (m *MockClient) Customers() CustomerService         { return m.MockCustomers }
 func (m *MockClient) Health() HealthService              { return m.MockHealth }
 
 // MockModelService records calls and returns configured responses.
@@ -305,6 +308,50 @@ func (m *MockOrganizationService) DeleteMember(ctx context.Context, organization
 		return m.DeleteMemberFunc(ctx, organizationID, userID)
 	}
 	return nil
+}
+
+// MockCustomerService records calls and returns configured responses.
+type MockCustomerService struct {
+	CreateFunc func(ctx context.Context, req CustomerCreateRequest) (*CustomerInfo, error)
+	UpdateFunc func(ctx context.Context, req CustomerUpdateRequest) (*CustomerInfo, error)
+	DeleteFunc func(ctx context.Context, customerID string) error
+	GetFunc    func(ctx context.Context, customerID string) (*CustomerInfo, error)
+	ListFunc   func(ctx context.Context) ([]CustomerInfo, error)
+}
+
+func (m *MockCustomerService) Create(ctx context.Context, req CustomerCreateRequest) (*CustomerInfo, error) {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(ctx, req)
+	}
+	return &CustomerInfo{UserID: req.UserID, Alias: req.Alias, MaxBudget: req.MaxBudget}, nil
+}
+
+func (m *MockCustomerService) Update(ctx context.Context, req CustomerUpdateRequest) (*CustomerInfo, error) {
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(ctx, req)
+	}
+	return &CustomerInfo{UserID: req.UserID, Alias: req.Alias, MaxBudget: req.MaxBudget}, nil
+}
+
+func (m *MockCustomerService) Delete(ctx context.Context, customerID string) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, customerID)
+	}
+	return nil
+}
+
+func (m *MockCustomerService) Get(ctx context.Context, customerID string) (*CustomerInfo, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, customerID)
+	}
+	return &CustomerInfo{UserID: customerID}, nil
+}
+
+func (m *MockCustomerService) List(ctx context.Context) ([]CustomerInfo, error) {
+	if m.ListFunc != nil {
+		return m.ListFunc(ctx)
+	}
+	return nil, nil
 }
 
 // MockHealthService records calls and returns configured responses.

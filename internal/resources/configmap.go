@@ -196,7 +196,30 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance) map[string]i
 		buildPassThroughEndpointsConfig(instance.Spec.PassThroughEndpoints, config)
 	}
 
+	// Default customer (end-user) budget
+	if instance.Spec.DefaultCustomerBudget != nil {
+		buildDefaultCustomerBudget(instance.Spec.DefaultCustomerBudget, config)
+	}
+
 	return config
+}
+
+// buildDefaultCustomerBudget writes default end-user budget settings into litellm_settings.
+func buildDefaultCustomerBudget(spec *litellmv1alpha1.DefaultCustomerBudgetSpec, config map[string]interface{}) {
+	if spec.MaxBudget == nil && spec.BudgetID == "" {
+		return
+	}
+	ls, ok := config["litellm_settings"].(map[string]interface{})
+	if !ok {
+		ls = map[string]interface{}{}
+		config["litellm_settings"] = ls
+	}
+	if spec.MaxBudget != nil {
+		ls["max_end_user_budget"] = *spec.MaxBudget
+	}
+	if spec.BudgetID != "" {
+		ls["max_end_user_budget_id"] = spec.BudgetID
+	}
 }
 
 // buildIPAllowlistConfig writes IP allowlist settings into general_settings.

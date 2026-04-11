@@ -37,6 +37,9 @@ resources:
 - litellmorganization_admin_role.yaml
 - litellmorganization_editor_role.yaml
 - litellmorganization_viewer_role.yaml
+- litellmcustomer_admin_role.yaml
+- litellmcustomer_editor_role.yaml
+- litellmcustomer_viewer_role.yaml
 - litellminstance_admin_role.yaml
 - litellminstance_editor_role.yaml
 - litellminstance_viewer_role.yaml

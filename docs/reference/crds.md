@@ -1,6 +1,6 @@
 # CRD Reference
 
-The LiteLLM Operator defines six Custom Resource Definitions in the `litellm.palena.ai/v1alpha1` API group.
+The LiteLLM Operator defines seven Custom Resource Definitions in the `litellm.palena.ai/v1alpha1` API group.
 
 ## Overview
 
@@ -11,6 +11,7 @@ The LiteLLM Operator defines six Custom Resource Definitions in the `litellm.pal
 | [LiteLLMModel](/reference/litellmmodel) | `lm` | Namespaced | Registers an AI model with the proxy |
 | [LiteLLMTeam](/reference/litellmteam) | `lt` | Namespaced | Creates a team with budget and member management |
 | [LiteLLMUser](/reference/litellmuser) | `lu` | Namespaced | Creates a user (non-SSO environments) |
+| [LiteLLMCustomer](/reference/litellmcustomer) | `lcust` | Namespaced | Creates an external end-user with budgets and rate limits |
 | [LiteLLMVirtualKey](/reference/litellmvirtualkey) | `lk` | Namespaced | Generates a scoped API key |
 
 ## Relationship Diagram
@@ -22,6 +23,7 @@ LiteLLMInstance
 ├── LiteLLMModel        (instanceRef → LiteLLMInstance)
 ├── LiteLLMTeam         (instanceRef → LiteLLMInstance)
 ├── LiteLLMUser         (instanceRef → LiteLLMInstance, teamRef → LiteLLMTeam)
+├── LiteLLMCustomer     (instanceRef → LiteLLMInstance) — external end-users
 └── LiteLLMVirtualKey   (instanceRef → LiteLLMInstance, teamRef → LiteLLMTeam, userRef → LiteLLMUser)
 ```
 
@@ -54,7 +56,7 @@ instanceRef:
 
 ```bash
 # List all resources
-kubectl get li,lo,lm,lt,lu,lk
+kubectl get li,lo,lm,lt,lu,lcust,lk
 
 # Watch a specific type
 kubectl get litellmmodels -w
