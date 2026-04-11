@@ -23,6 +23,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const testSecretKeyAPIKey = "api-key"
+
 func newTestInstance() *litellmv1alpha1.LiteLLMInstance {
 	return &litellmv1alpha1.LiteLLMInstance{
 		ObjectMeta: metav1.ObjectMeta{
@@ -197,7 +199,7 @@ func TestBuildDeployment_PassThroughSecretEnvVars(t *testing.T) {
 					Prefix:     "Bearer ",
 					SecretRef: litellmv1alpha1.SecretKeyRef{
 						Name: "bria-secret",
-						Key:  "api-key",
+						Key:  testSecretKeyAPIKey,
 					},
 				},
 			},
@@ -217,7 +219,7 @@ func TestBuildDeployment_PassThroughSecretEnvVars(t *testing.T) {
 			if env.ValueFrom.SecretKeyRef.Name != "bria-secret" {
 				t.Errorf("expected secret name 'bria-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
 			}
-			if env.ValueFrom.SecretKeyRef.Key != "api-key" {
+			if env.ValueFrom.SecretKeyRef.Key != testSecretKeyAPIKey {
 				t.Errorf("expected secret key 'api-key', got %q", env.ValueFrom.SecretKeyRef.Key)
 			}
 			break
@@ -269,7 +271,7 @@ func TestBuildDeployment_PassThroughMultipleEndpoints(t *testing.T) {
 			HeaderSecrets: []litellmv1alpha1.HeaderSecretRef{
 				{
 					HeaderName: "X-API-Key",
-					SecretRef:  litellmv1alpha1.SecretKeyRef{Name: "langfuse-secret", Key: "api-key"},
+					SecretRef:  litellmv1alpha1.SecretKeyRef{Name: "langfuse-secret", Key: testSecretKeyAPIKey},
 				},
 			},
 		},
@@ -301,7 +303,7 @@ func TestBuildDeployment_CachingQdrantAPIKey(t *testing.T) {
 			URL: "http://qdrant:6333",
 			APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{
 				Name: "qdrant-secret",
-				Key:  "api-key",
+				Key:  testSecretKeyAPIKey,
 			},
 		},
 	}
@@ -335,7 +337,7 @@ func TestBuildDeployment_CredentialEnvVars(t *testing.T) {
 				CredentialName: "openai-prod",
 				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{
 					Name: "openai-secret",
-					Key:  "api-key",
+					Key:  testSecretKeyAPIKey,
 				},
 			},
 		},
@@ -353,7 +355,7 @@ func TestBuildDeployment_CredentialEnvVars(t *testing.T) {
 			if env.ValueFrom.SecretKeyRef.Name != "openai-secret" {
 				t.Errorf("expected secret name 'openai-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
 			}
-			if env.ValueFrom.SecretKeyRef.Key != "api-key" {
+			if env.ValueFrom.SecretKeyRef.Key != testSecretKeyAPIKey {
 				t.Errorf("expected secret key 'api-key', got %q", env.ValueFrom.SecretKeyRef.Key)
 			}
 			break
@@ -437,7 +439,7 @@ func TestBuildDeployment_GuardrailEnvVarsFromSecretRef(t *testing.T) {
 				Mode:          "pre_call",
 				APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{
 					Name: "aporia-secret",
-					Key:  "api-key",
+					Key:  testSecretKeyAPIKey,
 				},
 			},
 		},
@@ -455,7 +457,7 @@ func TestBuildDeployment_GuardrailEnvVarsFromSecretRef(t *testing.T) {
 			if env.ValueFrom.SecretKeyRef.Name != "aporia-secret" {
 				t.Errorf("expected secret name 'aporia-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
 			}
-			if env.ValueFrom.SecretKeyRef.Key != "api-key" {
+			if env.ValueFrom.SecretKeyRef.Key != testSecretKeyAPIKey {
 				t.Errorf("expected secret key 'api-key', got %q", env.ValueFrom.SecretKeyRef.Key)
 			}
 			break

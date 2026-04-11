@@ -29,6 +29,16 @@ import (
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 )
 
+// Cache backend type and mode identifiers used by `proxy_server_config.yaml`.
+const (
+	cacheTypeRedis         = "redis"
+	cacheTypeRedisSemantic = "redis-semantic"
+	cacheTypeS3            = "s3"
+	cacheTypeGCS           = "gcs"
+	cacheTypeQdrant        = "qdrant"
+	cacheModeDefaultOff    = "default_off"
+)
+
 // BuildConfigMap creates the ConfigMap containing proxy_server_config.yaml.
 // credentials are the LiteLLMCredential CRs bound to this instance (used to
 // populate the `credential_list` section); pass nil if none. guardrails are
@@ -61,159 +71,183 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 		"model_list": []interface{}{},
 	}
 
-	// General settings
-	if instance.Spec.GeneralSettings != nil {
-		gs := map[string]interface{}{}
-		if instance.Spec.GeneralSettings.ProxyBatchWriteAt > 0 {
-			gs["proxy_batch_write_at"] = instance.Spec.GeneralSettings.ProxyBatchWriteAt
-		}
-		if instance.Spec.GeneralSettings.MasterKeyRequired != nil {
-			gs["master_key_required"] = *instance.Spec.GeneralSettings.MasterKeyRequired
-		}
-		if len(instance.Spec.GeneralSettings.AlertTypes) > 0 {
-			gs["alert_types"] = instance.Spec.GeneralSettings.AlertTypes
-		}
-		if instance.Spec.GeneralSettings.AllowUserAuth != nil {
-			gs["allow_user_auth"] = *instance.Spec.GeneralSettings.AllowUserAuth
-		}
-		if instance.Spec.GeneralSettings.MaxBudget != nil {
-			gs["max_budget"] = *instance.Spec.GeneralSettings.MaxBudget
-		}
-		if instance.Spec.GeneralSettings.BudgetDuration != "" {
-			gs["budget_duration"] = instance.Spec.GeneralSettings.BudgetDuration
-		}
-		if instance.Spec.GeneralSettings.GlobalMaxParallelRequests != nil {
-			gs["global_max_parallel_requests"] = *instance.Spec.GeneralSettings.GlobalMaxParallelRequests
-		}
-		if instance.Spec.GeneralSettings.BudgetReschedulerMinTime != nil {
-			gs["proxy_budget_rescheduler_min_time"] = *instance.Spec.GeneralSettings.BudgetReschedulerMinTime
-		}
-		if instance.Spec.GeneralSettings.BudgetReschedulerMaxTime != nil {
-			gs["proxy_budget_rescheduler_max_time"] = *instance.Spec.GeneralSettings.BudgetReschedulerMaxTime
-		}
-		if len(gs) > 0 {
-			config["general_settings"] = gs
-		}
+	if gs := buildGeneralSettings(instance.Spec.GeneralSettings); len(gs) > 0 {
+		config["general_settings"] = gs
 	}
 
-	// Router settings
-	if instance.Spec.RouterSettings != nil {
-		rs := map[string]interface{}{}
-		if instance.Spec.RouterSettings.RoutingStrategy != "" {
-			rs["routing_strategy"] = instance.Spec.RouterSettings.RoutingStrategy
-		}
-		if instance.Spec.RouterSettings.NumRetries != nil {
-			rs["num_retries"] = *instance.Spec.RouterSettings.NumRetries
-		}
-		if instance.Spec.RouterSettings.Timeout != nil {
-			rs["timeout"] = *instance.Spec.RouterSettings.Timeout
-		}
-		if instance.Spec.RouterSettings.AllowedFails != nil {
-			rs["allowed_fails"] = *instance.Spec.RouterSettings.AllowedFails
-		}
-		if instance.Spec.RouterSettings.CooldownTime != nil {
-			rs["cooldown_time"] = *instance.Spec.RouterSettings.CooldownTime
-		}
-		if len(instance.Spec.RouterSettings.RetryPolicy) > 0 {
-			rs["retry_policy"] = instance.Spec.RouterSettings.RetryPolicy
-		}
-		if len(instance.Spec.RouterSettings.ModelGroupRetryPolicy) > 0 {
-			rs["model_group_retry_policy"] = instance.Spec.RouterSettings.ModelGroupRetryPolicy
-		}
-		if instance.Spec.RouterSettings.EnableTagFiltering != nil && *instance.Spec.RouterSettings.EnableTagFiltering {
-			rs["enable_tag_filtering"] = true
-		}
-		if instance.Spec.RouterSettings.TagFilteringMatchAny != nil {
-			rs["tag_filtering_match_any"] = *instance.Spec.RouterSettings.TagFilteringMatchAny
-		}
-		if instance.Spec.RouterSettings.DefaultMaxParallelRequests != nil {
-			rs["default_max_parallel_requests"] = *instance.Spec.RouterSettings.DefaultMaxParallelRequests
-		}
-		if len(instance.Spec.RouterSettings.ProviderBudgetConfig) > 0 {
-			pbc := map[string]interface{}{}
-			for provider, budget := range instance.Spec.RouterSettings.ProviderBudgetConfig {
-				pbc[provider] = map[string]interface{}{
-					"budget_limit": budget.BudgetLimit,
-					"time_period":  budget.TimePeriod,
-				}
-			}
-			rs["provider_budget_config"] = pbc
-		}
-		if len(rs) > 0 {
-			config["router_settings"] = rs
-		}
+	if rs := buildRouterSettings(instance.Spec.RouterSettings); len(rs) > 0 {
+		config["router_settings"] = rs
 	}
 
-	// Fallback configuration
 	if instance.Spec.Fallbacks != nil {
 		buildFallbackConfig(instance.Spec.Fallbacks, config)
 	}
 
-	// SSO litellm_settings
 	if instance.Spec.SSO != nil && instance.Spec.SSO.Enabled {
-		ls := map[string]interface{}{}
-		if instance.Spec.SSO.DefaultUserParams != nil {
-			dup := mapDefaultUserParams(instance.Spec.SSO.DefaultUserParams)
-			ls["default_internal_user_params"] = dup
-		}
-		if instance.Spec.SSO.DefaultTeamParams != nil {
-			dtp := mapDefaultTeamParams(instance.Spec.SSO.DefaultTeamParams)
-			ls["default_team_params"] = dtp
-		}
-		if len(ls) > 0 {
-			config["litellm_settings"] = ls
-		}
-
-		if instance.Spec.SSO.TeamIDsJWTField != "" {
-			gs, ok := config["general_settings"].(map[string]interface{})
-			if !ok {
-				gs = map[string]interface{}{}
-				config["general_settings"] = gs
-			}
-			gs["litellm_jwtauth"] = map[string]interface{}{
-				"team_ids_jwt_field": instance.Spec.SSO.TeamIDsJWTField,
-			}
-		}
+		buildSSOConfig(instance.Spec.SSO, config)
 	}
 
-	// Callbacks
 	if instance.Spec.Callbacks != nil && len(instance.Spec.Callbacks.Types) > 0 {
-		ls, ok := config["litellm_settings"].(map[string]interface{})
-		if !ok {
-			ls = map[string]interface{}{}
-			config["litellm_settings"] = ls
-		}
+		ls := ensureLiteLLMSettings(config)
 		ls["success_callback"] = instance.Spec.Callbacks.Types
 		ls["failure_callback"] = instance.Spec.Callbacks.Types
 	}
 
-	// Caching
 	if instance.Spec.Caching != nil && instance.Spec.Caching.Enabled {
 		buildCachingConfig(instance, config)
 	}
 
-	// IP allowlist (enterprise)
 	if instance.Spec.Security != nil && instance.Spec.Security.IPAllowlist != nil && instance.Spec.Security.IPAllowlist.Enabled {
 		buildIPAllowlistConfig(instance.Spec.Security.IPAllowlist, config)
 	}
 
-	// Pass-through endpoints
 	if len(instance.Spec.PassThroughEndpoints) > 0 {
 		buildPassThroughEndpointsConfig(instance.Spec.PassThroughEndpoints, config)
 	}
 
-	// Default customer (end-user) budget
 	if instance.Spec.DefaultCustomerBudget != nil {
 		buildDefaultCustomerBudget(instance.Spec.DefaultCustomerBudget, config)
 	}
 
-	// credential_list — centralized provider credentials referenced by models.
 	buildCredentialList(instance, credentials, config)
-
-	// guardrails — content moderation / safety integrations.
 	buildGuardrailsList(instance, guardrails, config)
 
 	return config
+}
+
+// ensureLiteLLMSettings returns the litellm_settings map from config,
+// creating it if it doesn't already exist.
+func ensureLiteLLMSettings(config map[string]interface{}) map[string]interface{} {
+	ls, ok := config["litellm_settings"].(map[string]interface{})
+	if !ok {
+		ls = map[string]interface{}{}
+		config["litellm_settings"] = ls
+	}
+	return ls
+}
+
+// ensureGeneralSettings returns the general_settings map from config,
+// creating it if it doesn't already exist.
+func ensureGeneralSettings(config map[string]interface{}) map[string]interface{} {
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		gs = map[string]interface{}{}
+		config["general_settings"] = gs
+	}
+	return gs
+}
+
+// buildGeneralSettings serializes GeneralSettingsSpec into the map LiteLLM
+// expects under `general_settings`. Returns an empty map when no fields are set.
+func buildGeneralSettings(spec *litellmv1alpha1.GeneralSettingsSpec) map[string]interface{} {
+	gs := map[string]interface{}{}
+	if spec == nil {
+		return gs
+	}
+	if spec.ProxyBatchWriteAt > 0 {
+		gs["proxy_batch_write_at"] = spec.ProxyBatchWriteAt
+	}
+	if spec.MasterKeyRequired != nil {
+		gs["master_key_required"] = *spec.MasterKeyRequired
+	}
+	if len(spec.AlertTypes) > 0 {
+		gs["alert_types"] = spec.AlertTypes
+	}
+	if spec.AllowUserAuth != nil {
+		gs["allow_user_auth"] = *spec.AllowUserAuth
+	}
+	if spec.MaxBudget != nil {
+		gs["max_budget"] = *spec.MaxBudget
+	}
+	if spec.BudgetDuration != "" {
+		gs["budget_duration"] = spec.BudgetDuration
+	}
+	if spec.GlobalMaxParallelRequests != nil {
+		gs["global_max_parallel_requests"] = *spec.GlobalMaxParallelRequests
+	}
+	if spec.BudgetReschedulerMinTime != nil {
+		gs["proxy_budget_rescheduler_min_time"] = *spec.BudgetReschedulerMinTime
+	}
+	if spec.BudgetReschedulerMaxTime != nil {
+		gs["proxy_budget_rescheduler_max_time"] = *spec.BudgetReschedulerMaxTime
+	}
+	return gs
+}
+
+// buildRouterSettings serializes RouterSettingsSpec into the map LiteLLM
+// expects under `router_settings`. Returns an empty map when no fields are set.
+func buildRouterSettings(spec *litellmv1alpha1.RouterSettingsSpec) map[string]interface{} {
+	rs := map[string]interface{}{}
+	if spec == nil {
+		return rs
+	}
+	if spec.RoutingStrategy != "" {
+		rs["routing_strategy"] = spec.RoutingStrategy
+	}
+	if spec.NumRetries != nil {
+		rs["num_retries"] = *spec.NumRetries
+	}
+	if spec.Timeout != nil {
+		rs["timeout"] = *spec.Timeout
+	}
+	if spec.AllowedFails != nil {
+		rs["allowed_fails"] = *spec.AllowedFails
+	}
+	if spec.CooldownTime != nil {
+		rs["cooldown_time"] = *spec.CooldownTime
+	}
+	if len(spec.RetryPolicy) > 0 {
+		rs["retry_policy"] = spec.RetryPolicy
+	}
+	if len(spec.ModelGroupRetryPolicy) > 0 {
+		rs["model_group_retry_policy"] = spec.ModelGroupRetryPolicy
+	}
+	if spec.EnableTagFiltering != nil && *spec.EnableTagFiltering {
+		rs["enable_tag_filtering"] = true
+	}
+	if spec.TagFilteringMatchAny != nil {
+		rs["tag_filtering_match_any"] = *spec.TagFilteringMatchAny
+	}
+	if spec.DefaultMaxParallelRequests != nil {
+		rs["default_max_parallel_requests"] = *spec.DefaultMaxParallelRequests
+	}
+	if len(spec.ProviderBudgetConfig) > 0 {
+		pbc := map[string]interface{}{}
+		for provider, budget := range spec.ProviderBudgetConfig {
+			pbc[provider] = map[string]interface{}{
+				"budget_limit": budget.BudgetLimit,
+				"time_period":  budget.TimePeriod,
+			}
+		}
+		rs["provider_budget_config"] = pbc
+	}
+	return rs
+}
+
+// buildSSOConfig writes SSO-derived settings into litellm_settings and
+// general_settings (for litellm_jwtauth).
+func buildSSOConfig(sso *litellmv1alpha1.SSOSpec, config map[string]interface{}) {
+	ls := map[string]interface{}{}
+	if sso.DefaultUserParams != nil {
+		ls["default_internal_user_params"] = mapDefaultUserParams(sso.DefaultUserParams)
+	}
+	if sso.DefaultTeamParams != nil {
+		ls["default_team_params"] = mapDefaultTeamParams(sso.DefaultTeamParams)
+	}
+	if len(ls) > 0 {
+		// Merge into existing litellm_settings if present.
+		existing := ensureLiteLLMSettings(config)
+		for k, v := range ls {
+			existing[k] = v
+		}
+	}
+
+	if sso.TeamIDsJWTField != "" {
+		gs := ensureGeneralSettings(config)
+		gs["litellm_jwtauth"] = map[string]interface{}{
+			"team_ids_jwt_field": sso.TeamIDsJWTField,
+		}
+	}
 }
 
 // buildCredentialList serializes LiteLLMCredential CRs bound to this instance
@@ -443,15 +477,15 @@ func buildCachingConfig(instance *litellmv1alpha1.LiteLLMInstance, config map[st
 
 	cacheType := caching.Type
 	if cacheType == "" {
-		cacheType = "redis"
+		cacheType = cacheTypeRedis
 	}
 	params["type"] = cacheType
 
 	// Backend-specific config
 	switch cacheType {
-	case "redis", "redis-semantic":
+	case cacheTypeRedis, cacheTypeRedisSemantic:
 		buildRedisCacheParams(instance, params)
-	case "s3":
+	case cacheTypeS3:
 		if caching.S3 != nil {
 			params["s3_bucket_name"] = caching.S3.BucketName
 			if caching.S3.Region != "" {
@@ -462,14 +496,14 @@ func buildCachingConfig(instance *litellmv1alpha1.LiteLLMInstance, config map[st
 				params["s3_aws_secret_access_key"] = "os.environ/CACHE_S3_SECRET_ACCESS_KEY"
 			}
 		}
-	case "gcs":
+	case cacheTypeGCS:
 		if caching.GCS != nil {
 			params["s3_bucket_name"] = caching.GCS.BucketName // LiteLLM reuses s3_bucket_name for GCS
 			if caching.GCS.CredentialsSecretRef != nil {
 				params["s3_aws_access_key_id"] = "os.environ/CACHE_GCS_SERVICE_ACCOUNT_JSON"
 			}
 		}
-	case "qdrant":
+	case cacheTypeQdrant:
 		if caching.Qdrant != nil {
 			params["qdrant_semantic_cache_embedding_model"] = "text-embedding-ada-002"
 			params["qdrant_url"] = caching.Qdrant.URL
@@ -491,8 +525,8 @@ func buildCachingConfig(instance *litellmv1alpha1.LiteLLMInstance, config map[st
 	if len(caching.SupportedCallTypes) > 0 {
 		params["supported_call_types"] = caching.SupportedCallTypes
 	}
-	if caching.Mode == "default_off" {
-		params["mode"] = "default_off"
+	if caching.Mode == cacheModeDefaultOff {
+		params["mode"] = cacheModeDefaultOff
 	}
 
 	ls["cache_params"] = params

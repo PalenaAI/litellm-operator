@@ -31,6 +31,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+const (
+	testPerInstanceLicenseSecret = "my-gateway-license"
+	testInstanceName             = "my-gateway"
+)
+
 func TestReconcileLicense_PerInstanceSecret(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
@@ -38,7 +43,7 @@ func TestReconcileLicense_PerInstanceSecret(t *testing.T) {
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "my-gateway-license",
+			Name:      testPerInstanceLicenseSecret,
 			Namespace: "default",
 		},
 		Data: map[string][]byte{
@@ -49,19 +54,19 @@ func TestReconcileLicense_PerInstanceSecret(t *testing.T) {
 	r := &LiteLLMInstanceReconciler{Client: client, Scheme: scheme}
 
 	instance := &litellmv1alpha1.LiteLLMInstance{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-gateway", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testInstanceName, Namespace: "default"},
 	}
 
 	name := r.reconcileLicense(context.Background(), instance)
 
-	if name != "my-gateway-license" {
-		t.Errorf("expected 'my-gateway-license', got %q", name)
+	if name != testPerInstanceLicenseSecret {
+		t.Errorf("expected %q, got %q", testPerInstanceLicenseSecret, name)
 	}
 	if instance.Status.License == nil || !instance.Status.License.Active {
 		t.Error("expected license status to be active")
 	}
-	if instance.Status.License.SecretName != "my-gateway-license" {
-		t.Errorf("expected secretName 'my-gateway-license', got %q", instance.Status.License.SecretName)
+	if instance.Status.License.SecretName != testPerInstanceLicenseSecret {
+		t.Errorf("expected secretName %q, got %q", testPerInstanceLicenseSecret, instance.Status.License.SecretName)
 	}
 }
 
@@ -102,7 +107,7 @@ func TestReconcileLicense_PerInstanceTakesPrecedence(t *testing.T) {
 	_ = litellmv1alpha1.AddToScheme(scheme)
 
 	perInstance := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-gateway-license", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testPerInstanceLicenseSecret, Namespace: "default"},
 		Data:       map[string][]byte{"license-key": []byte("per-instance")},
 	}
 	namespaceWide := &corev1.Secret{
@@ -113,13 +118,13 @@ func TestReconcileLicense_PerInstanceTakesPrecedence(t *testing.T) {
 	r := &LiteLLMInstanceReconciler{Client: client, Scheme: scheme}
 
 	instance := &litellmv1alpha1.LiteLLMInstance{
-		ObjectMeta: metav1.ObjectMeta{Name: "my-gateway", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: testInstanceName, Namespace: "default"},
 	}
 
 	name := r.reconcileLicense(context.Background(), instance)
 
-	if name != "my-gateway-license" {
-		t.Errorf("expected per-instance secret 'my-gateway-license', got %q", name)
+	if name != testPerInstanceLicenseSecret {
+		t.Errorf("expected per-instance secret %q, got %q", testPerInstanceLicenseSecret, name)
 	}
 }
 
@@ -199,7 +204,7 @@ func TestFindInstanceForLicenseSecret_NamespaceWide(t *testing.T) {
 	}
 	names := map[string]bool{}
 	for _, req := range requests {
-		names[req.NamespacedName.Name] = true
+		names[req.Name] = true
 	}
 	if !names["inst-1"] || !names["inst-2"] {
 		t.Errorf("expected inst-1 and inst-2, got %v", names)

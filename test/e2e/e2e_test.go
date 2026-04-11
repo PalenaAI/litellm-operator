@@ -821,13 +821,13 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 					"-n", testNamespace, "-o", `jsonpath={.data.proxy_server_config\.yaml}`)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("guardrail_name: " + guardrailAlias),
+				g.Expect(output).To(ContainSubstring("guardrail_name: "+guardrailAlias),
 					"rendered config should contain the guardrail_name")
 				g.Expect(output).To(ContainSubstring("guardrail: aporia"),
 					"rendered config should contain the provider")
 				g.Expect(output).To(ContainSubstring("mode: pre_call"),
 					"rendered config should contain the execution mode")
-				g.Expect(output).To(ContainSubstring("os.environ/" + guardrailEnvVar),
+				g.Expect(output).To(ContainSubstring("os.environ/"+guardrailEnvVar),
 					"rendered config should reference the api_key via os.environ/…")
 			}
 			Eventually(verifyConfigMap, 2*time.Minute, 5*time.Second).Should(Succeed())
@@ -895,9 +895,9 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 					"-n", testNamespace, "-o", `jsonpath={.data.proxy_server_config\.yaml}`)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).NotTo(ContainSubstring("guardrail_name: " + guardrailAlias),
+				g.Expect(output).NotTo(ContainSubstring("guardrail_name: "+guardrailAlias),
 					"guardrail entry should be removed from rendered config")
-				g.Expect(output).NotTo(ContainSubstring("os.environ/" + guardrailEnvVar),
+				g.Expect(output).NotTo(ContainSubstring("os.environ/"+guardrailEnvVar),
 					"guardrail env var reference should be removed from rendered config")
 			}
 			Eventually(verifyConfigMapCleaned, 2*time.Minute, 5*time.Second).Should(Succeed())

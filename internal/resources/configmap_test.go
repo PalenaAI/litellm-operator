@@ -270,7 +270,7 @@ func TestGenerateProxyConfig_CachingEnabledFalse(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
 		Enabled: false,
-		Type:    "redis",
+		Type:    cacheTypeRedis,
 	}
 
 	config := GenerateProxyConfig(instance, nil, nil)
@@ -286,11 +286,11 @@ func TestGenerateProxyConfig_CachingRedis(t *testing.T) {
 	port := 6380
 	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
 		Enabled:            true,
-		Type:               "redis",
+		Type:               cacheTypeRedis,
 		Namespace:          "my-ns",
 		TTL:                &ttl,
 		SupportedCallTypes: []string{"acompletion", "aembedding"},
-		Mode:               "default_off",
+		Mode:               cacheModeDefaultOff,
 		Redis: &litellmv1alpha1.CacheRedisSpec{
 			Host: "redis.example.com",
 			Port: &port,
@@ -315,7 +315,7 @@ func TestGenerateProxyConfig_CachingRedis(t *testing.T) {
 	if !ok {
 		t.Fatal("expected cache_params to be present")
 	}
-	if params["type"] != "redis" {
+	if params["type"] != cacheTypeRedis {
 		t.Errorf("expected type=redis, got %v", params["type"])
 	}
 	if params["host"] != "redis.example.com" {
@@ -343,7 +343,7 @@ func TestGenerateProxyConfig_CachingRedis(t *testing.T) {
 	if callTypes[0] != "acompletion" || callTypes[1] != "aembedding" {
 		t.Errorf("unexpected supported_call_types: %v", callTypes)
 	}
-	if params["mode"] != "default_off" {
+	if params["mode"] != cacheModeDefaultOff {
 		t.Errorf("expected mode=default_off, got %v", params["mode"])
 	}
 }
@@ -361,7 +361,7 @@ func TestGenerateProxyConfig_CachingRedisReusesInstanceRedis(t *testing.T) {
 	}
 	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
 		Enabled: true,
-		Type:    "redis",
+		Type:    cacheTypeRedis,
 		// No Redis block — should reuse instance Redis
 	}
 
@@ -419,7 +419,7 @@ func TestGenerateProxyConfig_CachingQdrant(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Caching = &litellmv1alpha1.CachingSpec{
 		Enabled: true,
-		Type:    "qdrant",
+		Type:    cacheTypeQdrant,
 		Qdrant: &litellmv1alpha1.CacheQdrantSpec{
 			URL:            "http://qdrant:6333",
 			CollectionName: "llm-cache",
@@ -435,7 +435,7 @@ func TestGenerateProxyConfig_CachingQdrant(t *testing.T) {
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
 
-	if params["type"] != "qdrant" {
+	if params["type"] != cacheTypeQdrant {
 		t.Errorf("expected type=qdrant, got %v", params["type"])
 	}
 	if params["qdrant_url"] != "http://qdrant:6333" {
