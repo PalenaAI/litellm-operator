@@ -411,7 +411,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.9.0
-    createdAt: "2026-04-11T19:16:10Z"
+    createdAt: "2026-04-13T15:45:58Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -434,7 +434,7 @@ spec:
         LiteLLMCustomer is the Schema for the litellmcustomers API.
         A Customer represents an external end-user of the AI gateway with its own
         spending, rate, and access policies.
-      displayName: Lite LLMCustomer
+      displayName: LiteLLM Customer
       kind: LiteLLMCustomer
       name: litellmcustomers.litellm.palena.ai
       version: v1alpha1
@@ -445,12 +445,12 @@ spec:
       name: litellmguardrails.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMInstance is the Schema for the litellminstances API.
-      displayName: Lite LLMInstance
+      displayName: LiteLLM Instance
       kind: LiteLLMInstance
       name: litellminstances.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMModel is the Schema for the litellmmodels API.
-      displayName: Lite LLMModel
+      displayName: LiteLLM Model
       kind: LiteLLMModel
       name: litellmmodels.litellm.palena.ai
       version: v1alpha1
@@ -461,17 +461,17 @@ spec:
       name: litellmorganizations.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMTeam is the Schema for the litellmteams API.
-      displayName: Lite LLMTeam
+      displayName: LiteLLM Team
       kind: LiteLLMTeam
       name: litellmteams.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMUser is the Schema for the litellmusers API.
-      displayName: Lite LLMUser
+      displayName: LiteLLM User
       kind: LiteLLMUser
       name: litellmusers.litellm.palena.ai
       version: v1alpha1
     - description: LiteLLMVirtualKey is the Schema for the litellmvirtualkeys API.
-      displayName: Lite LLMVirtual Key
+      displayName: LiteLLM Virtual Key
       kind: LiteLLMVirtualKey
       name: litellmvirtualkeys.litellm.palena.ai
       version: v1alpha1
@@ -823,7 +823,7 @@ spec:
   - name: LiteLLM
     url: https://www.litellm.ai/
   maintainers:
-  - email: team@bitkaio.com
+  - email: opensource@bitkaio.com
     name: bitkaio LLC
   maturity: alpha
   minKubeVersion: 1.28.0

@@ -124,6 +124,7 @@ type LiteLLMVirtualKeyStatus struct {
 // +kubebuilder:printcolumn:name="Active",type="boolean",JSONPath=".status.isActive"
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Virtual Key"
 
 // LiteLLMVirtualKey is the Schema for the litellmvirtualkeys API.
 type LiteLLMVirtualKey struct {

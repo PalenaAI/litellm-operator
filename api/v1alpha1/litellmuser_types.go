@@ -133,6 +133,7 @@ type ResolvedTeamMembership struct {
 // +kubebuilder:printcolumn:name="Role",type="string",JSONPath=".spec.userRole"
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM User"
 
 // LiteLLMUser is the Schema for the litellmusers API.
 type LiteLLMUser struct {

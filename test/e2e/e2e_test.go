@@ -58,7 +58,7 @@ const (
 	guardrailName    = "e2e-guardrail"
 	guardrailAlias   = "e2e-pii-detector"
 	guardrailEnvVar  = "GUARDRAIL_E2E_PII_DETECTOR_API_KEY"
-	litellmTestImage = "ghcr.io/berriai/litellm:main-v1.60.0"
+	litellmTestImage = "ghcr.io/berriai/litellm:main-latest"
 )
 
 const postgresYAML = `
@@ -132,8 +132,8 @@ metadata:
 spec:
   image:
     repository: ghcr.io/berriai/litellm
-    tag: main-v1.60.0
-    pullPolicy: IfNotPresent
+    tag: main-latest
+    pullPolicy: Always
   replicas: 1
   masterKey:
     autoGenerate: true

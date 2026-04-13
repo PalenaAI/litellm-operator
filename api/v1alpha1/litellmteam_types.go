@@ -160,6 +160,7 @@ type TeamMemberStatus struct {
 // +kubebuilder:printcolumn:name="MemberMgmt",type="string",JSONPath=".spec.memberManagement"
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Team"
 
 // LiteLLMTeam is the Schema for the litellmteams API.
 type LiteLLMTeam struct {

@@ -314,6 +314,15 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMGuardrail")
 		os.Exit(1)
 	}
+	if err := (&controller.ConfigSyncReconciler{
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("configsync-controller"),
+		LiteLLMClientFactory: clientFactory,
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "ConfigSync")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	if metricsCertWatcher != nil {

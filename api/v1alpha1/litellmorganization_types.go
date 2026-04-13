@@ -101,6 +101,7 @@ type LiteLLMOrganizationStatus struct {
 // +kubebuilder:printcolumn:name="Members",type="integer",JSONPath=".status.memberCount"
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Organization"
 
 // LiteLLMOrganization is the Schema for the litellmorganizations API.
 type LiteLLMOrganization struct {

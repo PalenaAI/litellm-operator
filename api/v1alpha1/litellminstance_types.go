@@ -1175,6 +1175,12 @@ type ConfigSyncStatus struct {
 	// Count of synced keys.
 	SyncedKeys int `json:"syncedKeys,omitempty"`
 
+	// Count of synced organizations.
+	SyncedOrganizations int `json:"syncedOrganizations,omitempty"`
+
+	// Count of synced customers.
+	SyncedCustomers int `json:"syncedCustomers,omitempty"`
+
 	// Count of unmanaged models.
 	UnmanagedModels int `json:"unmanagedModels,omitempty"`
 
@@ -1186,6 +1192,12 @@ type ConfigSyncStatus struct {
 
 	// Count of unmanaged keys.
 	UnmanagedKeys int `json:"unmanagedKeys,omitempty"`
+
+	// Count of unmanaged organizations.
+	UnmanagedOrganizations int `json:"unmanagedOrganizations,omitempty"`
+
+	// Count of unmanaged customers.
+	UnmanagedCustomers int `json:"unmanagedCustomers,omitempty"`
 
 	// Sync errors.
 	// +optional
@@ -1217,6 +1229,7 @@ type SCIMStatus struct {
 // +kubebuilder:printcolumn:name="Endpoint",type="string",JSONPath=".status.endpoint"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Instance"
 
 // LiteLLMInstance is the Schema for the litellminstances API.
 type LiteLLMInstance struct {

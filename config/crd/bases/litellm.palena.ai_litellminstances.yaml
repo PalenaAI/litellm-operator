@@ -1844,11 +1844,17 @@ spec:
                     items:
                       type: string
                     type: array
+                  syncedCustomers:
+                    description: Count of synced customers.
+                    type: integer
                   syncedKeys:
                     description: Count of synced keys.
                     type: integer
                   syncedModels:
                     description: Count of synced models.
+                    type: integer
+                  syncedOrganizations:
+                    description: Count of synced organizations.
                     type: integer
                   syncedTeams:
                     description: Count of synced teams.
@@ -1856,11 +1862,17 @@ spec:
                   syncedUsers:
                     description: Count of synced users.
                     type: integer
+                  unmanagedCustomers:
+                    description: Count of unmanaged customers.
+                    type: integer
                   unmanagedKeys:
                     description: Count of unmanaged keys.
                     type: integer
                   unmanagedModels:
                     description: Count of unmanaged models.
+                    type: integer
+                  unmanagedOrganizations:
+                    description: Count of unmanaged organizations.
                     type: integer
                   unmanagedTeams:
                     description: Count of unmanaged teams.

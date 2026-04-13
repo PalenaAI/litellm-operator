@@ -136,6 +136,7 @@ type LiteLLMModelStatus struct {
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Health",type="string",JSONPath=".status.health"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Model"
 
 // LiteLLMModel is the Schema for the litellmmodels API.
 type LiteLLMModel struct {

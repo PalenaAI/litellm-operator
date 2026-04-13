@@ -133,6 +133,7 @@ type LiteLLMCustomerStatus struct {
 // +kubebuilder:printcolumn:name="Spend",type="string",JSONPath=".status.currentSpend"
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Customer"
 
 // LiteLLMCustomer is the Schema for the litellmcustomers API.
 // A Customer represents an external end-user of the AI gateway with its own

@@ -78,6 +78,7 @@ type LiteLLMCredentialStatus struct {
 // +kubebuilder:printcolumn:name="Configured",type="boolean",JSONPath=".status.configured"
 // +kubebuilder:printcolumn:name="Models",type="integer",JSONPath=".status.referencedByModels"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Credential"
 
 // LiteLLMCredential is the Schema for the litellmcredentials API.
 type LiteLLMCredential struct {

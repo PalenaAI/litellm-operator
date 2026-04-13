@@ -23,13 +23,17 @@ Config Sync Loop
 │   ├── List all LiteLLMModel CRs
 │   ├── List all LiteLLMTeam CRs
 │   ├── List all LiteLLMUser CRs
-│   └── List all LiteLLMVirtualKey CRs
+│   ├── List all LiteLLMVirtualKey CRs
+│   ├── List all LiteLLMOrganization CRs
+│   └── List all LiteLLMCustomer CRs
 │
 ├── 2. Fetch actual state from LiteLLM API
 │   ├── GET /model/info
 │   ├── GET /team/list
 │   ├── GET /user/list
-│   └── GET /key/list
+│   ├── GET /key/list
+│   ├── GET /organization/list
+│   └── GET /customer/list
 │
 ├── 3. Compute diff
 │   ├── In CRD but not in API → create
@@ -116,8 +120,12 @@ status:
     syncedTeams: 3
     syncedUsers: 10
     syncedKeys: 8
+    syncedOrganizations: 2
+    syncedCustomers: 15
     unmanagedModels: 2
     unmanagedTeams: 0
     unmanagedUsers: 5
     unmanagedKeys: 1
+    unmanagedOrganizations: 0
+    unmanagedCustomers: 3
 ```

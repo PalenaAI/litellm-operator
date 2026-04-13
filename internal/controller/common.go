@@ -79,6 +79,15 @@ const (
 	EventReasonHealthRestored     = "HealthRestored"
 	EventReasonRedisDisconnected  = "RedisDisconnected"
 	EventReasonRedisConnected     = "RedisConnected"
+
+	// Config sync event reasons.
+	EventReasonConfigSyncCompleted       = "ConfigSyncCompleted"
+	EventReasonConfigSyncFailed          = "ConfigSyncFailed"
+	EventReasonConfigSyncDriftDetected   = "ConfigSyncDriftDetected"
+	EventReasonConfigSyncDriftRemediated = "ConfigSyncDriftRemediated"
+	EventReasonConfigSyncPruned          = "ConfigSyncPruned"
+	EventReasonConfigSyncRecreated       = "ConfigSyncRecreated"
+	EventReasonConfigSyncUnmanaged       = "ConfigSyncUnmanaged"
 )
 
 // emitEvent records a Kubernetes Event on an object if the recorder is set.

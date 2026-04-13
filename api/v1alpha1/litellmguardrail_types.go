@@ -106,6 +106,7 @@ type LiteLLMGuardrailStatus struct {
 // +kubebuilder:printcolumn:name="Instance",type="string",JSONPath=".spec.instanceRef.name"
 // +kubebuilder:printcolumn:name="Configured",type="boolean",JSONPath=".status.configured"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Guardrail"
 
 // LiteLLMGuardrail is the Schema for the litellmguardrails API.
 //
