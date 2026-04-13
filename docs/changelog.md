@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-13
+
 ### Added
 
 - **Admin UI management** — new `spec.adminUI` field on `LiteLLMInstance` configures the built-in Admin UI. `disabled` disables the UI entirely via the `DISABLE_ADMIN_UI` environment variable. `adminOnly` restricts UI access to proxy admins via `ui_access_mode: "admin_only"` in `general_settings`. `storeModelInDB` enables dynamic model management from the UI without proxy restart via `store_model_in_db`. `defaultTeamDisabled` prevents personal key creation via `default_team_disabled`. `apiDocBaseURL`, `docsURL`, and `rootRedirectURL` customize API docs and root redirect behavior via environment variables. `logoURL` sets a custom logo for the Admin UI via `UI_LOGO_PATH`. `emailLogoURL` and `emailSupportContact` customize email notification branding via `EMAIL_LOGO_URL` and `EMAIL_SUPPORT_CONTACT`. `colorThemeConfigMapRef` mounts a ConfigMap containing `enterprise_colors.json` into the container for custom UI color themes (Tremor color palette). All settings are optional — when `adminUI` is omitted, LiteLLM uses its defaults.
@@ -105,7 +107,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows for tests, linting, and releases
 - OLM bundle and catalog manifests for OperatorHub distribution
 
-[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.7.0...v0.9.0
 [0.7.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.5.0...v0.6.0
