@@ -2003,3 +2003,177 @@ func TestGenerateProxyConfig_RBACWithExistingGeneralSettings(t *testing.T) {
 		t.Errorf("unexpected admin_only_routes: %v", routes)
 	}
 }
+
+func TestGenerateProxyConfig_LoggingAuditLogs(t *testing.T) {
+	instance := newTestInstance()
+	retDays := 90
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		AuditLogs: &litellmv1alpha1.AuditLogSpec{
+			Enabled:       true,
+			RetentionDays: &retDays,
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["store_audit_logs"] != true {
+		t.Errorf("expected store_audit_logs=true, got %v", gs["store_audit_logs"])
+	}
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["audit_log_retention_days"] != 90 {
+		t.Errorf("expected audit_log_retention_days=90, got %v", ls["audit_log_retention_days"])
+	}
+}
+
+func TestGenerateProxyConfig_LoggingAuditLogsNoRetention(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		AuditLogs: &litellmv1alpha1.AuditLogSpec{
+			Enabled: true,
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["store_audit_logs"] != true {
+		t.Errorf("expected store_audit_logs=true, got %v", gs["store_audit_logs"])
+	}
+	// No litellm_settings.audit_log_retention_days when not set
+	if _, ok := config["litellm_settings"]; ok {
+		ls := config["litellm_settings"].(map[string]interface{})
+		if _, has := ls["audit_log_retention_days"]; has {
+			t.Error("audit_log_retention_days should not be set when RetentionDays is nil")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_LoggingAuditLogsDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		AuditLogs: &litellmv1alpha1.AuditLogSpec{
+			Enabled: false,
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
+		if _, has := gs["store_audit_logs"]; has {
+			t.Error("store_audit_logs should not be set when audit logs are disabled")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_LoggingTurnOffMessageLogging(t *testing.T) {
+	instance := newTestInstance()
+	turnOff := true
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		TurnOffMessageLogging: &turnOff,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["turn_off_message_logging"] != true {
+		t.Errorf("expected turn_off_message_logging=true, got %v", ls["turn_off_message_logging"])
+	}
+}
+
+func TestGenerateProxyConfig_LoggingRedactUserAPIKeyInfo(t *testing.T) {
+	instance := newTestInstance()
+	redact := true
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		RedactUserAPIKeyInfo: &redact,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["redact_user_api_key_info"] != true {
+		t.Errorf("expected redact_user_api_key_info=true, got %v", ls["redact_user_api_key_info"])
+	}
+}
+
+func TestGenerateProxyConfig_LoggingSpendLogRetention(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		SpendLogRetention: &litellmv1alpha1.SpendLogRetentionSpec{
+			MaxRetentionPeriod: "90d",
+			CleanupInterval:    "1d",
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["maximum_spend_logs_retention_period"] != "90d" {
+		t.Errorf("expected maximum_spend_logs_retention_period=90d, got %v", gs["maximum_spend_logs_retention_period"])
+	}
+	if gs["maximum_spend_logs_retention_interval"] != "1d" {
+		t.Errorf("expected maximum_spend_logs_retention_interval=1d, got %v", gs["maximum_spend_logs_retention_interval"])
+	}
+}
+
+func TestGenerateProxyConfig_LoggingAllSettings(t *testing.T) {
+	instance := newTestInstance()
+	turnOff := true
+	redact := true
+	retDays := 30
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		AuditLogs: &litellmv1alpha1.AuditLogSpec{
+			Enabled:       true,
+			RetentionDays: &retDays,
+		},
+		TurnOffMessageLogging: &turnOff,
+		RedactUserAPIKeyInfo:  &redact,
+		SpendLogRetention: &litellmv1alpha1.SpendLogRetentionSpec{
+			MaxRetentionPeriod: "1y",
+			CleanupInterval:    "1h",
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["store_audit_logs"] != true {
+		t.Errorf("expected store_audit_logs=true")
+	}
+	if gs["maximum_spend_logs_retention_period"] != "1y" {
+		t.Errorf("expected retention_period=1y, got %v", gs["maximum_spend_logs_retention_period"])
+	}
+	if gs["maximum_spend_logs_retention_interval"] != "1h" {
+		t.Errorf("expected retention_interval=1h, got %v", gs["maximum_spend_logs_retention_interval"])
+	}
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["audit_log_retention_days"] != 30 {
+		t.Errorf("expected audit_log_retention_days=30, got %v", ls["audit_log_retention_days"])
+	}
+	if ls["turn_off_message_logging"] != true {
+		t.Errorf("expected turn_off_message_logging=true")
+	}
+	if ls["redact_user_api_key_info"] != true {
+		t.Errorf("expected redact_user_api_key_info=true")
+	}
+}
+
+func TestGenerateProxyConfig_LoggingNil(t *testing.T) {
+	instance := newTestInstance()
+	// No Logging spec set — should not produce any logging settings
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
+		if _, has := gs["store_audit_logs"]; has {
+			t.Error("store_audit_logs should not be set when Logging is nil")
+		}
+	}
+	if ls, ok := config["litellm_settings"].(map[string]interface{}); ok {
+		for _, key := range []string{"turn_off_message_logging", "redact_user_api_key_info", "audit_log_retention_days"} {
+			if _, has := ls[key]; has {
+				t.Errorf("%s should not be set when Logging is nil", key)
+			}
+		}
+	}
+}

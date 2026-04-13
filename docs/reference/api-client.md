@@ -45,6 +45,8 @@ type ClientFactory func(endpoint, masterKey string) Client
 | `AddMember` | POST | `/team/member_add` | Add a team member |
 | `RemoveMember` | POST | `/team/member_delete` | Remove a team member |
 | `ListMembers` | GET | `/team/info?team_id=` | List team members |
+| `SetCallback` | POST | `/team/{team_id}/callback` | Set a per-team logging callback (enterprise) |
+| `DisableLogging` | POST | `/team/{team_id}/disable_logging` | Disable all logging for a team (enterprise) |
 
 ### UserService
 

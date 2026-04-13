@@ -1,0 +1,49 @@
+# Example: Per-team logging with Langfuse (enterprise feature)
+# Routes all logs for this team to a dedicated Langfuse project.
+# Requires a LiteLLM Enterprise license.
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: engineering-with-logging
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  teamAlias: engineering
+  models:
+    - gpt-4o
+    - claude-4-sonnet
+  logging:
+    callbacks:
+      - name: langfuse
+        type: success_and_failure
+        credentialsSecretRef:
+          name: engineering-langfuse-credentials
+        config:
+          langfuse_host: "https://cloud.langfuse.com"
+---
+# Secret containing Langfuse credentials for the engineering team
+apiVersion: v1
+kind: Secret
+metadata:
+  name: engineering-langfuse-credentials
+stringData:
+  langfuse_public_key: "pk-lf-engineering-project"
+  langfuse_secret: "sk-lf-engineering-project"
+---
+# Example: GDPR — disable all logging for a team
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: gdpr-team
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  teamAlias: gdpr-compliant
+  logging:
+    disabled: true

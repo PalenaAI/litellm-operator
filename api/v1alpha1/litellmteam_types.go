@@ -91,6 +91,51 @@ type LiteLLMTeamSpec struct {
 	// Requires a LiteLLM Enterprise license.
 	// +optional
 	Guardrails []string `json:"guardrails,omitempty"`
+
+	// Logging configuration for this team (enterprise).
+	// Enables per-team logging destinations and GDPR logging disable.
+	// +optional
+	Logging *TeamLoggingSpec `json:"logging,omitempty"`
+}
+
+// TeamLoggingSpec configures per-team logging behavior.
+type TeamLoggingSpec struct {
+	// Disable all logging for this team (GDPR compliance).
+	// When true, no request/response data is logged for this team's requests.
+	// +optional
+	Disabled bool `json:"disabled,omitempty"`
+
+	// Team-specific logging callbacks.
+	// Each callback routes logs to a separate provider instance (e.g., a
+	// dedicated Langfuse project for this team).
+	// +optional
+	Callbacks []TeamCallback `json:"callbacks,omitempty"`
+}
+
+// TeamCallback defines a per-team logging callback destination.
+type TeamCallback struct {
+	// Callback provider name.
+	// +kubebuilder:validation:Enum=langfuse;gcs_bucket;langsmith;arize
+	Name string `json:"name"`
+
+	// Callback type: when to invoke the callback.
+	// +kubebuilder:validation:Enum=success;failure;success_and_failure
+	// +kubebuilder:default="success_and_failure"
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// Reference to a Secret containing provider credentials.
+	// Expected keys depend on the provider:
+	//   langfuse:    langfuse_public_key, langfuse_secret, langfuse_host (optional)
+	//   gcs_bucket:  gcs_bucket_name, gcs_path_service_account (optional)
+	//   langsmith:   langsmith_api_key, langsmith_project
+	//   arize:       arize_api_key, arize_space_key
+	CredentialsSecretRef SecretRef `json:"credentialsSecretRef"`
+
+	// Provider-specific configuration (e.g., host URL, bucket name).
+	// These are merged into callback_vars alongside the Secret data.
+	// +optional
+	Config map[string]string `json:"config,omitempty"`
 }
 
 // TeamMember defines a team member.
@@ -126,6 +171,14 @@ type LiteLLMTeamStatus struct {
 	// Members provisioned by SSO/SCIM (not managed by CRD).
 	// +optional
 	SSOMembers []TeamMemberStatus `json:"ssoMembers,omitempty"`
+
+	// Whether team logging callbacks are synced.
+	// +optional
+	LoggingSynced bool `json:"loggingSynced,omitempty"`
+
+	// Whether logging is disabled for this team (GDPR).
+	// +optional
+	LoggingDisabled bool `json:"loggingDisabled,omitempty"`
 
 	// Last successful sync time.
 	// +optional

@@ -950,6 +950,48 @@ spec:
                 required:
                 - enabled
                 type: object
+              logging:
+                description: |-
+                  Logging configuration for the instance.
+                  Controls audit logs, global message logging, and spend log retention.
+                properties:
+                  auditLogs:
+                    description: |-
+                      Enable audit logs (enterprise).
+                      Stores admin actions (key creation, team changes, etc.) in the database.
+                    properties:
+                      enabled:
+                        description: Enable audit logging.
+                        type: boolean
+                      retentionDays:
+                        description: Retention period in days.
+                        type: integer
+                    required:
+                    - enabled
+                    type: object
+                  redactUserApiKeyInfo:
+                    description: Redact user API key information from logs.
+                    type: boolean
+                  spendLogRetention:
+                    description: Spend log retention configuration.
+                    properties:
+                      cleanupInterval:
+                        description: |-
+                          Cleanup interval (e.g., "1d", "1h").
+                          Written to general_settings.maximum_spend_logs_retention_interval.
+                        type: string
+                      maxRetentionPeriod:
+                        description: |-
+                          Maximum retention period (e.g., "90d", "1y").
+                          Written to general_settings.maximum_spend_logs_retention_period.
+                        type: string
+                    type: object
+                  turnOffMessageLogging:
+                    description: |-
+                      Disable logging of request/response message content.
+                      Only metadata (tokens, cost, model) is logged.
+                    type: boolean
+                type: object
               masterKey:
                 description: Master key configuration for LiteLLM admin access.
                 properties:

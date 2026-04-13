@@ -125,6 +125,10 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 		buildSecretManagerConfig(instance.Spec.SecretManager, config)
 	}
 
+	if instance.Spec.Logging != nil {
+		buildLoggingConfig(instance.Spec.Logging, config)
+	}
+
 	buildCredentialList(instance, credentials, config)
 	buildGuardrailsList(instance, guardrails, config)
 
@@ -432,6 +436,42 @@ func buildGuardrailsList(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 	}
 	if len(entries) > 0 {
 		config["guardrails"] = entries
+	}
+}
+
+// buildLoggingConfig writes instance-level logging settings into the proxy config:
+// - audit logs → general_settings.store_audit_logs + litellm_settings.audit_log_retention_days
+// - message logging toggle → litellm_settings.turn_off_message_logging
+// - API key redaction → litellm_settings.redact_user_api_key_info
+// - spend log retention → general_settings.maximum_spend_logs_retention_period / _interval
+func buildLoggingConfig(logging *litellmv1alpha1.InstanceLoggingSpec, config map[string]interface{}) {
+	if logging.AuditLogs != nil && logging.AuditLogs.Enabled {
+		gs := ensureGeneralSettings(config)
+		gs["store_audit_logs"] = true
+		if logging.AuditLogs.RetentionDays != nil {
+			ls := ensureLiteLLMSettings(config)
+			ls["audit_log_retention_days"] = *logging.AuditLogs.RetentionDays
+		}
+	}
+
+	if logging.TurnOffMessageLogging != nil {
+		ls := ensureLiteLLMSettings(config)
+		ls["turn_off_message_logging"] = *logging.TurnOffMessageLogging
+	}
+
+	if logging.RedactUserAPIKeyInfo != nil {
+		ls := ensureLiteLLMSettings(config)
+		ls["redact_user_api_key_info"] = *logging.RedactUserAPIKeyInfo
+	}
+
+	if logging.SpendLogRetention != nil {
+		gs := ensureGeneralSettings(config)
+		if logging.SpendLogRetention.MaxRetentionPeriod != "" {
+			gs["maximum_spend_logs_retention_period"] = logging.SpendLogRetention.MaxRetentionPeriod
+		}
+		if logging.SpendLogRetention.CleanupInterval != "" {
+			gs["maximum_spend_logs_retention_interval"] = logging.SpendLogRetention.CleanupInterval
+		}
 	}
 }
 

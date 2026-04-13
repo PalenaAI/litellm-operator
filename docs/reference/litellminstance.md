@@ -240,6 +240,16 @@ spec:
         models:
           - gpt-4
           - claude-3-haiku
+
+  logging:
+    auditLogs:
+      enabled: true
+      retentionDays: 90
+    turnOffMessageLogging: false
+    redactUserApiKeyInfo: true
+    spendLogRetention:
+      maxRetentionPeriod: "90d"
+      cleanupInterval: "1d"
 ```
 
 ## Spec Fields
@@ -584,6 +594,31 @@ Role-based access control configuration. Controls route restrictions, key genera
 | --- | --- | --- |
 | `routes` | []string | API routes this role can access |
 | `models` | []string | Models this role can use |
+
+### `logging`
+
+Instance-level logging configuration. Controls audit logs, message content logging, API key redaction, and spend log retention.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `auditLogs` | *AuditLogSpec | — | Audit log configuration (enterprise) |
+| `turnOffMessageLogging` | *bool | — | Disable logging of request/response message content. Only metadata (tokens, cost, model) is logged |
+| `redactUserApiKeyInfo` | *bool | — | Redact user API key information from logs |
+| `spendLogRetention` | *SpendLogRetentionSpec | — | Spend log retention and cleanup configuration |
+
+**AuditLogSpec:**
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | bool | `false` | Enable audit logging (enterprise). Writes `store_audit_logs: true` to `general_settings` |
+| `retentionDays` | *int | — | Audit log retention period in days. Written to `litellm_settings.audit_log_retention_days` |
+
+**SpendLogRetentionSpec:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `maxRetentionPeriod` | string | Maximum retention period (e.g., `90d`, `1y`). Written to `general_settings.maximum_spend_logs_retention_period` |
+| `cleanupInterval` | string | Cleanup interval (e.g., `1d`, `1h`). Written to `general_settings.maximum_spend_logs_retention_interval` |
 
 ## Status Fields
 

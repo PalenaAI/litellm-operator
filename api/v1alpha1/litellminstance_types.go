@@ -162,6 +162,11 @@ type LiteLLMInstanceSpec struct {
 	// Some features (key_generation_settings, role_permissions) require a LiteLLM Enterprise license.
 	// +optional
 	RBAC *RBACSpec `json:"rbac,omitempty"`
+
+	// Logging configuration for the instance.
+	// Controls audit logs, global message logging, and spend log retention.
+	// +optional
+	Logging *InstanceLoggingSpec `json:"logging,omitempty"`
 }
 
 // DefaultCustomerBudgetSpec sets platform-wide defaults for new end-users.
@@ -354,6 +359,50 @@ type RolePermission struct {
 	// Models this role can use.
 	// +optional
 	Models []string `json:"models,omitempty"`
+}
+
+// InstanceLoggingSpec configures instance-level logging behavior.
+type InstanceLoggingSpec struct {
+	// Enable audit logs (enterprise).
+	// Stores admin actions (key creation, team changes, etc.) in the database.
+	// +optional
+	AuditLogs *AuditLogSpec `json:"auditLogs,omitempty"`
+
+	// Disable logging of request/response message content.
+	// Only metadata (tokens, cost, model) is logged.
+	// +optional
+	TurnOffMessageLogging *bool `json:"turnOffMessageLogging,omitempty"`
+
+	// Redact user API key information from logs.
+	// +optional
+	RedactUserAPIKeyInfo *bool `json:"redactUserApiKeyInfo,omitempty"`
+
+	// Spend log retention configuration.
+	// +optional
+	SpendLogRetention *SpendLogRetentionSpec `json:"spendLogRetention,omitempty"`
+}
+
+// AuditLogSpec configures audit logging.
+type AuditLogSpec struct {
+	// Enable audit logging.
+	Enabled bool `json:"enabled"`
+
+	// Retention period in days.
+	// +optional
+	RetentionDays *int `json:"retentionDays,omitempty"`
+}
+
+// SpendLogRetentionSpec configures spend log retention and cleanup.
+type SpendLogRetentionSpec struct {
+	// Maximum retention period (e.g., "90d", "1y").
+	// Written to general_settings.maximum_spend_logs_retention_period.
+	// +optional
+	MaxRetentionPeriod string `json:"maxRetentionPeriod,omitempty"`
+
+	// Cleanup interval (e.g., "1d", "1h").
+	// Written to general_settings.maximum_spend_logs_retention_interval.
+	// +optional
+	CleanupInterval string `json:"cleanupInterval,omitempty"`
 }
 
 // ImageSpec defines the container image for LiteLLM.
