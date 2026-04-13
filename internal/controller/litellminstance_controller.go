@@ -893,6 +893,9 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 		}
 	}
 
+	// Enterprise features warning: JWT/OAuth2 auth require a license
+	r.checkEnterpriseFeaturesWarning(instance)
+
 	// Secret manager status
 	r.reconcileSecretManagerStatus(ctx, instance)
 
@@ -962,6 +965,40 @@ func (r *LiteLLMInstanceReconciler) reconcileSecretManagerStatus(ctx context.Con
 			emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonSecretNotFound,
 				"Secret manager credentials Secret %q not found", sm.CredentialsSecretRef.Name)
 		}
+	}
+}
+
+// checkEnterpriseFeaturesWarning sets a warning condition and emits an event
+// when enterprise-only features (JWT auth, OAuth2 auth) are configured but no
+// LiteLLM license Secret is detected.
+func (r *LiteLLMInstanceReconciler) checkEnterpriseFeaturesWarning(instance *litellmv1alpha1.LiteLLMInstance) {
+	hasLicense := instance.Status.License != nil && instance.Status.License.Active
+
+	var features []string
+	if instance.Spec.JWTAuth != nil && instance.Spec.JWTAuth.Enabled {
+		features = append(features, "JWT auth")
+	}
+	if instance.Spec.OAuth2Auth != nil && instance.Spec.OAuth2Auth.Enabled {
+		features = append(features, "OAuth2 auth")
+	}
+	if instance.Spec.RBAC != nil && instance.Spec.RBAC.Enabled {
+		if instance.Spec.RBAC.KeyGeneration != nil || len(instance.Spec.RBAC.RolePermissions) > 0 {
+			features = append(features, "RBAC (key_generation_settings, role_permissions)")
+		}
+	}
+
+	if len(features) > 0 && !hasLicense {
+		msg := fmt.Sprintf("%s requires a LiteLLM Enterprise license", strings.Join(features, ", "))
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               "EnterpriseFeaturesConfigured",
+			Status:             metav1.ConditionTrue,
+			Reason:             "EnterpriseFeaturesConfigured",
+			Message:            msg,
+			ObservedGeneration: instance.Generation,
+		})
+		emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonEnterpriseRequired, msg)
+	} else {
+		meta.RemoveStatusCondition(&instance.Status.Conditions, "EnterpriseFeaturesConfigured")
 	}
 }
 

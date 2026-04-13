@@ -898,6 +898,58 @@ spec:
                 required:
                 - enabled
                 type: object
+              jwtAuth:
+                description: |-
+                  JWT authentication configuration (enterprise).
+                  Enables API-level authentication via JWT tokens from identity providers.
+                properties:
+                  adminAllowedRoutes:
+                    description: Routes accessible to admin JWT holders.
+                    items:
+                      type: string
+                    type: array
+                  adminJwtScope:
+                    description: JWT scope value that grants proxy admin access.
+                    type: string
+                  enabled:
+                    description: Enable JWT-based authentication.
+                    type: boolean
+                  endUserIdJwtField:
+                    description: JWT field containing the end-user ID.
+                    type: string
+                  orgIdJwtField:
+                    description: JWT field containing the organization ID.
+                    type: string
+                  publicKeyTtl:
+                    description: TTL in seconds for caching the public key.
+                    type: integer
+                  scopeModelMappings:
+                    additionalProperties:
+                      items:
+                        type: string
+                      type: array
+                    description: |-
+                      Scope-to-model mappings for fine-grained access control.
+                      Key: JWT scope value, Value: list of allowed model names.
+                    type: object
+                  teamIdJwtField:
+                    description: JWT field containing the team ID.
+                    type: string
+                  teamIdsJwtField:
+                    description: JWT field containing team IDs (array).
+                    type: string
+                  userEmailJwtField:
+                    description: JWT field containing the user email.
+                    type: string
+                  userIdJwtField:
+                    description: JWT field containing the user ID.
+                    type: string
+                  userRoleJwtField:
+                    description: JWT field containing the user role.
+                    type: string
+                required:
+                - enabled
+                type: object
               masterKey:
                 description: Master key configuration for LiteLLM admin access.
                 properties:
@@ -917,6 +969,39 @@ spec:
                     - key
                     - name
                     type: object
+                type: object
+              oauth2Auth:
+                description: |-
+                  OAuth2 machine-to-machine authentication configuration (enterprise).
+                  Maps JWT fields to LiteLLM attributes for service-to-service auth.
+                properties:
+                  configMappings:
+                    description: Mappings from JWT fields to LiteLLM attributes.
+                    items:
+                      description: OAuth2Mapping defines a single mapping from a JWT
+                        field to a LiteLLM attribute.
+                      properties:
+                        jwtField:
+                          description: JWT field to read from.
+                          type: string
+                        litellmAttribute:
+                          description: LiteLLM attribute to map to (e.g., "team_id",
+                            "user_id").
+                          type: string
+                        name:
+                          description: Identifier for this mapping.
+                          type: string
+                      required:
+                      - jwtField
+                      - litellmAttribute
+                      - name
+                      type: object
+                    type: array
+                  enabled:
+                    description: Enable OAuth2 machine-to-machine authentication.
+                    type: boolean
+                required:
+                - enabled
                 type: object
               observability:
                 description: Observability configuration.
@@ -1074,6 +1159,79 @@ spec:
                     description: Minimum available pods.
                     format: int32
                     type: integer
+                required:
+                - enabled
+                type: object
+              rbac:
+                description: |-
+                  Role-based access control configuration.
+                  Controls route restrictions, key generation permissions, and per-role access.
+                  Some features (key_generation_settings, role_permissions) require a LiteLLM Enterprise license.
+                properties:
+                  adminOnlyRoutes:
+                    description: Routes restricted to proxy_admin only.
+                    items:
+                      type: string
+                    type: array
+                  allowedRoutes:
+                    description: |-
+                      Routes accessible to all authenticated users.
+                      If set, only these routes are allowed; all others are blocked.
+                    items:
+                      type: string
+                    type: array
+                  defaultTeamDisabled:
+                    description: Prevent users from creating personal keys (force
+                      team-based keys).
+                    type: boolean
+                  enabled:
+                    description: Enable role-based access control enforcement.
+                    type: boolean
+                  keyGeneration:
+                    description: Key generation restrictions.
+                    properties:
+                      personalKeyGeneration:
+                        description: Personal key generation restrictions.
+                        properties:
+                          allowedUserRoles:
+                            description: User roles allowed to generate personal keys.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - allowedUserRoles
+                        type: object
+                      teamKeyGeneration:
+                        description: Team key generation restrictions.
+                        properties:
+                          allowedTeamMemberRoles:
+                            description: Team member roles allowed to generate team
+                              keys.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - allowedTeamMemberRoles
+                        type: object
+                    type: object
+                  rolePermissions:
+                    additionalProperties:
+                      description: RolePermission defines the routes and models accessible
+                        to a specific role.
+                      properties:
+                        models:
+                          description: Models this role can use.
+                          items:
+                            type: string
+                          type: array
+                        routes:
+                          description: API routes this role can access.
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                    description: Per-role permission definitions.
+                    type: object
                 required:
                 - enabled
                 type: object

@@ -178,6 +178,29 @@ spec:
       defaultQueryParams:
         version: "2"
 
+  jwtAuth:
+    enabled: true
+    adminJwtScope: "litellm_proxy_admin"
+    adminAllowedRoutes:
+      - openai_routes
+      - info_routes
+    teamIdJwtField: "client_id"
+    teamIdsJwtField: "groups"
+    orgIdJwtField: "org_id"
+    userIdJwtField: "sub"
+    userEmailJwtField: "email"
+    publicKeyTtl: 600
+
+  oauth2Auth:
+    enabled: true
+    configMappings:
+      - name: clientId
+        jwtField: "client_id"
+        litellmAttribute: "team_id"
+      - name: userId
+        jwtField: "sub"
+        litellmAttribute: "user_id"
+
   secretManager:
     provider: aws_secret_manager
     credentialsSecretRef:
@@ -190,6 +213,33 @@ spec:
     accessMode: read_and_write
     aws:
       region: us-east-1
+
+  rbac:
+    enabled: true
+    adminOnlyRoutes:
+      - /model/new
+      - /model/delete
+      - /organization/new
+    allowedRoutes:
+      - /chat/completions
+      - /embeddings
+      - /key/info
+      - /user/info
+    defaultTeamDisabled: true
+    keyGeneration:
+      teamKeyGeneration:
+        allowedTeamMemberRoles: ["admin"]
+      personalKeyGeneration:
+        allowedUserRoles: ["proxy_admin"]
+    rolePermissions:
+      internal_user:
+        routes:
+          - /key/generate
+          - /key/delete
+          - /key/info
+        models:
+          - gpt-4
+          - claude-3-haiku
 ```
 
 ## Spec Fields
@@ -441,6 +491,42 @@ External secret manager integration. When configured, LiteLLM fetches API keys f
 
 See the [Secret Managers guide](/guide/secret-managers) for full usage examples per provider.
 
+### `jwtAuth`
+
+JWT-based authentication configuration (enterprise). When enabled, LiteLLM validates JWT tokens from identity providers and maps claims to roles, teams, and organizations. Public keys are fetched automatically from the IdP's JWKS endpoint. See the [JWT/OAuth2 Auth guide](/guide/jwt-oauth2-auth) for detailed examples.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | bool | `false` | Enable JWT-based authentication |
+| `adminJwtScope` | string | — | JWT scope value that grants proxy admin access |
+| `adminAllowedRoutes` | []string | — | Routes accessible to admin JWT holders (e.g., `openai_routes`, `info_routes`) |
+| `teamIdJwtField` | string | — | JWT field containing the team ID |
+| `teamIdsJwtField` | string | — | JWT field containing team IDs (array) |
+| `orgIdJwtField` | string | — | JWT field containing the organization ID |
+| `userIdJwtField` | string | — | JWT field containing the user ID |
+| `userEmailJwtField` | string | — | JWT field containing the user email |
+| `userRoleJwtField` | string | — | JWT field containing the user role |
+| `endUserIdJwtField` | string | — | JWT field containing the end-user ID |
+| `publicKeyTtl` | *int | — | TTL in seconds for caching the public key |
+| `scopeModelMappings` | map[string][]string | — | Scope-to-model mappings (key: JWT scope, value: allowed model names) |
+
+### `oauth2Auth`
+
+OAuth2 machine-to-machine authentication configuration (enterprise). Maps JWT fields to LiteLLM attributes for service-to-service authentication. See the [JWT/OAuth2 Auth guide](/guide/jwt-oauth2-auth) for detailed examples.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | bool | `false` | Enable OAuth2 machine-to-machine authentication |
+| `configMappings` | []OAuth2Mapping | — | Mappings from JWT fields to LiteLLM attributes |
+
+**OAuth2Mapping:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | Identifier for this mapping (required) |
+| `jwtField` | string | JWT field to read from (required) |
+| `litellmAttribute` | string | LiteLLM attribute to map to, e.g., `team_id`, `user_id` (required) |
+
 ### `security`
 
 | Field | Type | Default | Description |
@@ -459,6 +545,45 @@ See the [Secret Managers guide](/guide/secret-managers) for full usage examples 
 | `useXForwardedFor` | *bool | — | Use `X-Forwarded-For` header for client IP detection. Enable when behind a load balancer |
 | `maxRequestSizeMB` | *int | — | Maximum request body size in MB (enterprise) |
 | `maxResponseSizeMB` | *int | — | Maximum response body size in MB (enterprise) |
+
+### `rbac`
+
+Role-based access control configuration. Controls route restrictions, key generation permissions, and per-role access. Some features require a LiteLLM Enterprise license. See the [RBAC guide](/guide/rbac) for detailed examples.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | bool | `false` | Enable RBAC enforcement (`enforce_rbac: true` in config) |
+| `adminOnlyRoutes` | []string | — | Routes restricted to `proxy_admin` only |
+| `allowedRoutes` | []string | — | Routes accessible to all authenticated users. If set, all other routes are blocked |
+| `defaultTeamDisabled` | *bool | — | Prevent personal key creation (force team-based keys) |
+| `keyGeneration` | *KeyGenerationSettings | — | Key generation restrictions (enterprise) |
+| `rolePermissions` | map[string]RolePermission | — | Per-role permission definitions (enterprise) |
+
+**KeyGenerationSettings:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `teamKeyGeneration` | *TeamKeyGenerationSettings | Team key generation restrictions |
+| `personalKeyGeneration` | *PersonalKeyGenerationSettings | Personal key generation restrictions |
+
+**TeamKeyGenerationSettings:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `allowedTeamMemberRoles` | []string | Team member roles allowed to generate team keys. Values: `admin`, `user` |
+
+**PersonalKeyGenerationSettings:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `allowedUserRoles` | []string | User roles allowed to generate personal keys. Values: `proxy_admin`, `proxy_admin_viewer`, `internal_user`, `internal_user_viewer` |
+
+**RolePermission:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `routes` | []string | API routes this role can access |
+| `models` | []string | Models this role can use |
 
 ## Status Fields
 

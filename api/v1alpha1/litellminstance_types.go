@@ -127,6 +127,16 @@ type LiteLLMInstanceSpec struct {
 	// +optional
 	SCIM *SCIMSpec `json:"scim,omitempty"`
 
+	// JWT authentication configuration (enterprise).
+	// Enables API-level authentication via JWT tokens from identity providers.
+	// +optional
+	JWTAuth *JWTAuthSpec `json:"jwtAuth,omitempty"`
+
+	// OAuth2 machine-to-machine authentication configuration (enterprise).
+	// Maps JWT fields to LiteLLM attributes for service-to-service auth.
+	// +optional
+	OAuth2Auth *OAuth2AuthSpec `json:"oauth2Auth,omitempty"`
+
 	// Response caching configuration.
 	// +optional
 	Caching *CachingSpec `json:"caching,omitempty"`
@@ -146,6 +156,12 @@ type LiteLLMInstanceSpec struct {
 	// instead of reading them from Kubernetes Secrets.
 	// +optional
 	SecretManager *SecretManagerSpec `json:"secretManager,omitempty"`
+
+	// Role-based access control configuration.
+	// Controls route restrictions, key generation permissions, and per-role access.
+	// Some features (key_generation_settings, role_permissions) require a LiteLLM Enterprise license.
+	// +optional
+	RBAC *RBACSpec `json:"rbac,omitempty"`
 }
 
 // DefaultCustomerBudgetSpec sets platform-wide defaults for new end-users.
@@ -274,6 +290,70 @@ type VaultConfig struct {
 	// Cache refresh interval in seconds.
 	// +optional
 	RefreshInterval *int `json:"refreshInterval,omitempty"`
+}
+
+// RBACSpec defines role-based access control configuration.
+// Controls route restrictions, key generation permissions, and per-role access.
+type RBACSpec struct {
+	// Enable role-based access control enforcement.
+	Enabled bool `json:"enabled"`
+
+	// Routes restricted to proxy_admin only.
+	// +optional
+	AdminOnlyRoutes []string `json:"adminOnlyRoutes,omitempty"`
+
+	// Routes accessible to all authenticated users.
+	// If set, only these routes are allowed; all others are blocked.
+	// +optional
+	AllowedRoutes []string `json:"allowedRoutes,omitempty"`
+
+	// Key generation restrictions.
+	// +optional
+	KeyGeneration *KeyGenerationSettings `json:"keyGeneration,omitempty"`
+
+	// Per-role permission definitions.
+	// +optional
+	RolePermissions map[string]RolePermission `json:"rolePermissions,omitempty"`
+
+	// Prevent users from creating personal keys (force team-based keys).
+	// +optional
+	DefaultTeamDisabled *bool `json:"defaultTeamDisabled,omitempty"`
+}
+
+// KeyGenerationSettings defines restrictions on who can generate API keys.
+type KeyGenerationSettings struct {
+	// Team key generation restrictions.
+	// +optional
+	TeamKeyGeneration *TeamKeyGenerationSettings `json:"teamKeyGeneration,omitempty"`
+
+	// Personal key generation restrictions.
+	// +optional
+	PersonalKeyGeneration *PersonalKeyGenerationSettings `json:"personalKeyGeneration,omitempty"`
+}
+
+// TeamKeyGenerationSettings defines which team member roles can generate team keys.
+type TeamKeyGenerationSettings struct {
+	// Team member roles allowed to generate team keys.
+	// +kubebuilder:validation:Items:Enum=admin;user
+	AllowedTeamMemberRoles []string `json:"allowedTeamMemberRoles"`
+}
+
+// PersonalKeyGenerationSettings defines which user roles can generate personal keys.
+type PersonalKeyGenerationSettings struct {
+	// User roles allowed to generate personal keys.
+	// +kubebuilder:validation:Items:Enum=proxy_admin;proxy_admin_viewer;internal_user;internal_user_viewer
+	AllowedUserRoles []string `json:"allowedUserRoles"`
+}
+
+// RolePermission defines the routes and models accessible to a specific role.
+type RolePermission struct {
+	// API routes this role can access.
+	// +optional
+	Routes []string `json:"routes,omitempty"`
+
+	// Models this role can use.
+	// +optional
+	Models []string `json:"models,omitempty"`
 }
 
 // ImageSpec defines the container image for LiteLLM.
@@ -1184,6 +1264,82 @@ type SCIMSpec struct {
 	// Name for the auto-generated SCIM token Secret.
 	// +kubebuilder:default="litellm-scim-token"
 	GeneratedTokenSecretName string `json:"generatedTokenSecretName,omitempty"`
+}
+
+// JWTAuthSpec defines JWT-based authentication configuration (enterprise).
+// When enabled, LiteLLM validates JWT tokens from identity providers and
+// maps claims to roles, teams, and organizations.
+type JWTAuthSpec struct {
+	// Enable JWT-based authentication.
+	Enabled bool `json:"enabled"`
+
+	// JWT scope value that grants proxy admin access.
+	// +optional
+	AdminJWTScope string `json:"adminJwtScope,omitempty"`
+
+	// Routes accessible to admin JWT holders.
+	// +optional
+	AdminAllowedRoutes []string `json:"adminAllowedRoutes,omitempty"`
+
+	// JWT field containing the team ID.
+	// +optional
+	TeamIDJWTField string `json:"teamIdJwtField,omitempty"`
+
+	// JWT field containing team IDs (array).
+	// +optional
+	TeamIDsJWTField string `json:"teamIdsJwtField,omitempty"`
+
+	// JWT field containing the organization ID.
+	// +optional
+	OrgIDJWTField string `json:"orgIdJwtField,omitempty"`
+
+	// JWT field containing the user ID.
+	// +optional
+	UserIDJWTField string `json:"userIdJwtField,omitempty"`
+
+	// JWT field containing the user email.
+	// +optional
+	UserEmailJWTField string `json:"userEmailJwtField,omitempty"`
+
+	// JWT field containing the user role.
+	// +optional
+	UserRoleJWTField string `json:"userRoleJwtField,omitempty"`
+
+	// JWT field containing the end-user ID.
+	// +optional
+	EndUserIDJWTField string `json:"endUserIdJwtField,omitempty"`
+
+	// TTL in seconds for caching the public key.
+	// +optional
+	PublicKeyTTL *int `json:"publicKeyTtl,omitempty"`
+
+	// Scope-to-model mappings for fine-grained access control.
+	// Key: JWT scope value, Value: list of allowed model names.
+	// +optional
+	ScopeModelMappings map[string][]string `json:"scopeModelMappings,omitempty"`
+}
+
+// OAuth2AuthSpec defines OAuth2 machine-to-machine authentication configuration (enterprise).
+// Maps JWT fields to LiteLLM attributes for service-to-service authentication.
+type OAuth2AuthSpec struct {
+	// Enable OAuth2 machine-to-machine authentication.
+	Enabled bool `json:"enabled"`
+
+	// Mappings from JWT fields to LiteLLM attributes.
+	// +optional
+	ConfigMappings []OAuth2Mapping `json:"configMappings,omitempty"`
+}
+
+// OAuth2Mapping defines a single mapping from a JWT field to a LiteLLM attribute.
+type OAuth2Mapping struct {
+	// Identifier for this mapping.
+	Name string `json:"name"`
+
+	// JWT field to read from.
+	JWTField string `json:"jwtField"`
+
+	// LiteLLM attribute to map to (e.g., "team_id", "user_id").
+	LiteLLMAttribute string `json:"litellmAttribute"`
 }
 
 // LiteLLMInstanceStatus defines the observed state of LiteLLMInstance.

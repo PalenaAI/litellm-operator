@@ -2,6 +2,10 @@
 
 The operator supports configuring SSO authentication on LiteLLM instances. SSO configuration is translated into environment variables and config entries on the Deployment.
 
+::: tip Looking for API-level authentication?
+SSO handles Admin UI login via browser flows. For API-level authentication (services calling the proxy with JWT tokens), see [JWT / OAuth2 Auth](/guide/jwt-oauth2-auth).
+:::
+
 ## Supported Providers
 
 | Provider | `spec.sso.provider` | Notes |

@@ -14,6 +14,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **Team member management** — three modes: `crd` (CRD authoritative), `sso` (IdP authoritative), `mixed` (additive)
 - **VirtualKey secret management** — generated API keys are stored in Kubernetes Secrets with owner references for automatic cleanup
 - **SSO/SCIM support** — configure Azure Entra ID, Okta, Google, or generic OIDC providers declaratively
+- **JWT/OAuth2 authentication (enterprise)** — API-level authentication via JWT tokens from identity providers with claim-to-role/team/org mapping, scope-to-model access control, and OAuth2 machine-to-machine auth
 - **Flexible ingress** — Kubernetes Ingress, OpenShift Route, and Gateway API HTTPRoute support
 - **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts
 - **OpenShift / non-root support** — `spec.security.runAsNonRoot: true` automatically uses the official non-root image and applies restricted security contexts
@@ -28,6 +29,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **Pass-through endpoints** — proxy arbitrary API requests to upstream services (image generation, fine-tuning, etc.) with static and secret-backed headers, sub-path routing, and optional LiteLLM authentication
 - **Advanced budget controls** — global proxy budget, per-provider spending caps, per-model budgets per key (enterprise), and concurrency limits at proxy/deployment/team/key levels
 - **IP allowlisting (enterprise)** — restrict API access to specific IP addresses or CIDR ranges via `spec.security.ipAllowlist`, with `X-Forwarded-For` support and max request/response size limits
+- **RBAC** — enforce role-based access control with admin-only routes, allowed routes, key generation restrictions, per-role permissions, and personal key disabling via `spec.rbac`
 - **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
 - **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
 
@@ -263,6 +265,36 @@ spec:
         - "192.168.1.0/24"
         - "203.0.113.50"
       useXForwardedFor: true  # required behind load balancers
+  # ... rest of spec
+```
+
+### RBAC (Role-Based Access Control)
+
+Enforce route restrictions and key generation controls:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  rbac:
+    enabled: true
+    adminOnlyRoutes:
+      - /model/new
+      - /model/delete
+    allowedRoutes:
+      - /chat/completions
+      - /embeddings
+      - /key/info
+    defaultTeamDisabled: true   # force team-based keys
+    keyGeneration:              # enterprise
+      teamKeyGeneration:
+        allowedTeamMemberRoles: ["admin"]
+    rolePermissions:            # enterprise
+      internal_user:
+        routes: ["/key/generate", "/key/info"]
+        models: ["gpt-4", "claude-3-haiku"]
   # ... rest of spec
 ```
 

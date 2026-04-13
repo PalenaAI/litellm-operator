@@ -1,0 +1,63 @@
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: litellminstance-jwt-auth
+spec:
+  image:
+    repository: ghcr.io/berriai/litellm
+    tag: main-v1.60.0
+
+  replicas: 1
+
+  masterKey:
+    autoGenerate: true
+
+  database:
+    external:
+      connectionSecretRef:
+        name: litellm-db-credentials
+        key: DATABASE_URL
+
+  service:
+    type: ClusterIP
+    port: 4000
+
+  # JWT authentication (enterprise) — validate tokens from your IdP.
+  # LiteLLM automatically discovers the IdP's JWKS endpoint from the JWT issuer.
+  jwtAuth:
+    enabled: true
+    adminJwtScope: "litellm_proxy_admin"
+    adminAllowedRoutes:
+      - openai_routes
+      - info_routes
+    teamIdJwtField: "client_id"
+    teamIdsJwtField: "groups"
+    orgIdJwtField: "org_id"
+    userIdJwtField: "sub"
+    userEmailJwtField: "email"
+    userRoleJwtField: "role"
+    endUserIdJwtField: "end_user_id"
+    publicKeyTtl: 600
+    # Optional: restrict which models a JWT scope grants access to
+    scopeModelMappings:
+      "scope:gpt":
+        - gpt-4
+        - gpt-4-mini
+      "scope:claude":
+        - claude-3-opus
+        - claude-3-sonnet
+
+  # OAuth2 machine-to-machine auth (enterprise) — map JWT claims to LiteLLM
+  # attributes for service-to-service authentication.
+  oauth2Auth:
+    enabled: true
+    configMappings:
+      - name: clientId
+        jwtField: "client_id"
+        litellmAttribute: "team_id"
+      - name: userId
+        jwtField: "sub"
+        litellmAttribute: "user_id"
