@@ -96,14 +96,16 @@ func (m *MockModelService) List(ctx context.Context) ([]ModelInfoResponse, error
 
 // MockTeamService records calls and returns configured responses.
 type MockTeamService struct {
-	CreateFunc       func(ctx context.Context, req TeamCreateRequest) (*TeamCreateResponse, error)
-	UpdateFunc       func(ctx context.Context, req TeamUpdateRequest) error
-	DeleteFunc       func(ctx context.Context, teamID string) error
-	GetFunc          func(ctx context.Context, teamID string) (*TeamInfo, error)
-	ListFunc         func(ctx context.Context) ([]TeamInfo, error)
-	AddMemberFunc    func(ctx context.Context, teamID, email, role string) error
-	RemoveMemberFunc func(ctx context.Context, teamID, email string) error
-	ListMembersFunc  func(ctx context.Context, teamID string) ([]TeamMemberInfo, error)
+	CreateFunc         func(ctx context.Context, req TeamCreateRequest) (*TeamCreateResponse, error)
+	UpdateFunc         func(ctx context.Context, req TeamUpdateRequest) error
+	DeleteFunc         func(ctx context.Context, teamID string) error
+	GetFunc            func(ctx context.Context, teamID string) (*TeamInfo, error)
+	ListFunc           func(ctx context.Context) ([]TeamInfo, error)
+	AddMemberFunc      func(ctx context.Context, teamID, email, role string) error
+	RemoveMemberFunc   func(ctx context.Context, teamID, email string) error
+	ListMembersFunc    func(ctx context.Context, teamID string) ([]TeamMemberInfo, error)
+	SetCallbackFunc    func(ctx context.Context, teamID string, req TeamCallbackRequest) error
+	DisableLoggingFunc func(ctx context.Context, teamID string) error
 }
 
 func (m *MockTeamService) Create(ctx context.Context, req TeamCreateRequest) (*TeamCreateResponse, error) {
@@ -160,6 +162,20 @@ func (m *MockTeamService) ListMembers(ctx context.Context, teamID string) ([]Tea
 		return m.ListMembersFunc(ctx, teamID)
 	}
 	return nil, nil
+}
+
+func (m *MockTeamService) SetCallback(ctx context.Context, teamID string, req TeamCallbackRequest) error {
+	if m.SetCallbackFunc != nil {
+		return m.SetCallbackFunc(ctx, teamID, req)
+	}
+	return nil
+}
+
+func (m *MockTeamService) DisableLogging(ctx context.Context, teamID string) error {
+	if m.DisableLoggingFunc != nil {
+		return m.DisableLoggingFunc(ctx, teamID)
+	}
+	return nil
 }
 
 // MockUserService records calls and returns configured responses.

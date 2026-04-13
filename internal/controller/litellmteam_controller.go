@@ -47,6 +47,7 @@ type LiteLLMTeamReconciler struct {
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmteams,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmteams/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmteams/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 
 func (r *LiteLLMTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -200,6 +201,14 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("reconcile members: %w", err)
 	}
 
+	// Reconcile per-team logging callbacks
+	if err := r.reconcileLogging(ctx, team, apiClient.Teams()); err != nil {
+		if isEnterpriseLicenseError(err) {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("reconcile logging: %w", err)
+	}
+
 	info, err := apiClient.Teams().Get(ctx, team.Status.LiteLLMTeamID)
 	if err == nil && info != nil {
 		team.Status.CurrentSpend = info.Spend
@@ -302,6 +311,100 @@ func (r *LiteLLMTeamReconciler) reconcileMembers(
 	default:
 		return fmt.Errorf("unknown memberManagement mode: %q", mgmt)
 	}
+}
+
+func (r *LiteLLMTeamReconciler) reconcileLogging(
+	ctx context.Context,
+	team *litellmv1alpha1.LiteLLMTeam,
+	teamSvc litellm.TeamService,
+) error {
+	log := logf.FromContext(ctx)
+
+	if team.Spec.Logging == nil {
+		// No logging spec — if logging was previously disabled, nothing to undo
+		// (LiteLLM has no "re-enable" endpoint; removing the spec means "leave as-is").
+		team.Status.LoggingSynced = false
+		team.Status.LoggingDisabled = false
+		return nil
+	}
+
+	// If logging disabled (GDPR), call disable endpoint and skip callbacks.
+	if team.Spec.Logging.Disabled {
+		if err := teamSvc.DisableLogging(ctx, team.Status.LiteLLMTeamID); err != nil {
+			return fmt.Errorf("disable logging for team %s: %w", team.Status.LiteLLMTeamID, err)
+		}
+		team.Status.LoggingDisabled = true
+		team.Status.LoggingSynced = true
+		log.Info("disabled logging for team (GDPR)", "teamId", team.Status.LiteLLMTeamID)
+		emitEvent(r.Recorder, team, corev1.EventTypeNormal, EventReasonUpdated,
+			"Logging disabled for team %q (GDPR)", team.Spec.TeamAlias)
+		return nil
+	}
+
+	// If no callbacks and not disabled, disable to clean up any previous callbacks.
+	if len(team.Spec.Logging.Callbacks) == 0 {
+		if err := teamSvc.DisableLogging(ctx, team.Status.LiteLLMTeamID); err != nil {
+			return fmt.Errorf("disable logging (cleanup) for team %s: %w", team.Status.LiteLLMTeamID, err)
+		}
+		team.Status.LoggingDisabled = false
+		team.Status.LoggingSynced = true
+		return nil
+	}
+
+	// Set each callback by reading the credentials Secret and calling the API.
+	for _, cb := range team.Spec.Logging.Callbacks {
+		vars, err := r.readCallbackCredentials(ctx, team.Namespace, cb)
+		if err != nil {
+			return fmt.Errorf("read credentials for callback %q: %w", cb.Name, err)
+		}
+
+		cbType := cb.Type
+		if cbType == "" {
+			cbType = "success_and_failure"
+		}
+
+		req := litellm.TeamCallbackRequest{
+			CallbackName: cb.Name,
+			CallbackType: cbType,
+			CallbackVars: vars,
+		}
+		if err := teamSvc.SetCallback(ctx, team.Status.LiteLLMTeamID, req); err != nil {
+			return fmt.Errorf("set callback %q for team %s: %w", cb.Name, team.Status.LiteLLMTeamID, err)
+		}
+		log.Info("set team callback", "teamId", team.Status.LiteLLMTeamID, "callback", cb.Name)
+	}
+
+	team.Status.LoggingDisabled = false
+	team.Status.LoggingSynced = true
+	emitEvent(r.Recorder, team, corev1.EventTypeNormal, EventReasonUpdated,
+		"Logging callbacks configured for team %q", team.Spec.TeamAlias)
+	return nil
+}
+
+// readCallbackCredentials reads all keys from the referenced Secret and merges
+// them with any inline config from the TeamCallback spec. Secret values are
+// held in memory only briefly for the API call — they are never logged.
+func (r *LiteLLMTeamReconciler) readCallbackCredentials(
+	ctx context.Context,
+	namespace string,
+	cb litellmv1alpha1.TeamCallback,
+) (map[string]string, error) {
+	var secret corev1.Secret
+	if err := r.Get(ctx, types.NamespacedName{
+		Name: cb.CredentialsSecretRef.Name, Namespace: namespace,
+	}, &secret); err != nil {
+		return nil, fmt.Errorf("fetch secret %q: %w", cb.CredentialsSecretRef.Name, err)
+	}
+
+	vars := make(map[string]string, len(secret.Data)+len(cb.Config))
+	for k, v := range secret.Data {
+		vars[k] = string(v)
+	}
+	// Inline config can override or supplement Secret data.
+	for k, v := range cb.Config {
+		vars[k] = v
+	}
+	return vars, nil
 }
 
 func (r *LiteLLMTeamReconciler) resolveOrganizationRef(

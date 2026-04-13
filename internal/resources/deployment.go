@@ -85,6 +85,8 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 	envVars = append(envVars, guardrailEnvVars(instance, guardrails)...)
 	envVars = append(envVars, instance.Spec.ExtraEnvVars...)
 
+	envFrom := append(secretManagerEnvFrom(instance), instance.Spec.ExtraEnvFrom...)
+
 	container := corev1.Container{
 		Name:            "litellm",
 		Image:           fmt.Sprintf("%s:%s", repo, tag),
@@ -93,7 +95,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 			{Name: "http", ContainerPort: 4000, Protocol: corev1.ProtocolTCP},
 		},
 		Env:          envVars,
-		EnvFrom:      instance.Spec.ExtraEnvFrom,
+		EnvFrom:      envFrom,
 		VolumeMounts: buildVolumeMounts(),
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -361,6 +363,9 @@ func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName s
 			})
 		}
 	}
+
+	// Secret manager env vars
+	vars = append(vars, secretManagerEnvVars(instance)...)
 
 	// Caching env vars
 	vars = append(vars, cachingEnvVars(instance)...)
@@ -719,6 +724,79 @@ func cachingEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
 	}
 
 	return vars
+}
+
+// secretManagerEnvVars returns provider-specific config env vars for the
+// secret manager integration. Credential secrets are injected via envFrom
+// (see secretManagerEnvFrom); this function handles the non-secret config
+// values like region, vault address, tenant ID, etc.
+func secretManagerEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
+	sm := instance.Spec.SecretManager
+	if sm == nil {
+		return nil
+	}
+
+	var vars []corev1.EnvVar
+
+	// AWS providers
+	if sm.AWS != nil {
+		vars = append(vars, corev1.EnvVar{Name: "AWS_REGION_NAME", Value: sm.AWS.Region})
+		if sm.AWS.RoleARN != "" {
+			vars = append(vars, corev1.EnvVar{Name: "aws_role_name", Value: sm.AWS.RoleARN})
+		}
+		if sm.AWS.SessionName != "" {
+			vars = append(vars, corev1.EnvVar{Name: "aws_session_name", Value: sm.AWS.SessionName})
+		}
+		if sm.AWS.WebIdentityTokenPath != "" {
+			vars = append(vars, corev1.EnvVar{Name: "aws_web_identity_token", Value: sm.AWS.WebIdentityTokenPath})
+		}
+		if sm.AWS.STSEndpoint != "" {
+			vars = append(vars, corev1.EnvVar{Name: "AWS_STS_ENDPOINT", Value: sm.AWS.STSEndpoint})
+		}
+	}
+
+	// Azure Key Vault
+	if sm.Azure != nil {
+		vars = append(vars, corev1.EnvVar{Name: "AZURE_KEY_VAULT_URI", Value: sm.Azure.VaultURI})
+		vars = append(vars, corev1.EnvVar{Name: "AZURE_TENANT_ID", Value: sm.Azure.TenantID})
+	}
+
+	// HashiCorp Vault
+	if sm.Vault != nil {
+		vars = append(vars, corev1.EnvVar{Name: "HCP_VAULT_ADDR", Value: sm.Vault.Address})
+		if sm.Vault.Namespace != "" {
+			vars = append(vars, corev1.EnvVar{Name: "HCP_VAULT_NAMESPACE", Value: sm.Vault.Namespace})
+		}
+		if sm.Vault.MountName != "" {
+			vars = append(vars, corev1.EnvVar{Name: "HCP_VAULT_MOUNT_NAME", Value: sm.Vault.MountName})
+		}
+		if sm.Vault.PathPrefix != "" {
+			vars = append(vars, corev1.EnvVar{Name: "HCP_VAULT_PATH_PREFIX", Value: sm.Vault.PathPrefix})
+		}
+		if sm.Vault.RefreshInterval != nil {
+			vars = append(vars, corev1.EnvVar{Name: "HCP_VAULT_REFRESH_INTERVAL", Value: fmt.Sprintf("%d", *sm.Vault.RefreshInterval)})
+		}
+	}
+
+	return vars
+}
+
+// secretManagerEnvFrom returns an EnvFromSource that injects all keys from
+// the secret manager credentials Secret into the pod environment.
+func secretManagerEnvFrom(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvFromSource {
+	sm := instance.Spec.SecretManager
+	if sm == nil || sm.CredentialsSecretRef == nil {
+		return nil
+	}
+	return []corev1.EnvFromSource{
+		{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: sm.CredentialsSecretRef.Name,
+				},
+			},
+		},
+	}
 }
 
 func boolPtr(b bool) *bool    { return &b }

@@ -23,12 +23,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	testModelClaude3Haiku = "claude-3-haiku"
+	testJWTFieldSub       = "sub"
+	testRouteModelNew     = "/model/new"
+)
+
 func intPtr(v int) *int { return &v }
 
 func TestGenerateProxyConfig_DefaultFallbacks(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Fallbacks = &litellmv1alpha1.FallbackSpec{
-		DefaultFallbacks: []string{"gpt-4-mini", "claude-3-haiku"},
+		DefaultFallbacks: []string{"gpt-4-mini", testModelClaude3Haiku},
 	}
 
 	config := GenerateProxyConfig(instance, nil, nil)
@@ -41,7 +47,7 @@ func TestGenerateProxyConfig_DefaultFallbacks(t *testing.T) {
 	if !ok {
 		t.Fatal("expected default_fallbacks to be []string")
 	}
-	if len(df) != 2 || df[0] != "gpt-4-mini" || df[1] != "claude-3-haiku" {
+	if len(df) != 2 || df[0] != "gpt-4-mini" || df[1] != testModelClaude3Haiku {
 		t.Errorf("unexpected default_fallbacks: %v", df)
 	}
 }
@@ -50,7 +56,7 @@ func TestGenerateProxyConfig_ModelFallbacks(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Fallbacks = &litellmv1alpha1.FallbackSpec{
 		ModelFallbacks: []litellmv1alpha1.ModelFallbackEntry{
-			{Model: "gpt-4", Fallbacks: []string{"gpt-4-mini", "claude-3-haiku"}},
+			{Model: "gpt-4", Fallbacks: []string{"gpt-4-mini", testModelClaude3Haiku}},
 		},
 	}
 
@@ -71,7 +77,7 @@ func TestGenerateProxyConfig_ModelFallbacks(t *testing.T) {
 	if !ok {
 		t.Fatal("expected fallback entry for gpt-4")
 	}
-	if len(models) != 2 || models[0] != "gpt-4-mini" || models[1] != "claude-3-haiku" {
+	if len(models) != 2 || models[0] != "gpt-4-mini" || models[1] != testModelClaude3Haiku {
 		t.Errorf("unexpected fallback models: %v", models)
 	}
 }
@@ -1412,6 +1418,768 @@ func TestGuardrailEnvVarName_Sanitization(t *testing.T) {
 		got := GuardrailEnvVarName(in)
 		if got != want {
 			t.Errorf("GuardrailEnvVarName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestGenerateProxyConfig_SecretManagerNone(t *testing.T) {
+	instance := newTestInstance()
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, _ := config["general_settings"].(map[string]interface{})
+	if gs != nil {
+		if _, ok := gs["key_management_system"]; ok {
+			t.Error("key_management_system should not be present when secretManager is nil")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_SecretManagerAWS(t *testing.T) {
+	instance := newTestInstance()
+	storeKeys := true
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider:                   "aws_secret_manager",
+		HostedKeys:                 []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY"},
+		StoreVirtualKeys:           &storeKeys,
+		PrefixForStoredVirtualKeys: "litellm/",
+		AccessMode:                 "read_and_write",
+		PrimarySecretName:          "litellm/all-keys",
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings")
+	}
+	if gs["key_management_system"] != "aws_secret_manager" {
+		t.Errorf("expected aws_secret_manager, got %v", gs["key_management_system"])
+	}
+	kms, ok := gs["key_management_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected key_management_settings")
+	}
+	hostedKeys, ok := kms["hosted_keys"].([]string)
+	if !ok {
+		t.Fatal("expected hosted_keys to be []string")
+	}
+	if len(hostedKeys) != 2 || hostedKeys[0] != "OPENAI_API_KEY" {
+		t.Errorf("unexpected hosted_keys: %v", hostedKeys)
+	}
+	if kms["store_virtual_keys"] != true {
+		t.Errorf("expected store_virtual_keys=true, got %v", kms["store_virtual_keys"])
+	}
+	if kms["prefix_for_stored_virtual_keys"] != "litellm/" {
+		t.Errorf("unexpected prefix: %v", kms["prefix_for_stored_virtual_keys"])
+	}
+	if kms["access_mode"] != "read_and_write" {
+		t.Errorf("unexpected access_mode: %v", kms["access_mode"])
+	}
+	if kms["primary_secret_name"] != "litellm/all-keys" {
+		t.Errorf("unexpected primary_secret_name: %v", kms["primary_secret_name"])
+	}
+}
+
+func TestGenerateProxyConfig_SecretManagerMinimal(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "google_secret_manager",
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings")
+	}
+	if gs["key_management_system"] != "google_secret_manager" {
+		t.Errorf("expected google_secret_manager, got %v", gs["key_management_system"])
+	}
+	if _, ok := gs["key_management_settings"]; ok {
+		t.Error("key_management_settings should be absent when no optional fields are set")
+	}
+}
+
+func TestGenerateProxyConfig_SecretManagerWithExistingGeneralSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		ProxyBatchWriteAt: 10,
+	}
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "hashicorp_vault",
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings")
+	}
+	// Existing settings preserved
+	if gs["proxy_batch_write_at"] != 10 {
+		t.Errorf("expected proxy_batch_write_at=10, got %v", gs["proxy_batch_write_at"])
+	}
+	// Secret manager added
+	if gs["key_management_system"] != "hashicorp_vault" {
+		t.Errorf("expected hashicorp_vault, got %v", gs["key_management_system"])
+	}
+}
+
+func TestGenerateProxyConfig_JWTAuthEnabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
+		Enabled:            true,
+		AdminJWTScope:      "litellm_proxy_admin",
+		AdminAllowedRoutes: []string{"openai_routes", "info_routes"},
+		TeamIDJWTField:     "client_id",
+		TeamIDsJWTField:    "groups",
+		OrgIDJWTField:      "org_id",
+		UserIDJWTField:     testJWTFieldSub,
+		UserEmailJWTField:  "email",
+		UserRoleJWTField:   "role",
+		EndUserIDJWTField:  "end_user_id",
+		PublicKeyTTL:       intPtr(600),
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["enable_jwt_auth"] != true {
+		t.Errorf("expected enable_jwt_auth=true, got %v", gs["enable_jwt_auth"])
+	}
+	jwtauth, ok := gs["litellm_jwtauth"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected litellm_jwtauth to be present")
+	}
+	if jwtauth["admin_jwt_scope"] != "litellm_proxy_admin" {
+		t.Errorf("unexpected admin_jwt_scope: %v", jwtauth["admin_jwt_scope"])
+	}
+	routes, ok := jwtauth["admin_allowed_routes"].([]string)
+	if !ok || len(routes) != 2 || routes[0] != "openai_routes" {
+		t.Errorf("unexpected admin_allowed_routes: %v", jwtauth["admin_allowed_routes"])
+	}
+	if jwtauth["team_id_jwt_field"] != "client_id" {
+		t.Errorf("unexpected team_id_jwt_field: %v", jwtauth["team_id_jwt_field"])
+	}
+	if jwtauth["team_ids_jwt_field"] != "groups" {
+		t.Errorf("unexpected team_ids_jwt_field: %v", jwtauth["team_ids_jwt_field"])
+	}
+	if jwtauth["org_id_jwt_field"] != "org_id" {
+		t.Errorf("unexpected org_id_jwt_field: %v", jwtauth["org_id_jwt_field"])
+	}
+	if jwtauth["user_id_jwt_field"] != testJWTFieldSub {
+		t.Errorf("unexpected user_id_jwt_field: %v", jwtauth["user_id_jwt_field"])
+	}
+	if jwtauth["user_email_jwt_field"] != "email" {
+		t.Errorf("unexpected user_email_jwt_field: %v", jwtauth["user_email_jwt_field"])
+	}
+	if jwtauth["user_role_jwt_field"] != "role" {
+		t.Errorf("unexpected user_role_jwt_field: %v", jwtauth["user_role_jwt_field"])
+	}
+	if jwtauth["end_user_id_jwt_field"] != "end_user_id" {
+		t.Errorf("unexpected end_user_id_jwt_field: %v", jwtauth["end_user_id_jwt_field"])
+	}
+	if jwtauth["public_key_ttl"] != 600 {
+		t.Errorf("unexpected public_key_ttl: %v", jwtauth["public_key_ttl"])
+	}
+}
+
+func TestGenerateProxyConfig_JWTAuthMinimal(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
+		Enabled: true,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["enable_jwt_auth"] != true {
+		t.Errorf("expected enable_jwt_auth=true, got %v", gs["enable_jwt_auth"])
+	}
+	// No litellm_jwtauth block when no fields are set
+	if _, ok := gs["litellm_jwtauth"]; ok {
+		t.Error("litellm_jwtauth should be absent when no optional fields are set")
+	}
+}
+
+func TestGenerateProxyConfig_JWTAuthScopeModelMappings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
+		Enabled: true,
+		ScopeModelMappings: map[string][]string{
+			"scope:gpt": {"gpt-4", "gpt-4-mini"},
+			"scope:all": {"*"},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	jwtauth := gs["litellm_jwtauth"].(map[string]interface{})
+	mappings, ok := jwtauth["scope_model_mappings"].(map[string][]string)
+	if !ok {
+		t.Fatal("expected scope_model_mappings to be map[string][]string")
+	}
+	if len(mappings["scope:gpt"]) != 2 || mappings["scope:gpt"][0] != "gpt-4" {
+		t.Errorf("unexpected scope:gpt mapping: %v", mappings["scope:gpt"])
+	}
+	if len(mappings["scope:all"]) != 1 || mappings["scope:all"][0] != "*" {
+		t.Errorf("unexpected scope:all mapping: %v", mappings["scope:all"])
+	}
+}
+
+func TestGenerateProxyConfig_JWTAuthDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
+		Enabled:        false,
+		AdminJWTScope:  "admin",
+		UserIDJWTField: testJWTFieldSub,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	// When disabled, no JWT auth config should be written
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if ok {
+		if _, found := gs["enable_jwt_auth"]; found {
+			t.Error("enable_jwt_auth should not be present when JWT auth is disabled")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_OAuth2AuthEnabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.OAuth2Auth = &litellmv1alpha1.OAuth2AuthSpec{
+		Enabled: true,
+		ConfigMappings: []litellmv1alpha1.OAuth2Mapping{
+			{Name: "clientId", JWTField: "client_id", LiteLLMAttribute: "team_id"},
+			{Name: "userId", JWTField: testJWTFieldSub, LiteLLMAttribute: "user_id"},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["enable_oauth2_auth"] != true {
+		t.Errorf("expected enable_oauth2_auth=true, got %v", gs["enable_oauth2_auth"])
+	}
+	mappings, ok := gs["oauth2_config_mappings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected oauth2_config_mappings to be present")
+	}
+	clientId, ok := mappings["clientId"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected clientId mapping to be present")
+	}
+	if clientId["jwt_field"] != "client_id" {
+		t.Errorf("unexpected jwt_field: %v", clientId["jwt_field"])
+	}
+	if clientId["litellm_attribute"] != "team_id" {
+		t.Errorf("unexpected litellm_attribute: %v", clientId["litellm_attribute"])
+	}
+	userId, ok := mappings["userId"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected userId mapping to be present")
+	}
+	if userId["jwt_field"] != testJWTFieldSub {
+		t.Errorf("unexpected jwt_field: %v", userId["jwt_field"])
+	}
+	if userId["litellm_attribute"] != "user_id" {
+		t.Errorf("unexpected litellm_attribute: %v", userId["litellm_attribute"])
+	}
+}
+
+func TestGenerateProxyConfig_OAuth2AuthMinimal(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.OAuth2Auth = &litellmv1alpha1.OAuth2AuthSpec{
+		Enabled: true,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["enable_oauth2_auth"] != true {
+		t.Errorf("expected enable_oauth2_auth=true, got %v", gs["enable_oauth2_auth"])
+	}
+	if _, ok := gs["oauth2_config_mappings"]; ok {
+		t.Error("oauth2_config_mappings should be absent when no mappings are configured")
+	}
+}
+
+func TestGenerateProxyConfig_OAuth2AuthDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.OAuth2Auth = &litellmv1alpha1.OAuth2AuthSpec{
+		Enabled: false,
+		ConfigMappings: []litellmv1alpha1.OAuth2Mapping{
+			{Name: "clientId", JWTField: "client_id", LiteLLMAttribute: "team_id"},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if ok {
+		if _, found := gs["enable_oauth2_auth"]; found {
+			t.Error("enable_oauth2_auth should not be present when OAuth2 auth is disabled")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_JWTAuthWithExistingGeneralSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		ProxyBatchWriteAt: 10,
+	}
+	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
+		Enabled:        true,
+		UserIDJWTField: testJWTFieldSub,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	// Existing settings preserved
+	if gs["proxy_batch_write_at"] != 10 {
+		t.Errorf("expected proxy_batch_write_at=10, got %v", gs["proxy_batch_write_at"])
+	}
+	// JWT auth added
+	if gs["enable_jwt_auth"] != true {
+		t.Errorf("expected enable_jwt_auth=true, got %v", gs["enable_jwt_auth"])
+	}
+	jwtauth := gs["litellm_jwtauth"].(map[string]interface{})
+	if jwtauth["user_id_jwt_field"] != testJWTFieldSub {
+		t.Errorf("unexpected user_id_jwt_field: %v", jwtauth["user_id_jwt_field"])
+	}
+}
+
+func TestGenerateProxyConfig_RBACEnabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled: true,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["enforce_rbac"] != true {
+		t.Errorf("expected enforce_rbac=true, got %v", gs["enforce_rbac"])
+	}
+}
+
+func TestGenerateProxyConfig_RBACDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled: false,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
+		if _, ok := gs["enforce_rbac"]; ok {
+			t.Error("enforce_rbac should not be present when RBAC is disabled")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_RBACAdminOnlyRoutes(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled:         true,
+		AdminOnlyRoutes: []string{testRouteModelNew, "/model/delete", "/organization/new"},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	routes, ok := gs["admin_only_routes"].([]string)
+	if !ok {
+		t.Fatal("expected admin_only_routes to be []string")
+	}
+	if len(routes) != 3 || routes[0] != testRouteModelNew || routes[2] != "/organization/new" {
+		t.Errorf("unexpected admin_only_routes: %v", routes)
+	}
+}
+
+func TestGenerateProxyConfig_RBACAllowedRoutes(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled:       true,
+		AllowedRoutes: []string{"/chat/completions", "/embeddings", "/key/info"},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	routes, ok := gs["allowed_routes"].([]string)
+	if !ok {
+		t.Fatal("expected allowed_routes to be []string")
+	}
+	if len(routes) != 3 || routes[0] != "/chat/completions" {
+		t.Errorf("unexpected allowed_routes: %v", routes)
+	}
+}
+
+func TestGenerateProxyConfig_RBACDefaultTeamDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled:             true,
+		DefaultTeamDisabled: boolPtr(true),
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["default_team_disabled"] != true {
+		t.Errorf("expected default_team_disabled=true, got %v", gs["default_team_disabled"])
+	}
+}
+
+func TestGenerateProxyConfig_RBACKeyGeneration(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled: true,
+		KeyGeneration: &litellmv1alpha1.KeyGenerationSettings{
+			TeamKeyGeneration: &litellmv1alpha1.TeamKeyGenerationSettings{
+				AllowedTeamMemberRoles: []string{"admin"},
+			},
+			PersonalKeyGeneration: &litellmv1alpha1.PersonalKeyGenerationSettings{
+				AllowedUserRoles: []string{"proxy_admin"},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	kgs, ok := gs["key_generation_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected key_generation_settings to be present")
+	}
+
+	tkg, ok := kgs["team_key_generation"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected team_key_generation to be present")
+	}
+	roles, ok := tkg["allowed_team_member_roles"].([]string)
+	if !ok {
+		t.Fatal("expected allowed_team_member_roles to be []string")
+	}
+	if len(roles) != 1 || roles[0] != "admin" {
+		t.Errorf("unexpected allowed_team_member_roles: %v", roles)
+	}
+
+	pkg, ok := kgs["personal_key_generation"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected personal_key_generation to be present")
+	}
+	userRoles, ok := pkg["allowed_user_roles"].([]string)
+	if !ok {
+		t.Fatal("expected allowed_user_roles to be []string")
+	}
+	if len(userRoles) != 1 || userRoles[0] != "proxy_admin" {
+		t.Errorf("unexpected allowed_user_roles: %v", userRoles)
+	}
+}
+
+func TestGenerateProxyConfig_RBACRolePermissions(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled: true,
+		RolePermissions: map[string]litellmv1alpha1.RolePermission{
+			"internal_user": {
+				Routes: []string{"/key/generate", "/key/delete", "/key/info"},
+				Models: []string{"gpt-4", testModelClaude3Haiku},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	rp, ok := gs["role_permissions"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected role_permissions to be present")
+	}
+	iu, ok := rp["internal_user"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected internal_user entry in role_permissions")
+	}
+	routes, ok := iu["routes"].([]string)
+	if !ok {
+		t.Fatal("expected routes to be []string")
+	}
+	if len(routes) != 3 || routes[0] != "/key/generate" {
+		t.Errorf("unexpected routes: %v", routes)
+	}
+	models, ok := iu["models"].([]string)
+	if !ok {
+		t.Fatal("expected models to be []string")
+	}
+	if len(models) != 2 || models[0] != "gpt-4" || models[1] != testModelClaude3Haiku {
+		t.Errorf("unexpected models: %v", models)
+	}
+}
+
+func TestGenerateProxyConfig_RBACFull(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled:             true,
+		AdminOnlyRoutes:     []string{testRouteModelNew},
+		AllowedRoutes:       []string{"/chat/completions"},
+		DefaultTeamDisabled: boolPtr(true),
+		KeyGeneration: &litellmv1alpha1.KeyGenerationSettings{
+			TeamKeyGeneration: &litellmv1alpha1.TeamKeyGenerationSettings{
+				AllowedTeamMemberRoles: []string{"admin"},
+			},
+		},
+		RolePermissions: map[string]litellmv1alpha1.RolePermission{
+			"internal_user": {
+				Routes: []string{"/key/generate"},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["enforce_rbac"] != true {
+		t.Errorf("expected enforce_rbac=true, got %v", gs["enforce_rbac"])
+	}
+	if gs["default_team_disabled"] != true {
+		t.Errorf("expected default_team_disabled=true, got %v", gs["default_team_disabled"])
+	}
+
+	adminRoutes := gs["admin_only_routes"].([]string)
+	if len(adminRoutes) != 1 || adminRoutes[0] != testRouteModelNew {
+		t.Errorf("unexpected admin_only_routes: %v", adminRoutes)
+	}
+
+	allowedRoutes := gs["allowed_routes"].([]string)
+	if len(allowedRoutes) != 1 || allowedRoutes[0] != "/chat/completions" {
+		t.Errorf("unexpected allowed_routes: %v", allowedRoutes)
+	}
+
+	kgs := gs["key_generation_settings"].(map[string]interface{})
+	if _, ok := kgs["team_key_generation"]; !ok {
+		t.Error("expected team_key_generation in key_generation_settings")
+	}
+
+	rp := gs["role_permissions"].(map[string]interface{})
+	if _, ok := rp["internal_user"]; !ok {
+		t.Error("expected internal_user in role_permissions")
+	}
+}
+
+func TestGenerateProxyConfig_RBACWithExistingGeneralSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		ProxyBatchWriteAt: 10,
+	}
+	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
+		Enabled:         true,
+		AdminOnlyRoutes: []string{testRouteModelNew},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["proxy_batch_write_at"] != 10 {
+		t.Errorf("expected proxy_batch_write_at=10, got %v", gs["proxy_batch_write_at"])
+	}
+	if gs["enforce_rbac"] != true {
+		t.Errorf("expected enforce_rbac=true, got %v", gs["enforce_rbac"])
+	}
+	routes := gs["admin_only_routes"].([]string)
+	if len(routes) != 1 || routes[0] != testRouteModelNew {
+		t.Errorf("unexpected admin_only_routes: %v", routes)
+	}
+}
+
+func TestGenerateProxyConfig_LoggingAuditLogs(t *testing.T) {
+	instance := newTestInstance()
+	retDays := 90
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		AuditLogs: &litellmv1alpha1.AuditLogSpec{
+			Enabled:       true,
+			RetentionDays: &retDays,
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["store_audit_logs"] != true {
+		t.Errorf("expected store_audit_logs=true, got %v", gs["store_audit_logs"])
+	}
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["audit_log_retention_days"] != 90 {
+		t.Errorf("expected audit_log_retention_days=90, got %v", ls["audit_log_retention_days"])
+	}
+}
+
+func TestGenerateProxyConfig_LoggingAuditLogsNoRetention(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		AuditLogs: &litellmv1alpha1.AuditLogSpec{
+			Enabled: true,
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["store_audit_logs"] != true {
+		t.Errorf("expected store_audit_logs=true, got %v", gs["store_audit_logs"])
+	}
+	// No litellm_settings.audit_log_retention_days when not set
+	if _, ok := config["litellm_settings"]; ok {
+		ls := config["litellm_settings"].(map[string]interface{})
+		if _, has := ls["audit_log_retention_days"]; has {
+			t.Error("audit_log_retention_days should not be set when RetentionDays is nil")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_LoggingAuditLogsDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		AuditLogs: &litellmv1alpha1.AuditLogSpec{
+			Enabled: false,
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
+		if _, has := gs["store_audit_logs"]; has {
+			t.Error("store_audit_logs should not be set when audit logs are disabled")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_LoggingTurnOffMessageLogging(t *testing.T) {
+	instance := newTestInstance()
+	turnOff := true
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		TurnOffMessageLogging: &turnOff,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["turn_off_message_logging"] != true {
+		t.Errorf("expected turn_off_message_logging=true, got %v", ls["turn_off_message_logging"])
+	}
+}
+
+func TestGenerateProxyConfig_LoggingRedactUserAPIKeyInfo(t *testing.T) {
+	instance := newTestInstance()
+	redact := true
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		RedactUserAPIKeyInfo: &redact,
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["redact_user_api_key_info"] != true {
+		t.Errorf("expected redact_user_api_key_info=true, got %v", ls["redact_user_api_key_info"])
+	}
+}
+
+func TestGenerateProxyConfig_LoggingSpendLogRetention(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		SpendLogRetention: &litellmv1alpha1.SpendLogRetentionSpec{
+			MaxRetentionPeriod: "90d",
+			CleanupInterval:    "1d",
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["maximum_spend_logs_retention_period"] != "90d" {
+		t.Errorf("expected maximum_spend_logs_retention_period=90d, got %v", gs["maximum_spend_logs_retention_period"])
+	}
+	if gs["maximum_spend_logs_retention_interval"] != "1d" {
+		t.Errorf("expected maximum_spend_logs_retention_interval=1d, got %v", gs["maximum_spend_logs_retention_interval"])
+	}
+}
+
+func TestGenerateProxyConfig_LoggingAllSettings(t *testing.T) {
+	instance := newTestInstance()
+	turnOff := true
+	redact := true
+	retDays := 30
+	instance.Spec.Logging = &litellmv1alpha1.InstanceLoggingSpec{
+		AuditLogs: &litellmv1alpha1.AuditLogSpec{
+			Enabled:       true,
+			RetentionDays: &retDays,
+		},
+		TurnOffMessageLogging: &turnOff,
+		RedactUserAPIKeyInfo:  &redact,
+		SpendLogRetention: &litellmv1alpha1.SpendLogRetentionSpec{
+			MaxRetentionPeriod: "1y",
+			CleanupInterval:    "1h",
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["store_audit_logs"] != true {
+		t.Errorf("expected store_audit_logs=true")
+	}
+	if gs["maximum_spend_logs_retention_period"] != "1y" {
+		t.Errorf("expected retention_period=1y, got %v", gs["maximum_spend_logs_retention_period"])
+	}
+	if gs["maximum_spend_logs_retention_interval"] != "1h" {
+		t.Errorf("expected retention_interval=1h, got %v", gs["maximum_spend_logs_retention_interval"])
+	}
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["audit_log_retention_days"] != 30 {
+		t.Errorf("expected audit_log_retention_days=30, got %v", ls["audit_log_retention_days"])
+	}
+	if ls["turn_off_message_logging"] != true {
+		t.Errorf("expected turn_off_message_logging=true")
+	}
+	if ls["redact_user_api_key_info"] != true {
+		t.Errorf("expected redact_user_api_key_info=true")
+	}
+}
+
+func TestGenerateProxyConfig_LoggingNil(t *testing.T) {
+	instance := newTestInstance()
+	// No Logging spec set — should not produce any logging settings
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
+		if _, has := gs["store_audit_logs"]; has {
+			t.Error("store_audit_logs should not be set when Logging is nil")
+		}
+	}
+	if ls, ok := config["litellm_settings"].(map[string]interface{}); ok {
+		for _, key := range []string{"turn_off_message_logging", "redact_user_api_key_info", "audit_log_retention_days"} {
+			if _, has := ls[key]; has {
+				t.Errorf("%s should not be set when Logging is nil", key)
+			}
 		}
 	}
 }

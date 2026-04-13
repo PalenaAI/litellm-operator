@@ -105,8 +105,28 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 		buildPassThroughEndpointsConfig(instance.Spec.PassThroughEndpoints, config)
 	}
 
+	if instance.Spec.JWTAuth != nil && instance.Spec.JWTAuth.Enabled {
+		buildJWTAuthConfig(instance.Spec.JWTAuth, config)
+	}
+
+	if instance.Spec.OAuth2Auth != nil && instance.Spec.OAuth2Auth.Enabled {
+		buildOAuth2AuthConfig(instance.Spec.OAuth2Auth, config)
+	}
+
+	if instance.Spec.RBAC != nil && instance.Spec.RBAC.Enabled {
+		buildRBACConfig(instance.Spec.RBAC, config)
+	}
+
 	if instance.Spec.DefaultCustomerBudget != nil {
 		buildDefaultCustomerBudget(instance.Spec.DefaultCustomerBudget, config)
+	}
+
+	if instance.Spec.SecretManager != nil {
+		buildSecretManagerConfig(instance.Spec.SecretManager, config)
+	}
+
+	if instance.Spec.Logging != nil {
+		buildLoggingConfig(instance.Spec.Logging, config)
 	}
 
 	buildCredentialList(instance, credentials, config)
@@ -250,6 +270,67 @@ func buildSSOConfig(sso *litellmv1alpha1.SSOSpec, config map[string]interface{})
 	}
 }
 
+// buildJWTAuthConfig writes JWT authentication settings into general_settings.
+func buildJWTAuthConfig(jwt *litellmv1alpha1.JWTAuthSpec, config map[string]interface{}) {
+	gs := ensureGeneralSettings(config)
+	gs["enable_jwt_auth"] = true
+
+	jwtauth := map[string]interface{}{}
+	if jwt.AdminJWTScope != "" {
+		jwtauth["admin_jwt_scope"] = jwt.AdminJWTScope
+	}
+	if len(jwt.AdminAllowedRoutes) > 0 {
+		jwtauth["admin_allowed_routes"] = jwt.AdminAllowedRoutes
+	}
+	if jwt.TeamIDJWTField != "" {
+		jwtauth["team_id_jwt_field"] = jwt.TeamIDJWTField
+	}
+	if jwt.TeamIDsJWTField != "" {
+		jwtauth["team_ids_jwt_field"] = jwt.TeamIDsJWTField
+	}
+	if jwt.OrgIDJWTField != "" {
+		jwtauth["org_id_jwt_field"] = jwt.OrgIDJWTField
+	}
+	if jwt.UserIDJWTField != "" {
+		jwtauth["user_id_jwt_field"] = jwt.UserIDJWTField
+	}
+	if jwt.UserEmailJWTField != "" {
+		jwtauth["user_email_jwt_field"] = jwt.UserEmailJWTField
+	}
+	if jwt.UserRoleJWTField != "" {
+		jwtauth["user_role_jwt_field"] = jwt.UserRoleJWTField
+	}
+	if jwt.EndUserIDJWTField != "" {
+		jwtauth["end_user_id_jwt_field"] = jwt.EndUserIDJWTField
+	}
+	if jwt.PublicKeyTTL != nil {
+		jwtauth["public_key_ttl"] = *jwt.PublicKeyTTL
+	}
+	if len(jwt.ScopeModelMappings) > 0 {
+		jwtauth["scope_model_mappings"] = jwt.ScopeModelMappings
+	}
+	if len(jwtauth) > 0 {
+		gs["litellm_jwtauth"] = jwtauth
+	}
+}
+
+// buildOAuth2AuthConfig writes OAuth2 authentication settings into general_settings.
+func buildOAuth2AuthConfig(oauth2 *litellmv1alpha1.OAuth2AuthSpec, config map[string]interface{}) {
+	gs := ensureGeneralSettings(config)
+	gs["enable_oauth2_auth"] = true
+
+	if len(oauth2.ConfigMappings) > 0 {
+		mappings := map[string]interface{}{}
+		for _, m := range oauth2.ConfigMappings {
+			mappings[m.Name] = map[string]interface{}{
+				"jwt_field":         m.JWTField,
+				"litellm_attribute": m.LiteLLMAttribute,
+			}
+		}
+		gs["oauth2_config_mappings"] = mappings
+	}
+}
+
 // buildCredentialList serializes LiteLLMCredential CRs bound to this instance
 // into the list-of-maps format LiteLLM expects for `credential_list`, and
 // writes the result under config["credential_list"] when any entries match.
@@ -355,6 +436,115 @@ func buildGuardrailsList(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 	}
 	if len(entries) > 0 {
 		config["guardrails"] = entries
+	}
+}
+
+// buildLoggingConfig writes instance-level logging settings into the proxy config:
+// - audit logs → general_settings.store_audit_logs + litellm_settings.audit_log_retention_days
+// - message logging toggle → litellm_settings.turn_off_message_logging
+// - API key redaction → litellm_settings.redact_user_api_key_info
+// - spend log retention → general_settings.maximum_spend_logs_retention_period / _interval
+func buildLoggingConfig(logging *litellmv1alpha1.InstanceLoggingSpec, config map[string]interface{}) {
+	if logging.AuditLogs != nil && logging.AuditLogs.Enabled {
+		gs := ensureGeneralSettings(config)
+		gs["store_audit_logs"] = true
+		if logging.AuditLogs.RetentionDays != nil {
+			ls := ensureLiteLLMSettings(config)
+			ls["audit_log_retention_days"] = *logging.AuditLogs.RetentionDays
+		}
+	}
+
+	if logging.TurnOffMessageLogging != nil {
+		ls := ensureLiteLLMSettings(config)
+		ls["turn_off_message_logging"] = *logging.TurnOffMessageLogging
+	}
+
+	if logging.RedactUserAPIKeyInfo != nil {
+		ls := ensureLiteLLMSettings(config)
+		ls["redact_user_api_key_info"] = *logging.RedactUserAPIKeyInfo
+	}
+
+	if logging.SpendLogRetention != nil {
+		gs := ensureGeneralSettings(config)
+		if logging.SpendLogRetention.MaxRetentionPeriod != "" {
+			gs["maximum_spend_logs_retention_period"] = logging.SpendLogRetention.MaxRetentionPeriod
+		}
+		if logging.SpendLogRetention.CleanupInterval != "" {
+			gs["maximum_spend_logs_retention_interval"] = logging.SpendLogRetention.CleanupInterval
+		}
+	}
+}
+
+// buildSecretManagerConfig writes key_management_system and key_management_settings
+// into general_settings so LiteLLM connects to the external secret manager at runtime.
+func buildSecretManagerConfig(sm *litellmv1alpha1.SecretManagerSpec, config map[string]interface{}) {
+	gs := ensureGeneralSettings(config)
+	gs["key_management_system"] = sm.Provider
+
+	settings := map[string]interface{}{}
+	if len(sm.HostedKeys) > 0 {
+		settings["hosted_keys"] = sm.HostedKeys
+	}
+	if sm.StoreVirtualKeys != nil {
+		settings["store_virtual_keys"] = *sm.StoreVirtualKeys
+	}
+	if sm.PrefixForStoredVirtualKeys != "" {
+		settings["prefix_for_stored_virtual_keys"] = sm.PrefixForStoredVirtualKeys
+	}
+	if sm.AccessMode != "" {
+		settings["access_mode"] = sm.AccessMode
+	}
+	if sm.PrimarySecretName != "" {
+		settings["primary_secret_name"] = sm.PrimarySecretName
+	}
+	if len(settings) > 0 {
+		gs["key_management_settings"] = settings
+	}
+}
+
+// buildRBACConfig writes RBAC settings into general_settings.
+func buildRBACConfig(rbac *litellmv1alpha1.RBACSpec, config map[string]interface{}) {
+	gs := ensureGeneralSettings(config)
+	gs["enforce_rbac"] = true
+
+	if len(rbac.AdminOnlyRoutes) > 0 {
+		gs["admin_only_routes"] = rbac.AdminOnlyRoutes
+	}
+	if len(rbac.AllowedRoutes) > 0 {
+		gs["allowed_routes"] = rbac.AllowedRoutes
+	}
+	if rbac.DefaultTeamDisabled != nil {
+		gs["default_team_disabled"] = *rbac.DefaultTeamDisabled
+	}
+	if rbac.KeyGeneration != nil {
+		kgs := map[string]interface{}{}
+		if rbac.KeyGeneration.TeamKeyGeneration != nil {
+			kgs["team_key_generation"] = map[string]interface{}{
+				"allowed_team_member_roles": rbac.KeyGeneration.TeamKeyGeneration.AllowedTeamMemberRoles,
+			}
+		}
+		if rbac.KeyGeneration.PersonalKeyGeneration != nil {
+			kgs["personal_key_generation"] = map[string]interface{}{
+				"allowed_user_roles": rbac.KeyGeneration.PersonalKeyGeneration.AllowedUserRoles,
+			}
+		}
+		if len(kgs) > 0 {
+			gs["key_generation_settings"] = kgs
+		}
+	}
+	if len(rbac.RolePermissions) > 0 {
+		rp := map[string]interface{}{}
+		for role, perm := range rbac.RolePermissions {
+			entry := map[string]interface{}{}
+			if len(perm.Routes) > 0 {
+				entry["routes"] = perm.Routes
+			}
+			if len(perm.Models) > 0 {
+				entry["models"] = perm.Models
+			}
+			rp[role] = entry
+		}
+		gs["role_permissions"] = rp
 	}
 }
 

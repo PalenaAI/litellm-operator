@@ -56,6 +56,10 @@ When a `LiteLLMVirtualKey` is created, the operator generates an API key via the
 
 Convention-based license management. Drop a Secret named `{instance}-license` or `litellm-license` into the namespace and the operator injects the `LITELLM_LICENSE` env var automatically — no CRD fields required. [Learn more](/guide/enterprise-license).
 
+### External Secret Managers
+
+Connect LiteLLM to AWS Secret Manager, AWS KMS, Azure Key Vault, Google Secret Manager, Google KMS, or HashiCorp Vault at runtime. API keys never touch Kubernetes etcd. Supports IRSA and workload identity. [Learn more](/guide/secret-managers).
+
 ### Production Infrastructure
 
 The Instance controller manages the full production stack:

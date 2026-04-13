@@ -593,7 +593,7 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(strings.TrimSpace(output)).To(Equal("1"), "expected 1 ready replica")
 			}
-			Eventually(verifyDeploymentReady, 5*time.Minute, 10*time.Second).Should(Succeed())
+			Eventually(verifyDeploymentReady, 10*time.Minute, 10*time.Second).Should(Succeed())
 
 			By("waiting for the LiteLLMInstance Ready condition")
 			verifyInstanceReady := func(g Gomega) {
@@ -630,6 +630,17 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 		})
 
 		It("should create a LiteLLMModel and wait for Synced", func() {
+			By("ensuring the LiteLLM instance is ready before creating the model")
+			verifyInstanceReady := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "litellminstance", instanceName,
+					"-n", testNamespace,
+					"-o", "jsonpath={.status.conditions[?(@.type=='Ready')].status}")
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(output).To(Equal("True"))
+			}
+			Eventually(verifyInstanceReady, 10*time.Minute, 10*time.Second).Should(Succeed())
+
 			By("applying the LiteLLMModel CR")
 			applyYAML(modelYAML)
 

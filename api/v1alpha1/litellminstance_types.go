@@ -127,6 +127,16 @@ type LiteLLMInstanceSpec struct {
 	// +optional
 	SCIM *SCIMSpec `json:"scim,omitempty"`
 
+	// JWT authentication configuration (enterprise).
+	// Enables API-level authentication via JWT tokens from identity providers.
+	// +optional
+	JWTAuth *JWTAuthSpec `json:"jwtAuth,omitempty"`
+
+	// OAuth2 machine-to-machine authentication configuration (enterprise).
+	// Maps JWT fields to LiteLLM attributes for service-to-service auth.
+	// +optional
+	OAuth2Auth *OAuth2AuthSpec `json:"oauth2Auth,omitempty"`
+
 	// Response caching configuration.
 	// +optional
 	Caching *CachingSpec `json:"caching,omitempty"`
@@ -140,6 +150,23 @@ type LiteLLMInstanceSpec struct {
 	// Written to litellm_settings.max_end_user_budget / max_end_user_budget_id.
 	// +optional
 	DefaultCustomerBudget *DefaultCustomerBudgetSpec `json:"defaultCustomerBudget,omitempty"`
+
+	// External secret manager configuration.
+	// When configured, LiteLLM fetches secrets from the provider at runtime
+	// instead of reading them from Kubernetes Secrets.
+	// +optional
+	SecretManager *SecretManagerSpec `json:"secretManager,omitempty"`
+
+	// Role-based access control configuration.
+	// Controls route restrictions, key generation permissions, and per-role access.
+	// Some features (key_generation_settings, role_permissions) require a LiteLLM Enterprise license.
+	// +optional
+	RBAC *RBACSpec `json:"rbac,omitempty"`
+
+	// Logging configuration for the instance.
+	// Controls audit logs, global message logging, and spend log retention.
+	// +optional
+	Logging *InstanceLoggingSpec `json:"logging,omitempty"`
 }
 
 // DefaultCustomerBudgetSpec sets platform-wide defaults for new end-users.
@@ -153,6 +180,229 @@ type DefaultCustomerBudgetSpec struct {
 	// Written to litellm_settings.max_end_user_budget_id.
 	// +optional
 	BudgetID string `json:"budgetId,omitempty"`
+}
+
+// SecretManagerSpec defines external secret manager integration.
+// LiteLLM connects to the provider at runtime to fetch API keys and
+// optionally store generated virtual keys.
+type SecretManagerSpec struct {
+	// Secret manager provider.
+	// +kubebuilder:validation:Enum=aws_secret_manager;aws_kms;azure_key_vault;google_secret_manager;google_kms;hashicorp_vault
+	Provider string `json:"provider"`
+
+	// Provider credentials. Reference to a Secret containing
+	// provider-specific authentication fields (e.g., AWS_ACCESS_KEY_ID,
+	// AZURE_CLIENT_ID). May be omitted when using workload identity
+	// (e.g., IRSA on EKS, Workload Identity on GKE).
+	// +optional
+	CredentialsSecretRef *SecretRef `json:"credentialsSecretRef,omitempty"`
+
+	// List of environment variable names that LiteLLM should
+	// resolve from the secret manager instead of the pod environment.
+	// +optional
+	HostedKeys []string `json:"hostedKeys,omitempty"`
+
+	// Store generated virtual keys in the secret manager.
+	// +optional
+	StoreVirtualKeys *bool `json:"storeVirtualKeys,omitempty"`
+
+	// Prefix for stored virtual keys (e.g., "litellm/").
+	// +optional
+	PrefixForStoredVirtualKeys string `json:"prefixForStoredVirtualKeys,omitempty"`
+
+	// Access mode for the secret manager.
+	// +kubebuilder:validation:Enum=read_only;write_only;read_and_write
+	// +kubebuilder:default="read_only"
+	// +optional
+	AccessMode string `json:"accessMode,omitempty"`
+
+	// Name of a single secret containing multiple key-value pairs as JSON.
+	// +optional
+	PrimarySecretName string `json:"primarySecretName,omitempty"`
+
+	// AWS-specific configuration (for aws_secret_manager and aws_kms providers).
+	// +optional
+	AWS *AWSSecretManagerConfig `json:"aws,omitempty"`
+
+	// Azure-specific configuration (for azure_key_vault provider).
+	// +optional
+	Azure *AzureKeyVaultConfig `json:"azure,omitempty"`
+
+	// HashiCorp Vault-specific configuration (for hashicorp_vault provider).
+	// +optional
+	Vault *VaultConfig `json:"vault,omitempty"`
+}
+
+// AWSSecretManagerConfig defines AWS-specific secret manager settings.
+type AWSSecretManagerConfig struct {
+	// AWS region.
+	Region string `json:"region"`
+
+	// IAM role ARN for role assumption (alternative to static credentials).
+	// +optional
+	RoleARN string `json:"roleARN,omitempty"`
+
+	// Session name for role assumption.
+	// +optional
+	SessionName string `json:"sessionName,omitempty"`
+
+	// Path to web identity token file (for IRSA on EKS).
+	// When set, the operator mounts the projected token as a volume.
+	// +optional
+	WebIdentityTokenPath string `json:"webIdentityTokenPath,omitempty"`
+
+	// Custom STS endpoint (for VPC environments).
+	// +optional
+	STSEndpoint string `json:"stsEndpoint,omitempty"`
+}
+
+// AzureKeyVaultConfig defines Azure Key Vault-specific settings.
+type AzureKeyVaultConfig struct {
+	// Azure Key Vault URI.
+	VaultURI string `json:"vaultURI"`
+
+	// Azure tenant ID.
+	TenantID string `json:"tenantID"`
+}
+
+// VaultConfig defines HashiCorp Vault-specific settings.
+type VaultConfig struct {
+	// Vault server address.
+	Address string `json:"address"`
+
+	// Vault namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+
+	// Auth method: approle, tls, or token.
+	// +kubebuilder:validation:Enum=approle;tls;token
+	// +kubebuilder:default="approle"
+	// +optional
+	AuthMethod string `json:"authMethod,omitempty"`
+
+	// AppRole mount path (defaults to "approle").
+	// +optional
+	AppRoleMountPath string `json:"appRoleMountPath,omitempty"`
+
+	// KV engine mount name (defaults to "secret").
+	// +optional
+	MountName string `json:"mountName,omitempty"`
+
+	// Path prefix for secrets.
+	// +optional
+	PathPrefix string `json:"pathPrefix,omitempty"`
+
+	// Cache refresh interval in seconds.
+	// +optional
+	RefreshInterval *int `json:"refreshInterval,omitempty"`
+}
+
+// RBACSpec defines role-based access control configuration.
+// Controls route restrictions, key generation permissions, and per-role access.
+type RBACSpec struct {
+	// Enable role-based access control enforcement.
+	Enabled bool `json:"enabled"`
+
+	// Routes restricted to proxy_admin only.
+	// +optional
+	AdminOnlyRoutes []string `json:"adminOnlyRoutes,omitempty"`
+
+	// Routes accessible to all authenticated users.
+	// If set, only these routes are allowed; all others are blocked.
+	// +optional
+	AllowedRoutes []string `json:"allowedRoutes,omitempty"`
+
+	// Key generation restrictions.
+	// +optional
+	KeyGeneration *KeyGenerationSettings `json:"keyGeneration,omitempty"`
+
+	// Per-role permission definitions.
+	// +optional
+	RolePermissions map[string]RolePermission `json:"rolePermissions,omitempty"`
+
+	// Prevent users from creating personal keys (force team-based keys).
+	// +optional
+	DefaultTeamDisabled *bool `json:"defaultTeamDisabled,omitempty"`
+}
+
+// KeyGenerationSettings defines restrictions on who can generate API keys.
+type KeyGenerationSettings struct {
+	// Team key generation restrictions.
+	// +optional
+	TeamKeyGeneration *TeamKeyGenerationSettings `json:"teamKeyGeneration,omitempty"`
+
+	// Personal key generation restrictions.
+	// +optional
+	PersonalKeyGeneration *PersonalKeyGenerationSettings `json:"personalKeyGeneration,omitempty"`
+}
+
+// TeamKeyGenerationSettings defines which team member roles can generate team keys.
+type TeamKeyGenerationSettings struct {
+	// Team member roles allowed to generate team keys.
+	// +kubebuilder:validation:Items:Enum=admin;user
+	AllowedTeamMemberRoles []string `json:"allowedTeamMemberRoles"`
+}
+
+// PersonalKeyGenerationSettings defines which user roles can generate personal keys.
+type PersonalKeyGenerationSettings struct {
+	// User roles allowed to generate personal keys.
+	// +kubebuilder:validation:Items:Enum=proxy_admin;proxy_admin_viewer;internal_user;internal_user_viewer
+	AllowedUserRoles []string `json:"allowedUserRoles"`
+}
+
+// RolePermission defines the routes and models accessible to a specific role.
+type RolePermission struct {
+	// API routes this role can access.
+	// +optional
+	Routes []string `json:"routes,omitempty"`
+
+	// Models this role can use.
+	// +optional
+	Models []string `json:"models,omitempty"`
+}
+
+// InstanceLoggingSpec configures instance-level logging behavior.
+type InstanceLoggingSpec struct {
+	// Enable audit logs (enterprise).
+	// Stores admin actions (key creation, team changes, etc.) in the database.
+	// +optional
+	AuditLogs *AuditLogSpec `json:"auditLogs,omitempty"`
+
+	// Disable logging of request/response message content.
+	// Only metadata (tokens, cost, model) is logged.
+	// +optional
+	TurnOffMessageLogging *bool `json:"turnOffMessageLogging,omitempty"`
+
+	// Redact user API key information from logs.
+	// +optional
+	RedactUserAPIKeyInfo *bool `json:"redactUserApiKeyInfo,omitempty"`
+
+	// Spend log retention configuration.
+	// +optional
+	SpendLogRetention *SpendLogRetentionSpec `json:"spendLogRetention,omitempty"`
+}
+
+// AuditLogSpec configures audit logging.
+type AuditLogSpec struct {
+	// Enable audit logging.
+	Enabled bool `json:"enabled"`
+
+	// Retention period in days.
+	// +optional
+	RetentionDays *int `json:"retentionDays,omitempty"`
+}
+
+// SpendLogRetentionSpec configures spend log retention and cleanup.
+type SpendLogRetentionSpec struct {
+	// Maximum retention period (e.g., "90d", "1y").
+	// Written to general_settings.maximum_spend_logs_retention_period.
+	// +optional
+	MaxRetentionPeriod string `json:"maxRetentionPeriod,omitempty"`
+
+	// Cleanup interval (e.g., "1d", "1h").
+	// Written to general_settings.maximum_spend_logs_retention_interval.
+	// +optional
+	CleanupInterval string `json:"cleanupInterval,omitempty"`
 }
 
 // ImageSpec defines the container image for LiteLLM.
@@ -1065,6 +1315,82 @@ type SCIMSpec struct {
 	GeneratedTokenSecretName string `json:"generatedTokenSecretName,omitempty"`
 }
 
+// JWTAuthSpec defines JWT-based authentication configuration (enterprise).
+// When enabled, LiteLLM validates JWT tokens from identity providers and
+// maps claims to roles, teams, and organizations.
+type JWTAuthSpec struct {
+	// Enable JWT-based authentication.
+	Enabled bool `json:"enabled"`
+
+	// JWT scope value that grants proxy admin access.
+	// +optional
+	AdminJWTScope string `json:"adminJwtScope,omitempty"`
+
+	// Routes accessible to admin JWT holders.
+	// +optional
+	AdminAllowedRoutes []string `json:"adminAllowedRoutes,omitempty"`
+
+	// JWT field containing the team ID.
+	// +optional
+	TeamIDJWTField string `json:"teamIdJwtField,omitempty"`
+
+	// JWT field containing team IDs (array).
+	// +optional
+	TeamIDsJWTField string `json:"teamIdsJwtField,omitempty"`
+
+	// JWT field containing the organization ID.
+	// +optional
+	OrgIDJWTField string `json:"orgIdJwtField,omitempty"`
+
+	// JWT field containing the user ID.
+	// +optional
+	UserIDJWTField string `json:"userIdJwtField,omitempty"`
+
+	// JWT field containing the user email.
+	// +optional
+	UserEmailJWTField string `json:"userEmailJwtField,omitempty"`
+
+	// JWT field containing the user role.
+	// +optional
+	UserRoleJWTField string `json:"userRoleJwtField,omitempty"`
+
+	// JWT field containing the end-user ID.
+	// +optional
+	EndUserIDJWTField string `json:"endUserIdJwtField,omitempty"`
+
+	// TTL in seconds for caching the public key.
+	// +optional
+	PublicKeyTTL *int `json:"publicKeyTtl,omitempty"`
+
+	// Scope-to-model mappings for fine-grained access control.
+	// Key: JWT scope value, Value: list of allowed model names.
+	// +optional
+	ScopeModelMappings map[string][]string `json:"scopeModelMappings,omitempty"`
+}
+
+// OAuth2AuthSpec defines OAuth2 machine-to-machine authentication configuration (enterprise).
+// Maps JWT fields to LiteLLM attributes for service-to-service authentication.
+type OAuth2AuthSpec struct {
+	// Enable OAuth2 machine-to-machine authentication.
+	Enabled bool `json:"enabled"`
+
+	// Mappings from JWT fields to LiteLLM attributes.
+	// +optional
+	ConfigMappings []OAuth2Mapping `json:"configMappings,omitempty"`
+}
+
+// OAuth2Mapping defines a single mapping from a JWT field to a LiteLLM attribute.
+type OAuth2Mapping struct {
+	// Identifier for this mapping.
+	Name string `json:"name"`
+
+	// JWT field to read from.
+	JWTField string `json:"jwtField"`
+
+	// LiteLLM attribute to map to (e.g., "team_id", "user_id").
+	LiteLLMAttribute string `json:"litellmAttribute"`
+}
+
 // LiteLLMInstanceStatus defines the observed state of LiteLLMInstance.
 type LiteLLMInstanceStatus struct {
 	// Whether the instance is fully ready.
@@ -1101,6 +1427,10 @@ type LiteLLMInstanceStatus struct {
 	// +optional
 	SCIM *SCIMStatus `json:"scim,omitempty"`
 
+	// Secret manager configuration status.
+	// +optional
+	SecretManager *SecretManagerStatus `json:"secretManager,omitempty"`
+
 	// License activation status.
 	// +optional
 	License *LicenseStatus `json:"license,omitempty"`
@@ -1116,6 +1446,16 @@ type LiteLLMInstanceStatus struct {
 	// Standard Kubernetes conditions.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// SecretManagerStatus defines the observed state of the secret manager integration.
+type SecretManagerStatus struct {
+	// Whether the secret manager is configured.
+	Configured bool `json:"configured"`
+
+	// The configured provider.
+	// +optional
+	Provider string `json:"provider,omitempty"`
 }
 
 // LicenseStatus reflects license Secret detection.

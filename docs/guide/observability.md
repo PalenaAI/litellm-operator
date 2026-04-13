@@ -123,6 +123,85 @@ spec:
 
 The operator translates callback configuration into environment variables (`LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`) and adds the callback list to the `proxy_server_config.yaml`.
 
+## Instance-Level Logging Controls
+
+Configure global logging behavior on the `LiteLLMInstance`:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: my-gateway
+spec:
+  logging:
+    # Audit logs (enterprise) — track admin actions in the database
+    auditLogs:
+      enabled: true
+      retentionDays: 90
+
+    # Don't log request/response message content (only metadata)
+    turnOffMessageLogging: true
+
+    # Redact API key info from logs
+    redactUserApiKeyInfo: true
+
+    # Spend log cleanup
+    spendLogRetention:
+      maxRetentionPeriod: "90d"
+      cleanupInterval: "1d"
+```
+
+## Per-Team Logging (Enterprise)
+
+Route logs to team-specific destinations. Each team can have its own Langfuse project, GCS bucket, LangSmith project, or Arize space:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: engineering
+spec:
+  instanceRef:
+    name: my-gateway
+  teamAlias: engineering
+  logging:
+    callbacks:
+      - name: langfuse
+        type: success_and_failure
+        credentialsSecretRef:
+          name: engineering-langfuse
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: engineering-langfuse
+stringData:
+  langfuse_public_key: "pk-team-engineering"
+  langfuse_secret: "sk-team-engineering"
+  langfuse_host: "https://cloud.langfuse.com"
+```
+
+Supported providers: `langfuse`, `gcs_bucket`, `langsmith`, `arize`.
+
+### GDPR: Disable Logging for a Team
+
+Completely disable all logging for a team to comply with GDPR or other data privacy requirements:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: eu-customers
+spec:
+  instanceRef:
+    name: my-gateway
+  teamAlias: eu-customers
+  logging:
+    disabled: true
+```
+
+When `disabled: true`, the operator calls the LiteLLM API to remove all callbacks for the team. No request or response data will be logged.
+
 ## Status Conditions
 
 Every CRD reports health via standard `metav1.Condition` types:

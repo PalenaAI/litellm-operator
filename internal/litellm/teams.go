@@ -31,6 +31,8 @@ type TeamService interface {
 	AddMember(ctx context.Context, teamID, email, role string) error
 	RemoveMember(ctx context.Context, teamID, email string) error
 	ListMembers(ctx context.Context, teamID string) ([]TeamMemberInfo, error)
+	SetCallback(ctx context.Context, teamID string, req TeamCallbackRequest) error
+	DisableLogging(ctx context.Context, teamID string) error
 }
 
 // TeamCreateRequest is the request to create a team.
@@ -93,6 +95,13 @@ type TeamMemberInfo struct {
 	Role  string `json:"role"`
 }
 
+// TeamCallbackRequest is the request to set a per-team logging callback.
+type TeamCallbackRequest struct {
+	CallbackName string            `json:"callback_name"`
+	CallbackType string            `json:"callback_type"`
+	CallbackVars map[string]string `json:"callback_vars"`
+}
+
 type teamService struct {
 	client *httpClient
 }
@@ -146,4 +155,12 @@ func (s *teamService) ListMembers(ctx context.Context, teamID string) ([]TeamMem
 	}
 	err := s.client.do(ctx, http.MethodGet, "/team/info?team_id="+teamID, nil, &resp)
 	return resp.Members, err
+}
+
+func (s *teamService) SetCallback(ctx context.Context, teamID string, req TeamCallbackRequest) error {
+	return s.client.do(ctx, http.MethodPost, "/team/"+teamID+"/callback", req, nil)
+}
+
+func (s *teamService) DisableLogging(ctx context.Context, teamID string) error {
+	return s.client.do(ctx, http.MethodPost, "/team/"+teamID+"/disable_logging", nil, nil)
 }

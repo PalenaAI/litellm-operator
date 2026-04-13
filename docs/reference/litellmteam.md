@@ -33,6 +33,52 @@ spec:
       role: user
 ```
 
+## Per-Team Logging Example
+
+Route logs for a team to a dedicated Langfuse project (enterprise):
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: engineering
+spec:
+  instanceRef:
+    name: my-gateway
+  teamAlias: engineering
+  logging:
+    callbacks:
+      - name: langfuse
+        type: success_and_failure
+        credentialsSecretRef:
+          name: engineering-langfuse
+        config:
+          langfuse_host: "https://cloud.langfuse.com"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: engineering-langfuse
+stringData:
+  langfuse_public_key: "pk-team-engineering"
+  langfuse_secret: "sk-team-engineering"
+```
+
+Disable all logging for a team (GDPR compliance):
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: gdpr-team
+spec:
+  instanceRef:
+    name: my-gateway
+  teamAlias: gdpr-team
+  logging:
+    disabled: true
+```
+
 ## Spec Fields
 
 | Field | Type | Required | Default | Description |
@@ -51,8 +97,36 @@ spec:
 | `tags` | []string | No | — | Tags for tag-based routing (keys inherit these tags) |
 | `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this team |
 | `guardrails` | []string | No | — | Names of [LiteLLMGuardrail](/reference/litellmguardrail) CRs this team opts into. Each entry must match `spec.guardrailName` on a guardrail bound to the same instance (enterprise) |
+| `logging` | *TeamLoggingSpec | No | — | Per-team logging configuration (enterprise). See below |
 | `memberManagement` | string | No | `mixed` | `crd`, `sso`, or `mixed` |
 | `members` | []TeamMember | No | — | Team members list |
+
+### `logging`
+
+Per-team logging configuration (enterprise). Enables routing logs to team-specific provider instances (e.g., separate Langfuse projects) and GDPR-compliant logging disable.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `disabled` | bool | `false` | Disable all logging for this team (GDPR compliance). When true, no request/response data is logged |
+| `callbacks` | []TeamCallback | — | Team-specific logging callbacks |
+
+**TeamCallback:**
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `name` | string | — | Callback provider: `langfuse`, `gcs_bucket`, `langsmith`, `arize` (required) |
+| `type` | string | `success_and_failure` | When to invoke: `success`, `failure`, `success_and_failure` |
+| `credentialsSecretRef` | SecretRef | — | Reference to a Secret containing provider credentials (required) |
+| `config` | map[string]string | — | Additional provider-specific configuration merged with Secret data |
+
+**Credentials Secret keys by provider:**
+
+| Provider | Expected Secret Keys |
+| --- | --- |
+| `langfuse` | `langfuse_public_key`, `langfuse_secret`, `langfuse_host` (optional) |
+| `gcs_bucket` | `gcs_bucket_name`, `gcs_path_service_account` (optional) |
+| `langsmith` | `langsmith_api_key`, `langsmith_project` |
+| `arize` | `arize_api_key`, `arize_space_key` |
 
 ### `members[]`
 
@@ -68,6 +142,8 @@ spec:
 | `synced` | bool | Whether the team is synced to LiteLLM |
 | `litellmTeamId` | string | LiteLLM-assigned team ID |
 | `currentSpend` | *float64 | Current spend in USD |
+| `loggingSynced` | bool | Whether team logging callbacks are synced |
+| `loggingDisabled` | bool | Whether logging is disabled for this team (GDPR) |
 | `totalMemberCount` | int | Total members (CRD + SSO) |
 | `crdMembers` | []TeamMemberStatus | Members managed by the CRD |
 | `ssoMembers` | []TeamMemberStatus | Members provisioned by SSO |

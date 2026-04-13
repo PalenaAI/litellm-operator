@@ -93,10 +93,14 @@ The operator does **not** requeue the resource in this case — the condition pe
 
 The following CRD fields configure LiteLLM Enterprise features and require an active license:
 
+- **JWT authentication** — `spec.jwtAuth` enables API-level authentication via JWT tokens from identity providers. See [JWT/OAuth2 Auth](/guide/jwt-oauth2-auth)
+- **OAuth2 authentication** — `spec.oauth2Auth` enables machine-to-machine authentication by mapping JWT fields to LiteLLM attributes. See [JWT/OAuth2 Auth](/guide/jwt-oauth2-auth)
 - **IP allowlisting** — `spec.security.ipAllowlist` restricts API access to specific IPs/CIDRs
 - **Max request/response size** — `spec.security.ipAllowlist.maxRequestSizeMB` / `maxResponseSizeMB`
 - **Per-model spending limits on virtual keys** — `spec.modelMaxBudget` on `LiteLLMVirtualKey`
 - **Per-key / per-team guardrail assignment** — `spec.guardrails []string` on `LiteLLMVirtualKey` and `LiteLLMTeam`. Declaring `LiteLLMGuardrail` CRs and rendering them into the proxy config works on open-source LiteLLM; opting a specific key or team into a guardrail is enterprise-only and will surface as `EnterpriseLicenseRequired` if no license is active. See [LiteLLMGuardrail](/reference/litellmguardrail) for details.
+
+When JWT or OAuth2 auth is configured without a license Secret, the operator sets an `EnterpriseFeaturesConfigured` warning condition on the `LiteLLMInstance` status and emits a warning event. The proxy config is still generated — LiteLLM will enforce the license requirement at runtime.
 
 ## Removing a License
 
