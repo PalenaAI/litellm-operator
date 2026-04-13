@@ -410,15 +410,15 @@ metadata:
       ]
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.9.0
-    createdAt: "2026-04-13T19:32:36Z"
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.10.0
+    createdAt: "2026-04-13T20:58:32Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/PalenaAI/litellm-operator
     support: bitkaio LLC
-  name: litellm-operator.v0.9.0
+  name: litellm-operator.v0.10.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -830,4 +830,4 @@ spec:
   provider:
     name: bitkaio LLC
     url: https://palena.ai
-  version: 0.9.0
+  version: 0.10.0
