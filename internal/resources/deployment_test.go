@@ -23,7 +23,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-const testSecretKeyAPIKey = "api-key"
+const (
+	testSecretKeyAPIKey = "api-key"
+	testSecretAWSCreds  = "aws-creds"
+)
 
 func newTestInstance() *litellmv1alpha1.LiteLLMInstance {
 	return &litellmv1alpha1.LiteLLMInstance{
@@ -164,7 +167,7 @@ func TestBuildDeployment_CachingS3Credentials(t *testing.T) {
 		S3: &litellmv1alpha1.CacheS3Spec{
 			BucketName: "my-bucket",
 			CredentialsSecretRef: &litellmv1alpha1.SecretKeyRef{
-				Name: "aws-creds",
+				Name: testSecretAWSCreds,
 				Key:  "credentials",
 			},
 		},
@@ -179,10 +182,10 @@ func TestBuildDeployment_CachingS3Credentials(t *testing.T) {
 			envMap[env.Name] = env.ValueFrom.SecretKeyRef.Name
 		}
 	}
-	if envMap["CACHE_S3_ACCESS_KEY_ID"] != "aws-creds" {
+	if envMap["CACHE_S3_ACCESS_KEY_ID"] != testSecretAWSCreds {
 		t.Error("CACHE_S3_ACCESS_KEY_ID not found or wrong secret")
 	}
-	if envMap["CACHE_S3_SECRET_ACCESS_KEY"] != "aws-creds" {
+	if envMap["CACHE_S3_SECRET_ACCESS_KEY"] != testSecretAWSCreds {
 		t.Error("CACHE_S3_SECRET_ACCESS_KEY not found or wrong secret")
 	}
 }
@@ -539,7 +542,7 @@ func TestBuildDeployment_SecretManagerAWSEnvVars(t *testing.T) {
 	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
 		Provider: "aws_secret_manager",
 		CredentialsSecretRef: &litellmv1alpha1.SecretRef{
-			Name: "aws-creds",
+			Name: testSecretAWSCreds,
 		},
 		AWS: &litellmv1alpha1.AWSSecretManagerConfig{
 			Region:  "us-east-1",
@@ -568,7 +571,7 @@ func TestBuildDeployment_SecretManagerAWSEnvVars(t *testing.T) {
 	container := dep.Spec.Template.Spec.Containers[0]
 	found := false
 	for _, ef := range container.EnvFrom {
-		if ef.SecretRef != nil && ef.SecretRef.Name == "aws-creds" {
+		if ef.SecretRef != nil && ef.SecretRef.Name == testSecretAWSCreds {
 			found = true
 			break
 		}

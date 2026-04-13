@@ -23,12 +23,18 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const (
+	testModelClaude3Haiku = "claude-3-haiku"
+	testJWTFieldSub       = "sub"
+	testRouteModelNew     = "/model/new"
+)
+
 func intPtr(v int) *int { return &v }
 
 func TestGenerateProxyConfig_DefaultFallbacks(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Fallbacks = &litellmv1alpha1.FallbackSpec{
-		DefaultFallbacks: []string{"gpt-4-mini", "claude-3-haiku"},
+		DefaultFallbacks: []string{"gpt-4-mini", testModelClaude3Haiku},
 	}
 
 	config := GenerateProxyConfig(instance, nil, nil)
@@ -41,7 +47,7 @@ func TestGenerateProxyConfig_DefaultFallbacks(t *testing.T) {
 	if !ok {
 		t.Fatal("expected default_fallbacks to be []string")
 	}
-	if len(df) != 2 || df[0] != "gpt-4-mini" || df[1] != "claude-3-haiku" {
+	if len(df) != 2 || df[0] != "gpt-4-mini" || df[1] != testModelClaude3Haiku {
 		t.Errorf("unexpected default_fallbacks: %v", df)
 	}
 }
@@ -50,7 +56,7 @@ func TestGenerateProxyConfig_ModelFallbacks(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.Fallbacks = &litellmv1alpha1.FallbackSpec{
 		ModelFallbacks: []litellmv1alpha1.ModelFallbackEntry{
-			{Model: "gpt-4", Fallbacks: []string{"gpt-4-mini", "claude-3-haiku"}},
+			{Model: "gpt-4", Fallbacks: []string{"gpt-4-mini", testModelClaude3Haiku}},
 		},
 	}
 
@@ -71,7 +77,7 @@ func TestGenerateProxyConfig_ModelFallbacks(t *testing.T) {
 	if !ok {
 		t.Fatal("expected fallback entry for gpt-4")
 	}
-	if len(models) != 2 || models[0] != "gpt-4-mini" || models[1] != "claude-3-haiku" {
+	if len(models) != 2 || models[0] != "gpt-4-mini" || models[1] != testModelClaude3Haiku {
 		t.Errorf("unexpected fallback models: %v", models)
 	}
 }
@@ -1528,7 +1534,7 @@ func TestGenerateProxyConfig_JWTAuthEnabled(t *testing.T) {
 		TeamIDJWTField:     "client_id",
 		TeamIDsJWTField:    "groups",
 		OrgIDJWTField:      "org_id",
-		UserIDJWTField:     "sub",
+		UserIDJWTField:     testJWTFieldSub,
 		UserEmailJWTField:  "email",
 		UserRoleJWTField:   "role",
 		EndUserIDJWTField:  "end_user_id",
@@ -1564,7 +1570,7 @@ func TestGenerateProxyConfig_JWTAuthEnabled(t *testing.T) {
 	if jwtauth["org_id_jwt_field"] != "org_id" {
 		t.Errorf("unexpected org_id_jwt_field: %v", jwtauth["org_id_jwt_field"])
 	}
-	if jwtauth["user_id_jwt_field"] != "sub" {
+	if jwtauth["user_id_jwt_field"] != testJWTFieldSub {
 		t.Errorf("unexpected user_id_jwt_field: %v", jwtauth["user_id_jwt_field"])
 	}
 	if jwtauth["user_email_jwt_field"] != "email" {
@@ -1633,7 +1639,7 @@ func TestGenerateProxyConfig_JWTAuthDisabled(t *testing.T) {
 	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
 		Enabled:        false,
 		AdminJWTScope:  "admin",
-		UserIDJWTField: "sub",
+		UserIDJWTField: testJWTFieldSub,
 	}
 
 	config := GenerateProxyConfig(instance, nil, nil)
@@ -1653,7 +1659,7 @@ func TestGenerateProxyConfig_OAuth2AuthEnabled(t *testing.T) {
 		Enabled: true,
 		ConfigMappings: []litellmv1alpha1.OAuth2Mapping{
 			{Name: "clientId", JWTField: "client_id", LiteLLMAttribute: "team_id"},
-			{Name: "userId", JWTField: "sub", LiteLLMAttribute: "user_id"},
+			{Name: "userId", JWTField: testJWTFieldSub, LiteLLMAttribute: "user_id"},
 		},
 	}
 
@@ -1684,7 +1690,7 @@ func TestGenerateProxyConfig_OAuth2AuthEnabled(t *testing.T) {
 	if !ok {
 		t.Fatal("expected userId mapping to be present")
 	}
-	if userId["jwt_field"] != "sub" {
+	if userId["jwt_field"] != testJWTFieldSub {
 		t.Errorf("unexpected jwt_field: %v", userId["jwt_field"])
 	}
 	if userId["litellm_attribute"] != "user_id" {
@@ -1738,7 +1744,7 @@ func TestGenerateProxyConfig_JWTAuthWithExistingGeneralSettings(t *testing.T) {
 	}
 	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
 		Enabled:        true,
-		UserIDJWTField: "sub",
+		UserIDJWTField: testJWTFieldSub,
 	}
 
 	config := GenerateProxyConfig(instance, nil, nil)
@@ -1753,7 +1759,7 @@ func TestGenerateProxyConfig_JWTAuthWithExistingGeneralSettings(t *testing.T) {
 		t.Errorf("expected enable_jwt_auth=true, got %v", gs["enable_jwt_auth"])
 	}
 	jwtauth := gs["litellm_jwtauth"].(map[string]interface{})
-	if jwtauth["user_id_jwt_field"] != "sub" {
+	if jwtauth["user_id_jwt_field"] != testJWTFieldSub {
 		t.Errorf("unexpected user_id_jwt_field: %v", jwtauth["user_id_jwt_field"])
 	}
 }
@@ -1794,7 +1800,7 @@ func TestGenerateProxyConfig_RBACAdminOnlyRoutes(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
 		Enabled:         true,
-		AdminOnlyRoutes: []string{"/model/new", "/model/delete", "/organization/new"},
+		AdminOnlyRoutes: []string{testRouteModelNew, "/model/delete", "/organization/new"},
 	}
 
 	config := GenerateProxyConfig(instance, nil, nil)
@@ -1804,7 +1810,7 @@ func TestGenerateProxyConfig_RBACAdminOnlyRoutes(t *testing.T) {
 	if !ok {
 		t.Fatal("expected admin_only_routes to be []string")
 	}
-	if len(routes) != 3 || routes[0] != "/model/new" || routes[2] != "/organization/new" {
+	if len(routes) != 3 || routes[0] != testRouteModelNew || routes[2] != "/organization/new" {
 		t.Errorf("unexpected admin_only_routes: %v", routes)
 	}
 }
@@ -1897,7 +1903,7 @@ func TestGenerateProxyConfig_RBACRolePermissions(t *testing.T) {
 		RolePermissions: map[string]litellmv1alpha1.RolePermission{
 			"internal_user": {
 				Routes: []string{"/key/generate", "/key/delete", "/key/info"},
-				Models: []string{"gpt-4", "claude-3-haiku"},
+				Models: []string{"gpt-4", testModelClaude3Haiku},
 			},
 		},
 	}
@@ -1924,7 +1930,7 @@ func TestGenerateProxyConfig_RBACRolePermissions(t *testing.T) {
 	if !ok {
 		t.Fatal("expected models to be []string")
 	}
-	if len(models) != 2 || models[0] != "gpt-4" || models[1] != "claude-3-haiku" {
+	if len(models) != 2 || models[0] != "gpt-4" || models[1] != testModelClaude3Haiku {
 		t.Errorf("unexpected models: %v", models)
 	}
 }
@@ -1933,7 +1939,7 @@ func TestGenerateProxyConfig_RBACFull(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
 		Enabled:             true,
-		AdminOnlyRoutes:     []string{"/model/new"},
+		AdminOnlyRoutes:     []string{testRouteModelNew},
 		AllowedRoutes:       []string{"/chat/completions"},
 		DefaultTeamDisabled: boolPtr(true),
 		KeyGeneration: &litellmv1alpha1.KeyGenerationSettings{
@@ -1959,7 +1965,7 @@ func TestGenerateProxyConfig_RBACFull(t *testing.T) {
 	}
 
 	adminRoutes := gs["admin_only_routes"].([]string)
-	if len(adminRoutes) != 1 || adminRoutes[0] != "/model/new" {
+	if len(adminRoutes) != 1 || adminRoutes[0] != testRouteModelNew {
 		t.Errorf("unexpected admin_only_routes: %v", adminRoutes)
 	}
 
@@ -1986,7 +1992,7 @@ func TestGenerateProxyConfig_RBACWithExistingGeneralSettings(t *testing.T) {
 	}
 	instance.Spec.RBAC = &litellmv1alpha1.RBACSpec{
 		Enabled:         true,
-		AdminOnlyRoutes: []string{"/model/new"},
+		AdminOnlyRoutes: []string{testRouteModelNew},
 	}
 
 	config := GenerateProxyConfig(instance, nil, nil)
@@ -1999,7 +2005,7 @@ func TestGenerateProxyConfig_RBACWithExistingGeneralSettings(t *testing.T) {
 		t.Errorf("expected enforce_rbac=true, got %v", gs["enforce_rbac"])
 	}
 	routes := gs["admin_only_routes"].([]string)
-	if len(routes) != 1 || routes[0] != "/model/new" {
+	if len(routes) != 1 || routes[0] != testRouteModelNew {
 		t.Errorf("unexpected admin_only_routes: %v", routes)
 	}
 }
