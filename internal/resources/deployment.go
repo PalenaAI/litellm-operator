@@ -34,6 +34,8 @@ const (
 	defaultImageRepo = "ghcr.io/berriai/litellm"
 	// nonRootImageRepo is the official non-root LiteLLM image (runs as nobody:65534).
 	nonRootImageRepo = "ghcr.io/berriai/litellm-non_root"
+	// volumeNameColorTheme is the volume name for the Admin UI color theme ConfigMap.
+	volumeNameColorTheme = "color-theme"
 )
 
 func podSecurityContext(nonRoot bool) *corev1.PodSecurityContext {
@@ -515,7 +517,7 @@ func buildVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volum
 	}
 	if instance.Spec.AdminUI != nil && instance.Spec.AdminUI.ColorThemeConfigMapRef != nil {
 		mounts = append(mounts, corev1.VolumeMount{
-			Name:      "color-theme",
+			Name:      volumeNameColorTheme,
 			MountPath: "/app/enterprise/enterprise_ui/enterprise_colors.json",
 			SubPath:   "enterprise_colors.json",
 			ReadOnly:  true,
@@ -545,7 +547,7 @@ func buildVolumes(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volume {
 	}
 	if instance.Spec.AdminUI != nil && instance.Spec.AdminUI.ColorThemeConfigMapRef != nil {
 		volumes = append(volumes, corev1.Volume{
-			Name: "color-theme",
+			Name: volumeNameColorTheme,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{

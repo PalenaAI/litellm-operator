@@ -2191,7 +2191,7 @@ func TestGenerateProxyConfig_AdminUIAdminOnly(t *testing.T) {
 	}
 	config := GenerateProxyConfig(instance, nil, nil)
 	gs := config["general_settings"].(map[string]interface{})
-	if gs["ui_access_mode"] != "admin_only" {
+	if gs["ui_access_mode"] != uiAccessModeAdminOnly {
 		t.Errorf("expected ui_access_mode=admin_only, got %v", gs["ui_access_mode"])
 	}
 }
@@ -2254,7 +2254,7 @@ func TestGenerateProxyConfig_AdminUIAllSettings(t *testing.T) {
 	}
 	config := GenerateProxyConfig(instance, nil, nil)
 	gs := config["general_settings"].(map[string]interface{})
-	if gs["ui_access_mode"] != "admin_only" {
+	if gs["ui_access_mode"] != uiAccessModeAdminOnly {
 		t.Errorf("expected ui_access_mode=admin_only, got %v", gs["ui_access_mode"])
 	}
 	if gs["store_model_in_db"] != true {

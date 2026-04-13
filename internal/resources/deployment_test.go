@@ -854,7 +854,7 @@ func TestBuildDeployment_AdminUIColorTheme(t *testing.T) {
 	// Check volume exists
 	foundVolume := false
 	for _, v := range dep.Spec.Template.Spec.Volumes {
-		if v.Name == "color-theme" {
+		if v.Name == volumeNameColorTheme {
 			foundVolume = true
 			if v.ConfigMap == nil || v.ConfigMap.Name != "my-colors" {
 				t.Errorf("expected color-theme volume to reference ConfigMap 'my-colors', got %+v", v)
@@ -868,7 +868,7 @@ func TestBuildDeployment_AdminUIColorTheme(t *testing.T) {
 	// Check volume mount exists with subPath
 	foundMount := false
 	for _, m := range dep.Spec.Template.Spec.Containers[0].VolumeMounts {
-		if m.Name == "color-theme" {
+		if m.Name == volumeNameColorTheme {
 			foundMount = true
 			if m.MountPath != "/app/enterprise/enterprise_ui/enterprise_colors.json" {
 				t.Errorf("expected mountPath /app/enterprise/enterprise_ui/enterprise_colors.json, got %s", m.MountPath)
@@ -896,12 +896,12 @@ func TestBuildDeployment_AdminUINoColorTheme(t *testing.T) {
 	dep := BuildDeployment(instance, labels, "", nil, nil)
 
 	for _, v := range dep.Spec.Template.Spec.Volumes {
-		if v.Name == "color-theme" {
+		if v.Name == volumeNameColorTheme {
 			t.Error("color-theme volume should not be present when colorThemeConfigMapRef is nil")
 		}
 	}
 	for _, m := range dep.Spec.Template.Spec.Containers[0].VolumeMounts {
-		if m.Name == "color-theme" {
+		if m.Name == volumeNameColorTheme {
 			t.Error("color-theme mount should not be present when colorThemeConfigMapRef is nil")
 		}
 	}
@@ -925,7 +925,7 @@ func TestBuildDeployment_AdminUINil(t *testing.T) {
 		}
 	}
 	for _, v := range dep.Spec.Template.Spec.Volumes {
-		if v.Name == "color-theme" {
+		if v.Name == volumeNameColorTheme {
 			t.Error("color-theme volume should not be present when AdminUI is nil")
 		}
 	}

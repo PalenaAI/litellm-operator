@@ -29,6 +29,11 @@ import (
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 )
 
+// Admin UI config values written to general_settings.
+const (
+	uiAccessModeAdminOnly = "admin_only"
+)
+
 // Cache backend type and mode identifiers used by `proxy_server_config.yaml`.
 const (
 	cacheTypeRedis         = "redis"
@@ -488,7 +493,7 @@ func buildLoggingConfig(logging *litellmv1alpha1.InstanceLoggingSpec, config map
 func buildAdminUIConfig(adminUI *litellmv1alpha1.AdminUISpec, config map[string]interface{}) {
 	if adminUI.AdminOnly != nil && *adminUI.AdminOnly {
 		gs := ensureGeneralSettings(config)
-		gs["ui_access_mode"] = "admin_only"
+		gs["ui_access_mode"] = uiAccessModeAdminOnly
 	}
 	if adminUI.StoreModelInDB != nil {
 		gs := ensureGeneralSettings(config)
