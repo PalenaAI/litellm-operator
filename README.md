@@ -19,6 +19,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **OpenShift / non-root support** — `spec.security.runAsNonRoot: true` automatically uses the official non-root image and applies restricted security contexts
 - **Multiple install methods** — OLM bundles (OperatorHub/OpenShift) or Helm chart
 - **CloudNativePG backup/restore** — scheduled backups via CNPG `ScheduledBackup` CRs with configurable schedule, retention, and method
+- **External secret managers** — connect LiteLLM to AWS Secret Manager, AWS KMS, Azure Key Vault, Google Secret Manager, Google KMS, or HashiCorp Vault at runtime so API keys never touch Kubernetes etcd; supports IRSA and workload identity
 - **Enterprise license activation** — convention-based license Secret detection (`{instance}-license` or `litellm-license`) with automatic `LITELLM_LICENSE` env var injection
 - **Auto-rollback** — automatically rolls back failed deployments when `spec.upgrade.autoRollback: true`
 - **Response caching** — 6 cache backends (Redis, S3, GCS, Qdrant semantic, Redis semantic, local) with TTL, namespace isolation, call-type filtering, and default-off mode

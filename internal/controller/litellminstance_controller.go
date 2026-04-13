@@ -893,6 +893,9 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 		}
 	}
 
+	// Secret manager status
+	r.reconcileSecretManagerStatus(ctx, instance)
+
 	// Ready condition
 	if reconcileErr != nil {
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
@@ -932,6 +935,34 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 	}
 
 	_ = r.Status().Update(ctx, instance)
+}
+
+// reconcileSecretManagerStatus validates the secret manager configuration and
+// updates status.secretManager. When a credentialsSecretRef is specified, the
+// referenced Secret must exist; otherwise a warning event is emitted.
+func (r *LiteLLMInstanceReconciler) reconcileSecretManagerStatus(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) {
+	sm := instance.Spec.SecretManager
+	if sm == nil {
+		instance.Status.SecretManager = nil
+		return
+	}
+
+	instance.Status.SecretManager = &litellmv1alpha1.SecretManagerStatus{
+		Configured: true,
+		Provider:   sm.Provider,
+	}
+
+	// Validate credentials Secret exists when referenced
+	if sm.CredentialsSecretRef != nil {
+		var secret corev1.Secret
+		if err := r.Get(ctx, types.NamespacedName{
+			Name: sm.CredentialsSecretRef.Name, Namespace: instance.Namespace,
+		}, &secret); err != nil {
+			instance.Status.SecretManager.Configured = false
+			emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonSecretNotFound,
+				"Secret manager credentials Secret %q not found", sm.CredentialsSecretRef.Name)
+		}
+	}
 }
 
 // probeInstanceHealth calls /health/liveliness and /health/readiness on the

@@ -1324,6 +1324,135 @@ spec:
                 required:
                 - enabled
                 type: object
+              secretManager:
+                description: |-
+                  External secret manager configuration.
+                  When configured, LiteLLM fetches secrets from the provider at runtime
+                  instead of reading them from Kubernetes Secrets.
+                properties:
+                  accessMode:
+                    default: read_only
+                    description: Access mode for the secret manager.
+                    enum:
+                    - read_only
+                    - write_only
+                    - read_and_write
+                    type: string
+                  aws:
+                    description: AWS-specific configuration (for aws_secret_manager
+                      and aws_kms providers).
+                    properties:
+                      region:
+                        description: AWS region.
+                        type: string
+                      roleARN:
+                        description: IAM role ARN for role assumption (alternative
+                          to static credentials).
+                        type: string
+                      sessionName:
+                        description: Session name for role assumption.
+                        type: string
+                      stsEndpoint:
+                        description: Custom STS endpoint (for VPC environments).
+                        type: string
+                      webIdentityTokenPath:
+                        description: |-
+                          Path to web identity token file (for IRSA on EKS).
+                          When set, the operator mounts the projected token as a volume.
+                        type: string
+                    required:
+                    - region
+                    type: object
+                  azure:
+                    description: Azure-specific configuration (for azure_key_vault
+                      provider).
+                    properties:
+                      tenantID:
+                        description: Azure tenant ID.
+                        type: string
+                      vaultURI:
+                        description: Azure Key Vault URI.
+                        type: string
+                    required:
+                    - tenantID
+                    - vaultURI
+                    type: object
+                  credentialsSecretRef:
+                    description: |-
+                      Provider credentials. Reference to a Secret containing
+                      provider-specific authentication fields (e.g., AWS_ACCESS_KEY_ID,
+                      AZURE_CLIENT_ID). May be omitted when using workload identity
+                      (e.g., IRSA on EKS, Workload Identity on GKE).
+                    properties:
+                      name:
+                        description: Name of the Secret.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  hostedKeys:
+                    description: |-
+                      List of environment variable names that LiteLLM should
+                      resolve from the secret manager instead of the pod environment.
+                    items:
+                      type: string
+                    type: array
+                  prefixForStoredVirtualKeys:
+                    description: Prefix for stored virtual keys (e.g., "litellm/").
+                    type: string
+                  primarySecretName:
+                    description: Name of a single secret containing multiple key-value
+                      pairs as JSON.
+                    type: string
+                  provider:
+                    description: Secret manager provider.
+                    enum:
+                    - aws_secret_manager
+                    - aws_kms
+                    - azure_key_vault
+                    - google_secret_manager
+                    - google_kms
+                    - hashicorp_vault
+                    type: string
+                  storeVirtualKeys:
+                    description: Store generated virtual keys in the secret manager.
+                    type: boolean
+                  vault:
+                    description: HashiCorp Vault-specific configuration (for hashicorp_vault
+                      provider).
+                    properties:
+                      address:
+                        description: Vault server address.
+                        type: string
+                      appRoleMountPath:
+                        description: AppRole mount path (defaults to "approle").
+                        type: string
+                      authMethod:
+                        default: approle
+                        description: 'Auth method: approle, tls, or token.'
+                        enum:
+                        - approle
+                        - tls
+                        - token
+                        type: string
+                      mountName:
+                        description: KV engine mount name (defaults to "secret").
+                        type: string
+                      namespace:
+                        description: Vault namespace.
+                        type: string
+                      pathPrefix:
+                        description: Path prefix for secrets.
+                        type: string
+                      refreshInterval:
+                        description: Cache refresh interval in seconds.
+                        type: integer
+                    required:
+                    - address
+                    type: object
+                required:
+                - provider
+                type: object
               security:
                 description: Security settings.
                 properties:
@@ -1936,6 +2065,18 @@ spec:
                   tokenSecretName:
                     description: Name of the Secret containing the SCIM token.
                     type: string
+                type: object
+              secretManager:
+                description: Secret manager configuration status.
+                properties:
+                  configured:
+                    description: Whether the secret manager is configured.
+                    type: boolean
+                  provider:
+                    description: The configured provider.
+                    type: string
+                required:
+                - configured
                 type: object
               sso:
                 description: SSO configuration status.

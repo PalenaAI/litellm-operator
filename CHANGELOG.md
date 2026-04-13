@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **External secret manager integration** — new `spec.secretManager` field on `LiteLLMInstance` configures LiteLLM's native secret manager support. LiteLLM connects to the external provider at runtime to fetch API keys, store generated virtual keys, and read configuration secrets — without the secrets ever being stored in Kubernetes etcd. Supports 6 providers: AWS Secret Manager (`aws_secret_manager`), AWS KMS (`aws_kms`), Azure Key Vault (`azure_key_vault`, enterprise), Google Secret Manager (`google_secret_manager`), Google KMS (`google_kms`), and HashiCorp Vault (`hashicorp_vault`). Configurable `hostedKeys` (env var names resolved from the secret manager), `storeVirtualKeys`, `prefixForStoredVirtualKeys`, `accessMode` (read_only/write_only/read_and_write), and `primarySecretName`. Provider credentials are injected via `envFrom` from a referenced Kubernetes Secret; AWS IRSA and GKE Workload Identity are supported by omitting the credentials Secret and configuring the workload identity token path. Provider-specific settings (AWS region/role/STS endpoint, Azure vault URI/tenant, Vault address/namespace/auth method/mount/prefix/refresh interval) are injected as environment variables. The instance controller validates the credentials Secret and reports `status.secretManager.configured` and `status.secretManager.provider`. This is complementary to the External Secrets Operator approach — both patterns are valid and can coexist.
+
 ## [0.9.0] - 2026-04-11
 
 ### Added

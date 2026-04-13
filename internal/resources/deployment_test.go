@@ -520,3 +520,179 @@ func TestBuildDeployment_GuardrailEnvVarsNoAPIKeyOK(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildDeployment_SecretManagerNone(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "AWS_REGION_NAME" || env.Name == "HCP_VAULT_ADDR" || env.Name == "AZURE_KEY_VAULT_URI" {
+			t.Errorf("unexpected secret manager env var %q when secretManager is nil", env.Name)
+		}
+	}
+}
+
+func TestBuildDeployment_SecretManagerAWSEnvVars(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "aws_secret_manager",
+		CredentialsSecretRef: &litellmv1alpha1.SecretRef{
+			Name: "aws-creds",
+		},
+		AWS: &litellmv1alpha1.AWSSecretManagerConfig{
+			Region:  "us-east-1",
+			RoleARN: "arn:aws:iam::123456789012:role/litellm",
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	// Check env vars
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+	if envMap["AWS_REGION_NAME"] != "us-east-1" {
+		t.Errorf("expected AWS_REGION_NAME=us-east-1, got %q", envMap["AWS_REGION_NAME"])
+	}
+	if envMap["aws_role_name"] != "arn:aws:iam::123456789012:role/litellm" {
+		t.Errorf("expected aws_role_name, got %q", envMap["aws_role_name"])
+	}
+
+	// Check envFrom for credentials Secret
+	container := dep.Spec.Template.Spec.Containers[0]
+	found := false
+	for _, ef := range container.EnvFrom {
+		if ef.SecretRef != nil && ef.SecretRef.Name == "aws-creds" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected envFrom entry for aws-creds Secret")
+	}
+}
+
+func TestBuildDeployment_SecretManagerVaultEnvVars(t *testing.T) {
+	instance := newTestInstance()
+	refreshInterval := 60
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "hashicorp_vault",
+		CredentialsSecretRef: &litellmv1alpha1.SecretRef{
+			Name: "vault-creds",
+		},
+		Vault: &litellmv1alpha1.VaultConfig{
+			Address:         "https://vault.example.com",
+			Namespace:       "admin",
+			MountName:       "kv",
+			PathPrefix:      "litellm/",
+			RefreshInterval: &refreshInterval,
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+
+	checks := map[string]string{
+		"HCP_VAULT_ADDR":             "https://vault.example.com",
+		"HCP_VAULT_NAMESPACE":        "admin",
+		"HCP_VAULT_MOUNT_NAME":       "kv",
+		"HCP_VAULT_PATH_PREFIX":      "litellm/",
+		"HCP_VAULT_REFRESH_INTERVAL": "60",
+	}
+	for k, want := range checks {
+		if envMap[k] != want {
+			t.Errorf("expected %s=%q, got %q", k, want, envMap[k])
+		}
+	}
+}
+
+func TestBuildDeployment_SecretManagerAzureEnvVars(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "azure_key_vault",
+		Azure: &litellmv1alpha1.AzureKeyVaultConfig{
+			VaultURI: "https://my-vault.vault.azure.net",
+			TenantID: "tenant-123",
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+
+	if envMap["AZURE_KEY_VAULT_URI"] != "https://my-vault.vault.azure.net" {
+		t.Errorf("expected AZURE_KEY_VAULT_URI, got %q", envMap["AZURE_KEY_VAULT_URI"])
+	}
+	if envMap["AZURE_TENANT_ID"] != "tenant-123" {
+		t.Errorf("expected AZURE_TENANT_ID=tenant-123, got %q", envMap["AZURE_TENANT_ID"])
+	}
+}
+
+func TestBuildDeployment_SecretManagerNoCredentialsSecret(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "google_secret_manager",
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	// No envFrom should be added for secret manager when no credentials Secret
+	container := dep.Spec.Template.Spec.Containers[0]
+	for _, ef := range container.EnvFrom {
+		if ef.SecretRef != nil {
+			t.Errorf("unexpected envFrom secretRef %q when credentialsSecretRef is nil", ef.SecretRef.Name)
+		}
+	}
+}
+
+func TestBuildDeployment_SecretManagerAWSWithIRSA(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "aws_secret_manager",
+		AWS: &litellmv1alpha1.AWSSecretManagerConfig{
+			Region:               "us-west-2",
+			WebIdentityTokenPath: "/var/run/secrets/eks.amazonaws.com/serviceaccount/token",
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+
+	if envMap["aws_web_identity_token"] != "/var/run/secrets/eks.amazonaws.com/serviceaccount/token" {
+		t.Errorf("expected aws_web_identity_token path, got %q", envMap["aws_web_identity_token"])
+	}
+	// Should not have a credentials Secret envFrom
+	container := dep.Spec.Template.Spec.Containers[0]
+	for _, ef := range container.EnvFrom {
+		if ef.SecretRef != nil {
+			t.Errorf("unexpected envFrom when using IRSA (no credentialsSecretRef)")
+		}
+	}
+}

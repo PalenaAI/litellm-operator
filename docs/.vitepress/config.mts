@@ -62,6 +62,7 @@ export default defineConfig({
           { text: 'Enterprise License', link: '/guide/enterprise-license' },
           { text: 'SSO Setup', link: '/guide/sso' },
           { text: 'SCIM Provisioning', link: '/guide/scim' },
+          { text: 'Secret Managers', link: '/guide/secret-managers' },
           { text: 'Database', link: '/guide/database' },
           { text: 'Observability', link: '/guide/observability' },
         ],

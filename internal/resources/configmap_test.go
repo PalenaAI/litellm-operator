@@ -1415,3 +1415,106 @@ func TestGuardrailEnvVarName_Sanitization(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateProxyConfig_SecretManagerNone(t *testing.T) {
+	instance := newTestInstance()
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, _ := config["general_settings"].(map[string]interface{})
+	if gs != nil {
+		if _, ok := gs["key_management_system"]; ok {
+			t.Error("key_management_system should not be present when secretManager is nil")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_SecretManagerAWS(t *testing.T) {
+	instance := newTestInstance()
+	storeKeys := true
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider:                   "aws_secret_manager",
+		HostedKeys:                 []string{"OPENAI_API_KEY", "ANTHROPIC_API_KEY"},
+		StoreVirtualKeys:           &storeKeys,
+		PrefixForStoredVirtualKeys: "litellm/",
+		AccessMode:                 "read_and_write",
+		PrimarySecretName:          "litellm/all-keys",
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings")
+	}
+	if gs["key_management_system"] != "aws_secret_manager" {
+		t.Errorf("expected aws_secret_manager, got %v", gs["key_management_system"])
+	}
+	kms, ok := gs["key_management_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected key_management_settings")
+	}
+	hostedKeys, ok := kms["hosted_keys"].([]string)
+	if !ok {
+		t.Fatal("expected hosted_keys to be []string")
+	}
+	if len(hostedKeys) != 2 || hostedKeys[0] != "OPENAI_API_KEY" {
+		t.Errorf("unexpected hosted_keys: %v", hostedKeys)
+	}
+	if kms["store_virtual_keys"] != true {
+		t.Errorf("expected store_virtual_keys=true, got %v", kms["store_virtual_keys"])
+	}
+	if kms["prefix_for_stored_virtual_keys"] != "litellm/" {
+		t.Errorf("unexpected prefix: %v", kms["prefix_for_stored_virtual_keys"])
+	}
+	if kms["access_mode"] != "read_and_write" {
+		t.Errorf("unexpected access_mode: %v", kms["access_mode"])
+	}
+	if kms["primary_secret_name"] != "litellm/all-keys" {
+		t.Errorf("unexpected primary_secret_name: %v", kms["primary_secret_name"])
+	}
+}
+
+func TestGenerateProxyConfig_SecretManagerMinimal(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "google_secret_manager",
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings")
+	}
+	if gs["key_management_system"] != "google_secret_manager" {
+		t.Errorf("expected google_secret_manager, got %v", gs["key_management_system"])
+	}
+	if _, ok := gs["key_management_settings"]; ok {
+		t.Error("key_management_settings should be absent when no optional fields are set")
+	}
+}
+
+func TestGenerateProxyConfig_SecretManagerWithExistingGeneralSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		ProxyBatchWriteAt: 10,
+	}
+	instance.Spec.SecretManager = &litellmv1alpha1.SecretManagerSpec{
+		Provider: "hashicorp_vault",
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings")
+	}
+	// Existing settings preserved
+	if gs["proxy_batch_write_at"] != 10 {
+		t.Errorf("expected proxy_batch_write_at=10, got %v", gs["proxy_batch_write_at"])
+	}
+	// Secret manager added
+	if gs["key_management_system"] != "hashicorp_vault" {
+		t.Errorf("expected hashicorp_vault, got %v", gs["key_management_system"])
+	}
+}

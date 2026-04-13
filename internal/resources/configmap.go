@@ -109,6 +109,10 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 		buildDefaultCustomerBudget(instance.Spec.DefaultCustomerBudget, config)
 	}
 
+	if instance.Spec.SecretManager != nil {
+		buildSecretManagerConfig(instance.Spec.SecretManager, config)
+	}
+
 	buildCredentialList(instance, credentials, config)
 	buildGuardrailsList(instance, guardrails, config)
 
@@ -355,6 +359,33 @@ func buildGuardrailsList(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 	}
 	if len(entries) > 0 {
 		config["guardrails"] = entries
+	}
+}
+
+// buildSecretManagerConfig writes key_management_system and key_management_settings
+// into general_settings so LiteLLM connects to the external secret manager at runtime.
+func buildSecretManagerConfig(sm *litellmv1alpha1.SecretManagerSpec, config map[string]interface{}) {
+	gs := ensureGeneralSettings(config)
+	gs["key_management_system"] = sm.Provider
+
+	settings := map[string]interface{}{}
+	if len(sm.HostedKeys) > 0 {
+		settings["hosted_keys"] = sm.HostedKeys
+	}
+	if sm.StoreVirtualKeys != nil {
+		settings["store_virtual_keys"] = *sm.StoreVirtualKeys
+	}
+	if sm.PrefixForStoredVirtualKeys != "" {
+		settings["prefix_for_stored_virtual_keys"] = sm.PrefixForStoredVirtualKeys
+	}
+	if sm.AccessMode != "" {
+		settings["access_mode"] = sm.AccessMode
+	}
+	if sm.PrimarySecretName != "" {
+		settings["primary_secret_name"] = sm.PrimarySecretName
+	}
+	if len(settings) > 0 {
+		gs["key_management_settings"] = settings
 	}
 }
 

@@ -177,6 +177,19 @@ spec:
       methods: ["GET", "POST"]
       defaultQueryParams:
         version: "2"
+
+  secretManager:
+    provider: aws_secret_manager
+    credentialsSecretRef:
+      name: litellm-aws-credentials
+    hostedKeys:
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+    storeVirtualKeys: true
+    prefixForStoredVirtualKeys: "litellm/"
+    accessMode: read_and_write
+    aws:
+      region: us-east-1
 ```
 
 ## Spec Fields
@@ -380,6 +393,54 @@ Configure pass-through endpoints to proxy arbitrary API requests to upstream ser
 
 Secret-backed headers are injected as environment variables named `PASSTHROUGH_{PATH}_{HEADER}` (uppercase, special characters replaced with `_`). In the generated config, they appear as `os.environ/PASSTHROUGH_...` references that LiteLLM resolves at runtime.
 
+### `secretManager`
+
+External secret manager integration. When configured, LiteLLM fetches API keys from the provider at runtime instead of reading them from Kubernetes Secrets.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `provider` | string | — | Provider name (required). One of: `aws_secret_manager`, `aws_kms`, `azure_key_vault`, `google_secret_manager`, `google_kms`, `hashicorp_vault` |
+| `credentialsSecretRef` | *SecretRef | — | Reference to a Secret containing provider authentication fields. Omit when using workload identity (IRSA, GKE WI) |
+| `hostedKeys` | []string | — | Env var names LiteLLM should resolve from the secret manager |
+| `storeVirtualKeys` | *bool | — | Store generated virtual keys in the secret manager |
+| `prefixForStoredVirtualKeys` | string | — | Prefix for stored virtual keys (e.g., `litellm/`) |
+| `accessMode` | string | `read_only` | Access mode: `read_only`, `write_only`, `read_and_write` |
+| `primarySecretName` | string | — | Single secret containing multiple key-value pairs as JSON |
+| `aws` | *AWSSecretManagerConfig | — | AWS-specific settings |
+| `azure` | *AzureKeyVaultConfig | — | Azure-specific settings |
+| `vault` | *VaultConfig | — | HashiCorp Vault-specific settings |
+
+**AWSSecretManagerConfig:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `region` | string | AWS region (required) |
+| `roleARN` | string | IAM role ARN for role assumption |
+| `sessionName` | string | Session name for role assumption |
+| `webIdentityTokenPath` | string | Path to web identity token file (for IRSA on EKS) |
+| `stsEndpoint` | string | Custom STS endpoint (for VPC environments) |
+
+**AzureKeyVaultConfig:**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `vaultURI` | string | Azure Key Vault URI (required) |
+| `tenantID` | string | Azure tenant ID (required) |
+
+**VaultConfig:**
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `address` | string | — | Vault server address (required) |
+| `namespace` | string | — | Vault namespace |
+| `authMethod` | string | `approle` | Auth method: `approle`, `tls`, or `token` |
+| `appRoleMountPath` | string | — | AppRole mount path |
+| `mountName` | string | — | KV engine mount name |
+| `pathPrefix` | string | — | Path prefix for secrets |
+| `refreshInterval` | *int | — | Cache refresh interval in seconds |
+
+See the [Secret Managers guide](/guide/secret-managers) for full usage examples per provider.
+
 ### `security`
 
 | Field | Type | Default | Description |
@@ -411,6 +472,7 @@ Secret-backed headers are injected as environment variables named `PASSTHROUGH_{
 | `database` | DatabaseStatus | Database connection status |
 | `redis` | *RedisStatus | Redis connection status |
 | `configSync` | *ConfigSyncStatus | Config sync status and counts |
+| `secretManager` | *SecretManagerStatus | Secret manager status (`configured`, `provider`) |
 | `license` | *LicenseStatus | License activation status (`active`, `secretName`) |
 | `sso` | *SSOStatus | SSO configuration status |
 | `scim` | *SCIMStatus | SCIM configuration status |
