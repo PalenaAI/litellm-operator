@@ -58,6 +58,7 @@ export default defineConfig({
       {
         text: 'Configuration',
         items: [
+          { text: 'Admin UI', link: '/guide/admin-ui' },
           { text: 'Caching', link: '/guide/caching' },
           { text: 'Enterprise License', link: '/guide/enterprise-license' },
           { text: 'SSO Setup', link: '/guide/sso' },

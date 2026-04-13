@@ -96,7 +96,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 		},
 		Env:          envVars,
 		EnvFrom:      envFrom,
-		VolumeMounts: buildVolumeMounts(),
+		VolumeMounts: buildVolumeMounts(instance),
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -378,6 +378,9 @@ func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName s
 		vars = append(vars, instance.Spec.Callbacks.EnvVars...)
 	}
 
+	// Admin UI env vars
+	vars = append(vars, adminUIEnvVars(instance)...)
+
 	// Enterprise license
 	if licenseSecretName != "" {
 		vars = append(vars, corev1.EnvVar{
@@ -498,8 +501,8 @@ func proxyBaseURL(instance *litellmv1alpha1.LiteLLMInstance) string {
 	return fmt.Sprintf("http://%s.%s.svc:%d", instance.Name, instance.Namespace, port)
 }
 
-func buildVolumeMounts() []corev1.VolumeMount {
-	return []corev1.VolumeMount{
+func buildVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.VolumeMount {
+	mounts := []corev1.VolumeMount{
 		{
 			Name:      "config",
 			MountPath: "/app/config",
@@ -510,10 +513,19 @@ func buildVolumeMounts() []corev1.VolumeMount {
 			MountPath: "/tmp",
 		},
 	}
+	if instance.Spec.AdminUI != nil && instance.Spec.AdminUI.ColorThemeConfigMapRef != nil {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      "color-theme",
+			MountPath: "/app/enterprise/enterprise_ui/enterprise_colors.json",
+			SubPath:   "enterprise_colors.json",
+			ReadOnly:  true,
+		})
+	}
+	return mounts
 }
 
 func buildVolumes(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volume {
-	return []corev1.Volume{
+	volumes := []corev1.Volume{
 		{
 			Name: "config",
 			VolumeSource: corev1.VolumeSource{
@@ -531,6 +543,19 @@ func buildVolumes(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volume {
 			},
 		},
 	}
+	if instance.Spec.AdminUI != nil && instance.Spec.AdminUI.ColorThemeConfigMapRef != nil {
+		volumes = append(volumes, corev1.Volume{
+			Name: "color-theme",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{
+						Name: instance.Spec.AdminUI.ColorThemeConfigMapRef.Name,
+					},
+				},
+			},
+		})
+	}
+	return volumes
 }
 
 func healthCheckInitialDelay(instance *litellmv1alpha1.LiteLLMInstance, probe string) int32 {
@@ -797,6 +822,37 @@ func secretManagerEnvFrom(instance *litellmv1alpha1.LiteLLMInstance) []corev1.En
 			},
 		},
 	}
+}
+
+// adminUIEnvVars injects environment variables for Admin UI configuration.
+func adminUIEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
+	ui := instance.Spec.AdminUI
+	if ui == nil {
+		return nil
+	}
+	var vars []corev1.EnvVar
+	if ui.Disabled != nil && *ui.Disabled {
+		vars = append(vars, corev1.EnvVar{Name: "DISABLE_ADMIN_UI", Value: "True"})
+	}
+	if ui.APIDocBaseURL != "" {
+		vars = append(vars, corev1.EnvVar{Name: "LITELLM_UI_API_DOC_BASE_URL", Value: ui.APIDocBaseURL})
+	}
+	if ui.DocsURL != "" {
+		vars = append(vars, corev1.EnvVar{Name: "DOCS_URL", Value: ui.DocsURL})
+	}
+	if ui.RootRedirectURL != "" {
+		vars = append(vars, corev1.EnvVar{Name: "ROOT_REDIRECT_URL", Value: ui.RootRedirectURL})
+	}
+	if ui.LogoURL != "" {
+		vars = append(vars, corev1.EnvVar{Name: "UI_LOGO_PATH", Value: ui.LogoURL})
+	}
+	if ui.EmailLogoURL != "" {
+		vars = append(vars, corev1.EnvVar{Name: "EMAIL_LOGO_URL", Value: ui.EmailLogoURL})
+	}
+	if ui.EmailSupportContact != "" {
+		vars = append(vars, corev1.EnvVar{Name: "EMAIL_SUPPORT_CONTACT", Value: ui.EmailSupportContact})
+	}
+	return vars
 }
 
 func boolPtr(b bool) *bool    { return &b }

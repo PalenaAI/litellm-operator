@@ -60,6 +60,14 @@ spec:
               budgetDuration:
                 description: Budget reset duration (e.g., "30d", "7d").
                 type: string
+              guardrails:
+                description: |-
+                  Guardrails to activate for this team. Each entry must match the
+                  guardrailName of a LiteLLMGuardrail CR bound to the same instance.
+                  Requires a LiteLLM Enterprise license.
+                items:
+                  type: string
+                type: array
               instanceRef:
                 description: Reference to the LiteLLMInstance.
                 properties:
@@ -68,6 +76,69 @@ spec:
                     type: string
                 required:
                 - name
+                type: object
+              logging:
+                description: |-
+                  Logging configuration for this team (enterprise).
+                  Enables per-team logging destinations and GDPR logging disable.
+                properties:
+                  callbacks:
+                    description: |-
+                      Team-specific logging callbacks.
+                      Each callback routes logs to a separate provider instance (e.g., a
+                      dedicated Langfuse project for this team).
+                    items:
+                      description: TeamCallback defines a per-team logging callback
+                        destination.
+                      properties:
+                        config:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            Provider-specific configuration (e.g., host URL, bucket name).
+                            These are merged into callback_vars alongside the Secret data.
+                          type: object
+                        credentialsSecretRef:
+                          description: |-
+                            Reference to a Secret containing provider credentials.
+                            Expected keys depend on the provider:
+                              langfuse:    langfuse_public_key, langfuse_secret, langfuse_host (optional)
+                              gcs_bucket:  gcs_bucket_name, gcs_path_service_account (optional)
+                              langsmith:   langsmith_api_key, langsmith_project
+                              arize:       arize_api_key, arize_space_key
+                          properties:
+                            name:
+                              description: Name of the Secret.
+                              type: string
+                          required:
+                          - name
+                          type: object
+                        name:
+                          description: Callback provider name.
+                          enum:
+                          - langfuse
+                          - gcs_bucket
+                          - langsmith
+                          - arize
+                          type: string
+                        type:
+                          default: success_and_failure
+                          description: 'Callback type: when to invoke the callback.'
+                          enum:
+                          - success
+                          - failure
+                          - success_and_failure
+                          type: string
+                      required:
+                      - credentialsSecretRef
+                      - name
+                      type: object
+                    type: array
+                  disabled:
+                    description: |-
+                      Disable all logging for this team (GDPR compliance).
+                      When true, no request/response data is logged for this team's requests.
+                    type: boolean
                 type: object
               maxBudgetMonthly:
                 description: Maximum monthly budget in USD.
@@ -118,6 +189,15 @@ spec:
                 items:
                   type: string
                 type: array
+              organizationRef:
+                description: Reference to the organization this team belongs to.
+                properties:
+                  name:
+                    description: Name of the LiteLLMOrganization CR.
+                    type: string
+                required:
+                - name
+                type: object
               rpmLimit:
                 description: RPM limit for the team.
                 type: integer
@@ -237,6 +317,12 @@ spec:
               litellmTeamId:
                 description: LiteLLM-assigned team ID.
                 type: string
+              loggingDisabled:
+                description: Whether logging is disabled for this team (GDPR).
+                type: boolean
+              loggingSynced:
+                description: Whether team logging callbacks are synced.
+                type: boolean
               ssoMembers:
                 description: Members provisioned by SSO/SCIM (not managed by CRD).
                 items:

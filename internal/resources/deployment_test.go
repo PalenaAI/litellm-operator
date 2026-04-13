@@ -699,3 +699,234 @@ func TestBuildDeployment_SecretManagerAWSWithIRSA(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildDeployment_AdminUIDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		Disabled: boolPtr(true),
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+	if envMap["DISABLE_ADMIN_UI"] != "True" {
+		t.Errorf("expected DISABLE_ADMIN_UI=True, got %q", envMap["DISABLE_ADMIN_UI"])
+	}
+}
+
+func TestBuildDeployment_AdminUIDisabledFalse(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		Disabled: boolPtr(false),
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "DISABLE_ADMIN_UI" {
+			t.Error("DISABLE_ADMIN_UI should not be set when disabled is false")
+		}
+	}
+}
+
+func TestBuildDeployment_AdminUIAPIDocBaseURL(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		APIDocBaseURL: "https://api.example.com",
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+	if envMap["LITELLM_UI_API_DOC_BASE_URL"] != "https://api.example.com" {
+		t.Errorf("expected LITELLM_UI_API_DOC_BASE_URL=https://api.example.com, got %q", envMap["LITELLM_UI_API_DOC_BASE_URL"])
+	}
+}
+
+func TestBuildDeployment_AdminUIDocsAndRedirect(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		DocsURL:         "/docs",
+		RootRedirectURL: "/ui",
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+	if envMap["DOCS_URL"] != "/docs" {
+		t.Errorf("expected DOCS_URL=/docs, got %q", envMap["DOCS_URL"])
+	}
+	if envMap["ROOT_REDIRECT_URL"] != "/ui" {
+		t.Errorf("expected ROOT_REDIRECT_URL=/ui, got %q", envMap["ROOT_REDIRECT_URL"])
+	}
+}
+
+func TestBuildDeployment_AdminUIAllEnvVars(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		Disabled:        boolPtr(true),
+		APIDocBaseURL:   "https://api.example.com",
+		DocsURL:         "/docs",
+		RootRedirectURL: "/ui",
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+	expected := map[string]string{
+		"DISABLE_ADMIN_UI":            "True",
+		"LITELLM_UI_API_DOC_BASE_URL": "https://api.example.com",
+		"DOCS_URL":                    "/docs",
+		"ROOT_REDIRECT_URL":           "/ui",
+	}
+	for k, v := range expected {
+		if envMap[k] != v {
+			t.Errorf("expected %s=%s, got %q", k, v, envMap[k])
+		}
+	}
+}
+
+func TestBuildDeployment_AdminUIBranding(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		LogoURL:             "https://example.com/logo.png",
+		EmailLogoURL:        "https://example.com/email-logo.png",
+		EmailSupportContact: "support@example.com",
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+	expected := map[string]string{
+		"UI_LOGO_PATH":          "https://example.com/logo.png",
+		"EMAIL_LOGO_URL":        "https://example.com/email-logo.png",
+		"EMAIL_SUPPORT_CONTACT": "support@example.com",
+	}
+	for k, v := range expected {
+		if envMap[k] != v {
+			t.Errorf("expected %s=%s, got %q", k, v, envMap[k])
+		}
+	}
+}
+
+func TestBuildDeployment_AdminUIColorTheme(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		ColorThemeConfigMapRef: &litellmv1alpha1.ConfigMapRef{
+			Name: "my-colors",
+		},
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	// Check volume exists
+	foundVolume := false
+	for _, v := range dep.Spec.Template.Spec.Volumes {
+		if v.Name == "color-theme" {
+			foundVolume = true
+			if v.ConfigMap == nil || v.ConfigMap.Name != "my-colors" {
+				t.Errorf("expected color-theme volume to reference ConfigMap 'my-colors', got %+v", v)
+			}
+		}
+	}
+	if !foundVolume {
+		t.Error("expected color-theme volume to be present")
+	}
+
+	// Check volume mount exists with subPath
+	foundMount := false
+	for _, m := range dep.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if m.Name == "color-theme" {
+			foundMount = true
+			if m.MountPath != "/app/enterprise/enterprise_ui/enterprise_colors.json" {
+				t.Errorf("expected mountPath /app/enterprise/enterprise_ui/enterprise_colors.json, got %s", m.MountPath)
+			}
+			if m.SubPath != "enterprise_colors.json" {
+				t.Errorf("expected subPath enterprise_colors.json, got %s", m.SubPath)
+			}
+			if !m.ReadOnly {
+				t.Error("expected color-theme mount to be readOnly")
+			}
+		}
+	}
+	if !foundMount {
+		t.Error("expected color-theme volume mount to be present")
+	}
+}
+
+func TestBuildDeployment_AdminUINoColorTheme(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		AdminOnly: boolPtr(true),
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	for _, v := range dep.Spec.Template.Spec.Volumes {
+		if v.Name == "color-theme" {
+			t.Error("color-theme volume should not be present when colorThemeConfigMapRef is nil")
+		}
+	}
+	for _, m := range dep.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if m.Name == "color-theme" {
+			t.Error("color-theme mount should not be present when colorThemeConfigMapRef is nil")
+		}
+	}
+}
+
+func TestBuildDeployment_AdminUINil(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil, nil)
+
+	forbidden := []string{
+		"DISABLE_ADMIN_UI", "LITELLM_UI_API_DOC_BASE_URL", "DOCS_URL", "ROOT_REDIRECT_URL",
+		"UI_LOGO_PATH", "EMAIL_LOGO_URL", "EMAIL_SUPPORT_CONTACT",
+	}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		for _, name := range forbidden {
+			if env.Name == name {
+				t.Errorf("%s should not be set when AdminUI is nil", name)
+			}
+		}
+	}
+	for _, v := range dep.Spec.Template.Spec.Volumes {
+		if v.Name == "color-theme" {
+			t.Error("color-theme volume should not be present when AdminUI is nil")
+		}
+	}
+}

@@ -54,6 +54,78 @@ spec:
           spec:
             description: LiteLLMInstanceSpec defines the desired state of LiteLLMInstance.
             properties:
+              adminUI:
+                description: |-
+                  Admin UI configuration.
+                  Controls UI availability, access restrictions, model persistence, and personal key creation.
+                properties:
+                  adminOnly:
+                    description: |-
+                      Restrict UI access to admin users only (proxy_admin and proxy_admin_viewer).
+                      When true, sets ui_access_mode: "admin_only" in general_settings.
+                    type: boolean
+                  apiDocBaseURL:
+                    description: |-
+                      Custom base URL for the API reference documentation shown in the UI.
+                      Useful when the Admin UI is served from a different host than the proxy.
+                      Injected as LITELLM_UI_API_DOC_BASE_URL environment variable.
+                    type: string
+                  colorThemeConfigMapRef:
+                    description: |-
+                      Reference to a ConfigMap containing a custom UI color theme.
+                      The ConfigMap must have a key named "enterprise_colors.json" with a JSON
+                      object defining brand colors (uses the Tremor color palette).
+                      Mounted at /app/enterprise/enterprise_ui/enterprise_colors.json in the container.
+                    properties:
+                      name:
+                        description: Name of the ConfigMap.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  defaultTeamDisabled:
+                    description: |-
+                      Prevent users from creating personal API keys.
+                      When true, keys can only be created under an assigned team.
+                      Written to general_settings.default_team_disabled.
+                    type: boolean
+                  disabled:
+                    description: |-
+                      Disable the Admin UI entirely. When true, the /ui endpoint returns 404.
+                      Injected as DISABLE_ADMIN_UI environment variable.
+                    type: boolean
+                  docsURL:
+                    description: |-
+                      Custom path for the docs endpoint (default: "/").
+                      Injected as DOCS_URL environment variable.
+                    type: string
+                  emailLogoURL:
+                    description: |-
+                      URL to a logo image included in email notifications (budget alerts, invitations).
+                      Injected as EMAIL_LOGO_URL environment variable.
+                    type: string
+                  emailSupportContact:
+                    description: |-
+                      Support email address displayed in email notifications.
+                      Injected as EMAIL_SUPPORT_CONTACT environment variable.
+                    type: string
+                  logoURL:
+                    description: |-
+                      URL to a hosted logo image displayed in the Admin UI.
+                      Injected as UI_LOGO_PATH environment variable.
+                    type: string
+                  rootRedirectURL:
+                    description: |-
+                      URL to redirect to when the root path is accessed and docsURL is changed.
+                      Injected as ROOT_REDIRECT_URL environment variable.
+                    type: string
+                  storeModelInDB:
+                    description: |-
+                      Store model definitions in the database instead of the config file.
+                      Enables adding/editing models from the Admin UI without proxy restart.
+                      Written to general_settings.store_model_in_db.
+                    type: boolean
+                type: object
               autoscaling:
                 description: Autoscaling configuration.
                 properties:

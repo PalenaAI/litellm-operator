@@ -30,6 +30,7 @@ Replaces manual Helm-based deployments with a declarative, reconciliation-based 
 - **Advanced budget controls** — global proxy budget, per-provider spending caps, per-model budgets per key (enterprise), and concurrency limits at proxy/deployment/team/key levels
 - **IP allowlisting (enterprise)** — restrict API access to specific IP addresses or CIDR ranges via `spec.security.ipAllowlist`, with `X-Forwarded-For` support and max request/response size limits
 - **RBAC** — enforce role-based access control with admin-only routes, allowed routes, key generation restrictions, per-role permissions, and personal key disabling via `spec.rbac`
+- **Admin UI management** — disable the Admin UI, restrict access to admins, enable dynamic model management in DB, prevent personal key creation, and customize docs URLs via `spec.adminUI`
 - **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
 - **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
 

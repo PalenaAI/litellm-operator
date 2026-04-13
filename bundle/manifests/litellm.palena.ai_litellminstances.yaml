@@ -54,6 +54,78 @@ spec:
           spec:
             description: LiteLLMInstanceSpec defines the desired state of LiteLLMInstance.
             properties:
+              adminUI:
+                description: |-
+                  Admin UI configuration.
+                  Controls UI availability, access restrictions, model persistence, and personal key creation.
+                properties:
+                  adminOnly:
+                    description: |-
+                      Restrict UI access to admin users only (proxy_admin and proxy_admin_viewer).
+                      When true, sets ui_access_mode: "admin_only" in general_settings.
+                    type: boolean
+                  apiDocBaseURL:
+                    description: |-
+                      Custom base URL for the API reference documentation shown in the UI.
+                      Useful when the Admin UI is served from a different host than the proxy.
+                      Injected as LITELLM_UI_API_DOC_BASE_URL environment variable.
+                    type: string
+                  colorThemeConfigMapRef:
+                    description: |-
+                      Reference to a ConfigMap containing a custom UI color theme.
+                      The ConfigMap must have a key named "enterprise_colors.json" with a JSON
+                      object defining brand colors (uses the Tremor color palette).
+                      Mounted at /app/enterprise/enterprise_ui/enterprise_colors.json in the container.
+                    properties:
+                      name:
+                        description: Name of the ConfigMap.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  defaultTeamDisabled:
+                    description: |-
+                      Prevent users from creating personal API keys.
+                      When true, keys can only be created under an assigned team.
+                      Written to general_settings.default_team_disabled.
+                    type: boolean
+                  disabled:
+                    description: |-
+                      Disable the Admin UI entirely. When true, the /ui endpoint returns 404.
+                      Injected as DISABLE_ADMIN_UI environment variable.
+                    type: boolean
+                  docsURL:
+                    description: |-
+                      Custom path for the docs endpoint (default: "/").
+                      Injected as DOCS_URL environment variable.
+                    type: string
+                  emailLogoURL:
+                    description: |-
+                      URL to a logo image included in email notifications (budget alerts, invitations).
+                      Injected as EMAIL_LOGO_URL environment variable.
+                    type: string
+                  emailSupportContact:
+                    description: |-
+                      Support email address displayed in email notifications.
+                      Injected as EMAIL_SUPPORT_CONTACT environment variable.
+                    type: string
+                  logoURL:
+                    description: |-
+                      URL to a hosted logo image displayed in the Admin UI.
+                      Injected as UI_LOGO_PATH environment variable.
+                    type: string
+                  rootRedirectURL:
+                    description: |-
+                      URL to redirect to when the root path is accessed and docsURL is changed.
+                      Injected as ROOT_REDIRECT_URL environment variable.
+                    type: string
+                  storeModelInDB:
+                    description: |-
+                      Store model definitions in the database instead of the config file.
+                      Enables adding/editing models from the Admin UI without proxy restart.
+                      Written to general_settings.store_model_in_db.
+                    type: boolean
+                type: object
               autoscaling:
                 description: Autoscaling configuration.
                 properties:
@@ -898,6 +970,100 @@ spec:
                 required:
                 - enabled
                 type: object
+              jwtAuth:
+                description: |-
+                  JWT authentication configuration (enterprise).
+                  Enables API-level authentication via JWT tokens from identity providers.
+                properties:
+                  adminAllowedRoutes:
+                    description: Routes accessible to admin JWT holders.
+                    items:
+                      type: string
+                    type: array
+                  adminJwtScope:
+                    description: JWT scope value that grants proxy admin access.
+                    type: string
+                  enabled:
+                    description: Enable JWT-based authentication.
+                    type: boolean
+                  endUserIdJwtField:
+                    description: JWT field containing the end-user ID.
+                    type: string
+                  orgIdJwtField:
+                    description: JWT field containing the organization ID.
+                    type: string
+                  publicKeyTtl:
+                    description: TTL in seconds for caching the public key.
+                    type: integer
+                  scopeModelMappings:
+                    additionalProperties:
+                      items:
+                        type: string
+                      type: array
+                    description: |-
+                      Scope-to-model mappings for fine-grained access control.
+                      Key: JWT scope value, Value: list of allowed model names.
+                    type: object
+                  teamIdJwtField:
+                    description: JWT field containing the team ID.
+                    type: string
+                  teamIdsJwtField:
+                    description: JWT field containing team IDs (array).
+                    type: string
+                  userEmailJwtField:
+                    description: JWT field containing the user email.
+                    type: string
+                  userIdJwtField:
+                    description: JWT field containing the user ID.
+                    type: string
+                  userRoleJwtField:
+                    description: JWT field containing the user role.
+                    type: string
+                required:
+                - enabled
+                type: object
+              logging:
+                description: |-
+                  Logging configuration for the instance.
+                  Controls audit logs, global message logging, and spend log retention.
+                properties:
+                  auditLogs:
+                    description: |-
+                      Enable audit logs (enterprise).
+                      Stores admin actions (key creation, team changes, etc.) in the database.
+                    properties:
+                      enabled:
+                        description: Enable audit logging.
+                        type: boolean
+                      retentionDays:
+                        description: Retention period in days.
+                        type: integer
+                    required:
+                    - enabled
+                    type: object
+                  redactUserApiKeyInfo:
+                    description: Redact user API key information from logs.
+                    type: boolean
+                  spendLogRetention:
+                    description: Spend log retention configuration.
+                    properties:
+                      cleanupInterval:
+                        description: |-
+                          Cleanup interval (e.g., "1d", "1h").
+                          Written to general_settings.maximum_spend_logs_retention_interval.
+                        type: string
+                      maxRetentionPeriod:
+                        description: |-
+                          Maximum retention period (e.g., "90d", "1y").
+                          Written to general_settings.maximum_spend_logs_retention_period.
+                        type: string
+                    type: object
+                  turnOffMessageLogging:
+                    description: |-
+                      Disable logging of request/response message content.
+                      Only metadata (tokens, cost, model) is logged.
+                    type: boolean
+                type: object
               masterKey:
                 description: Master key configuration for LiteLLM admin access.
                 properties:
@@ -917,6 +1083,39 @@ spec:
                     - key
                     - name
                     type: object
+                type: object
+              oauth2Auth:
+                description: |-
+                  OAuth2 machine-to-machine authentication configuration (enterprise).
+                  Maps JWT fields to LiteLLM attributes for service-to-service auth.
+                properties:
+                  configMappings:
+                    description: Mappings from JWT fields to LiteLLM attributes.
+                    items:
+                      description: OAuth2Mapping defines a single mapping from a JWT
+                        field to a LiteLLM attribute.
+                      properties:
+                        jwtField:
+                          description: JWT field to read from.
+                          type: string
+                        litellmAttribute:
+                          description: LiteLLM attribute to map to (e.g., "team_id",
+                            "user_id").
+                          type: string
+                        name:
+                          description: Identifier for this mapping.
+                          type: string
+                      required:
+                      - jwtField
+                      - litellmAttribute
+                      - name
+                      type: object
+                    type: array
+                  enabled:
+                    description: Enable OAuth2 machine-to-machine authentication.
+                    type: boolean
+                required:
+                - enabled
                 type: object
               observability:
                 description: Observability configuration.
@@ -1074,6 +1273,79 @@ spec:
                     description: Minimum available pods.
                     format: int32
                     type: integer
+                required:
+                - enabled
+                type: object
+              rbac:
+                description: |-
+                  Role-based access control configuration.
+                  Controls route restrictions, key generation permissions, and per-role access.
+                  Some features (key_generation_settings, role_permissions) require a LiteLLM Enterprise license.
+                properties:
+                  adminOnlyRoutes:
+                    description: Routes restricted to proxy_admin only.
+                    items:
+                      type: string
+                    type: array
+                  allowedRoutes:
+                    description: |-
+                      Routes accessible to all authenticated users.
+                      If set, only these routes are allowed; all others are blocked.
+                    items:
+                      type: string
+                    type: array
+                  defaultTeamDisabled:
+                    description: Prevent users from creating personal keys (force
+                      team-based keys).
+                    type: boolean
+                  enabled:
+                    description: Enable role-based access control enforcement.
+                    type: boolean
+                  keyGeneration:
+                    description: Key generation restrictions.
+                    properties:
+                      personalKeyGeneration:
+                        description: Personal key generation restrictions.
+                        properties:
+                          allowedUserRoles:
+                            description: User roles allowed to generate personal keys.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - allowedUserRoles
+                        type: object
+                      teamKeyGeneration:
+                        description: Team key generation restrictions.
+                        properties:
+                          allowedTeamMemberRoles:
+                            description: Team member roles allowed to generate team
+                              keys.
+                            items:
+                              type: string
+                            type: array
+                        required:
+                        - allowedTeamMemberRoles
+                        type: object
+                    type: object
+                  rolePermissions:
+                    additionalProperties:
+                      description: RolePermission defines the routes and models accessible
+                        to a specific role.
+                      properties:
+                        models:
+                          description: Models this role can use.
+                          items:
+                            type: string
+                          type: array
+                        routes:
+                          description: API routes this role can access.
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                    description: Per-role permission definitions.
+                    type: object
                 required:
                 - enabled
                 type: object
@@ -1323,6 +1595,135 @@ spec:
                     type: object
                 required:
                 - enabled
+                type: object
+              secretManager:
+                description: |-
+                  External secret manager configuration.
+                  When configured, LiteLLM fetches secrets from the provider at runtime
+                  instead of reading them from Kubernetes Secrets.
+                properties:
+                  accessMode:
+                    default: read_only
+                    description: Access mode for the secret manager.
+                    enum:
+                    - read_only
+                    - write_only
+                    - read_and_write
+                    type: string
+                  aws:
+                    description: AWS-specific configuration (for aws_secret_manager
+                      and aws_kms providers).
+                    properties:
+                      region:
+                        description: AWS region.
+                        type: string
+                      roleARN:
+                        description: IAM role ARN for role assumption (alternative
+                          to static credentials).
+                        type: string
+                      sessionName:
+                        description: Session name for role assumption.
+                        type: string
+                      stsEndpoint:
+                        description: Custom STS endpoint (for VPC environments).
+                        type: string
+                      webIdentityTokenPath:
+                        description: |-
+                          Path to web identity token file (for IRSA on EKS).
+                          When set, the operator mounts the projected token as a volume.
+                        type: string
+                    required:
+                    - region
+                    type: object
+                  azure:
+                    description: Azure-specific configuration (for azure_key_vault
+                      provider).
+                    properties:
+                      tenantID:
+                        description: Azure tenant ID.
+                        type: string
+                      vaultURI:
+                        description: Azure Key Vault URI.
+                        type: string
+                    required:
+                    - tenantID
+                    - vaultURI
+                    type: object
+                  credentialsSecretRef:
+                    description: |-
+                      Provider credentials. Reference to a Secret containing
+                      provider-specific authentication fields (e.g., AWS_ACCESS_KEY_ID,
+                      AZURE_CLIENT_ID). May be omitted when using workload identity
+                      (e.g., IRSA on EKS, Workload Identity on GKE).
+                    properties:
+                      name:
+                        description: Name of the Secret.
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  hostedKeys:
+                    description: |-
+                      List of environment variable names that LiteLLM should
+                      resolve from the secret manager instead of the pod environment.
+                    items:
+                      type: string
+                    type: array
+                  prefixForStoredVirtualKeys:
+                    description: Prefix for stored virtual keys (e.g., "litellm/").
+                    type: string
+                  primarySecretName:
+                    description: Name of a single secret containing multiple key-value
+                      pairs as JSON.
+                    type: string
+                  provider:
+                    description: Secret manager provider.
+                    enum:
+                    - aws_secret_manager
+                    - aws_kms
+                    - azure_key_vault
+                    - google_secret_manager
+                    - google_kms
+                    - hashicorp_vault
+                    type: string
+                  storeVirtualKeys:
+                    description: Store generated virtual keys in the secret manager.
+                    type: boolean
+                  vault:
+                    description: HashiCorp Vault-specific configuration (for hashicorp_vault
+                      provider).
+                    properties:
+                      address:
+                        description: Vault server address.
+                        type: string
+                      appRoleMountPath:
+                        description: AppRole mount path (defaults to "approle").
+                        type: string
+                      authMethod:
+                        default: approle
+                        description: 'Auth method: approle, tls, or token.'
+                        enum:
+                        - approle
+                        - tls
+                        - token
+                        type: string
+                      mountName:
+                        description: KV engine mount name (defaults to "secret").
+                        type: string
+                      namespace:
+                        description: Vault namespace.
+                        type: string
+                      pathPrefix:
+                        description: Path prefix for secrets.
+                        type: string
+                      refreshInterval:
+                        description: Cache refresh interval in seconds.
+                        type: integer
+                    required:
+                    - address
+                    type: object
+                required:
+                - provider
                 type: object
               security:
                 description: Security settings.
@@ -1844,11 +2245,17 @@ spec:
                     items:
                       type: string
                     type: array
+                  syncedCustomers:
+                    description: Count of synced customers.
+                    type: integer
                   syncedKeys:
                     description: Count of synced keys.
                     type: integer
                   syncedModels:
                     description: Count of synced models.
+                    type: integer
+                  syncedOrganizations:
+                    description: Count of synced organizations.
                     type: integer
                   syncedTeams:
                     description: Count of synced teams.
@@ -1856,11 +2263,17 @@ spec:
                   syncedUsers:
                     description: Count of synced users.
                     type: integer
+                  unmanagedCustomers:
+                    description: Count of unmanaged customers.
+                    type: integer
                   unmanagedKeys:
                     description: Count of unmanaged keys.
                     type: integer
                   unmanagedModels:
                     description: Count of unmanaged models.
+                    type: integer
+                  unmanagedOrganizations:
+                    description: Count of unmanaged organizations.
                     type: integer
                   unmanagedTeams:
                     description: Count of unmanaged teams.
@@ -1924,6 +2337,18 @@ spec:
                   tokenSecretName:
                     description: Name of the Secret containing the SCIM token.
                     type: string
+                type: object
+              secretManager:
+                description: Secret manager configuration status.
+                properties:
+                  configured:
+                    description: Whether the secret manager is configured.
+                    type: boolean
+                  provider:
+                    description: The configured provider.
+                    type: string
+                required:
+                - configured
                 type: object
               sso:
                 description: SSO configuration status.

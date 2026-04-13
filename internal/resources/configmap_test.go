@@ -2183,3 +2183,96 @@ func TestGenerateProxyConfig_LoggingNil(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateProxyConfig_AdminUIAdminOnly(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		AdminOnly: boolPtr(true),
+	}
+	config := GenerateProxyConfig(instance, nil, nil)
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["ui_access_mode"] != "admin_only" {
+		t.Errorf("expected ui_access_mode=admin_only, got %v", gs["ui_access_mode"])
+	}
+}
+
+func TestGenerateProxyConfig_AdminUIAdminOnlyFalse(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		AdminOnly: boolPtr(false),
+	}
+	config := GenerateProxyConfig(instance, nil, nil)
+	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
+		if _, has := gs["ui_access_mode"]; has {
+			t.Error("ui_access_mode should not be set when adminOnly is false")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_AdminUIStoreModelInDB(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		StoreModelInDB: boolPtr(true),
+	}
+	config := GenerateProxyConfig(instance, nil, nil)
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["store_model_in_db"] != true {
+		t.Errorf("expected store_model_in_db=true, got %v", gs["store_model_in_db"])
+	}
+}
+
+func TestGenerateProxyConfig_AdminUIStoreModelInDBFalse(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		StoreModelInDB: boolPtr(false),
+	}
+	config := GenerateProxyConfig(instance, nil, nil)
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["store_model_in_db"] != false {
+		t.Errorf("expected store_model_in_db=false, got %v", gs["store_model_in_db"])
+	}
+}
+
+func TestGenerateProxyConfig_AdminUIDefaultTeamDisabled(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		DefaultTeamDisabled: boolPtr(true),
+	}
+	config := GenerateProxyConfig(instance, nil, nil)
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["default_team_disabled"] != true {
+		t.Errorf("expected default_team_disabled=true, got %v", gs["default_team_disabled"])
+	}
+}
+
+func TestGenerateProxyConfig_AdminUIAllSettings(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
+		AdminOnly:           boolPtr(true),
+		StoreModelInDB:      boolPtr(true),
+		DefaultTeamDisabled: boolPtr(true),
+	}
+	config := GenerateProxyConfig(instance, nil, nil)
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["ui_access_mode"] != "admin_only" {
+		t.Errorf("expected ui_access_mode=admin_only, got %v", gs["ui_access_mode"])
+	}
+	if gs["store_model_in_db"] != true {
+		t.Errorf("expected store_model_in_db=true")
+	}
+	if gs["default_team_disabled"] != true {
+		t.Errorf("expected default_team_disabled=true")
+	}
+}
+
+func TestGenerateProxyConfig_AdminUINil(t *testing.T) {
+	instance := newTestInstance()
+	config := GenerateProxyConfig(instance, nil, nil)
+	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
+		for _, key := range []string{"ui_access_mode", "store_model_in_db", "default_team_disabled"} {
+			if _, has := gs[key]; has {
+				t.Errorf("%s should not be set when AdminUI is nil", key)
+			}
+		}
+	}
+}

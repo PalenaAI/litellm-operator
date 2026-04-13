@@ -129,6 +129,10 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 		buildLoggingConfig(instance.Spec.Logging, config)
 	}
 
+	if instance.Spec.AdminUI != nil {
+		buildAdminUIConfig(instance.Spec.AdminUI, config)
+	}
+
 	buildCredentialList(instance, credentials, config)
 	buildGuardrailsList(instance, guardrails, config)
 
@@ -472,6 +476,27 @@ func buildLoggingConfig(logging *litellmv1alpha1.InstanceLoggingSpec, config map
 		if logging.SpendLogRetention.CleanupInterval != "" {
 			gs["maximum_spend_logs_retention_interval"] = logging.SpendLogRetention.CleanupInterval
 		}
+	}
+}
+
+// buildAdminUIConfig writes Admin UI settings into general_settings:
+// - ui_access_mode: "admin_only" when adminOnly is true
+// - store_model_in_db when storeModelInDB is set
+// - default_team_disabled when defaultTeamDisabled is set
+// Environment-variable-only settings (disabled, apiDocBaseURL, docsURL, rootRedirectURL)
+// are handled in deployment.go.
+func buildAdminUIConfig(adminUI *litellmv1alpha1.AdminUISpec, config map[string]interface{}) {
+	if adminUI.AdminOnly != nil && *adminUI.AdminOnly {
+		gs := ensureGeneralSettings(config)
+		gs["ui_access_mode"] = "admin_only"
+	}
+	if adminUI.StoreModelInDB != nil {
+		gs := ensureGeneralSettings(config)
+		gs["store_model_in_db"] = *adminUI.StoreModelInDB
+	}
+	if adminUI.DefaultTeamDisabled != nil {
+		gs := ensureGeneralSettings(config)
+		gs["default_team_disabled"] = *adminUI.DefaultTeamDisabled
 	}
 }
 

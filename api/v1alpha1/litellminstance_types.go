@@ -167,6 +167,11 @@ type LiteLLMInstanceSpec struct {
 	// Controls audit logs, global message logging, and spend log retention.
 	// +optional
 	Logging *InstanceLoggingSpec `json:"logging,omitempty"`
+
+	// Admin UI configuration.
+	// Controls UI availability, access restrictions, model persistence, and personal key creation.
+	// +optional
+	AdminUI *AdminUISpec `json:"adminUI,omitempty"`
 }
 
 // DefaultCustomerBudgetSpec sets platform-wide defaults for new end-users.
@@ -403,6 +408,76 @@ type SpendLogRetentionSpec struct {
 	// Written to general_settings.maximum_spend_logs_retention_interval.
 	// +optional
 	CleanupInterval string `json:"cleanupInterval,omitempty"`
+}
+
+// AdminUISpec defines Admin UI configuration for a LiteLLM instance.
+// +kubebuilder:object:generate=true
+type AdminUISpec struct {
+	// Disable the Admin UI entirely. When true, the /ui endpoint returns 404.
+	// Injected as DISABLE_ADMIN_UI environment variable.
+	// +optional
+	Disabled *bool `json:"disabled,omitempty"`
+
+	// Restrict UI access to admin users only (proxy_admin and proxy_admin_viewer).
+	// When true, sets ui_access_mode: "admin_only" in general_settings.
+	// +optional
+	AdminOnly *bool `json:"adminOnly,omitempty"`
+
+	// Store model definitions in the database instead of the config file.
+	// Enables adding/editing models from the Admin UI without proxy restart.
+	// Written to general_settings.store_model_in_db.
+	// +optional
+	StoreModelInDB *bool `json:"storeModelInDB,omitempty"`
+
+	// Prevent users from creating personal API keys.
+	// When true, keys can only be created under an assigned team.
+	// Written to general_settings.default_team_disabled.
+	// +optional
+	DefaultTeamDisabled *bool `json:"defaultTeamDisabled,omitempty"`
+
+	// Custom base URL for the API reference documentation shown in the UI.
+	// Useful when the Admin UI is served from a different host than the proxy.
+	// Injected as LITELLM_UI_API_DOC_BASE_URL environment variable.
+	// +optional
+	APIDocBaseURL string `json:"apiDocBaseURL,omitempty"`
+
+	// Custom path for the docs endpoint (default: "/").
+	// Injected as DOCS_URL environment variable.
+	// +optional
+	DocsURL string `json:"docsURL,omitempty"`
+
+	// URL to redirect to when the root path is accessed and docsURL is changed.
+	// Injected as ROOT_REDIRECT_URL environment variable.
+	// +optional
+	RootRedirectURL string `json:"rootRedirectURL,omitempty"`
+
+	// URL to a hosted logo image displayed in the Admin UI.
+	// Injected as UI_LOGO_PATH environment variable.
+	// +optional
+	LogoURL string `json:"logoURL,omitempty"`
+
+	// URL to a logo image included in email notifications (budget alerts, invitations).
+	// Injected as EMAIL_LOGO_URL environment variable.
+	// +optional
+	EmailLogoURL string `json:"emailLogoURL,omitempty"`
+
+	// Support email address displayed in email notifications.
+	// Injected as EMAIL_SUPPORT_CONTACT environment variable.
+	// +optional
+	EmailSupportContact string `json:"emailSupportContact,omitempty"`
+
+	// Reference to a ConfigMap containing a custom UI color theme.
+	// The ConfigMap must have a key named "enterprise_colors.json" with a JSON
+	// object defining brand colors (uses the Tremor color palette).
+	// Mounted at /app/enterprise/enterprise_ui/enterprise_colors.json in the container.
+	// +optional
+	ColorThemeConfigMapRef *ConfigMapRef `json:"colorThemeConfigMapRef,omitempty"`
+}
+
+// ConfigMapRef references a Kubernetes ConfigMap by name.
+type ConfigMapRef struct {
+	// Name of the ConfigMap.
+	Name string `json:"name"`
 }
 
 // ImageSpec defines the container image for LiteLLM.

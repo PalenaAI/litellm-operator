@@ -250,6 +250,20 @@ spec:
     spendLogRetention:
       maxRetentionPeriod: "90d"
       cleanupInterval: "1d"
+
+  adminUI:
+    disabled: false
+    adminOnly: true
+    storeModelInDB: true
+    defaultTeamDisabled: true
+    apiDocBaseURL: "https://api.example.com"
+    docsURL: "/docs"
+    rootRedirectURL: "/ui"
+    logoURL: "https://example.com/logo.png"
+    emailLogoURL: "https://example.com/email-logo.png"
+    emailSupportContact: "support@example.com"
+    colorThemeConfigMapRef:
+      name: litellm-colors
 ```
 
 ## Spec Fields
@@ -619,6 +633,30 @@ Instance-level logging configuration. Controls audit logs, message content loggi
 | --- | --- | --- |
 | `maxRetentionPeriod` | string | Maximum retention period (e.g., `90d`, `1y`). Written to `general_settings.maximum_spend_logs_retention_period` |
 | `cleanupInterval` | string | Cleanup interval (e.g., `1d`, `1h`). Written to `general_settings.maximum_spend_logs_retention_interval` |
+
+### `adminUI`
+
+Admin UI configuration. Controls UI availability, access restrictions, model persistence, and personal key creation policy.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `disabled` | *bool | — | Disable the Admin UI entirely. When `true`, the `/ui` endpoint returns 404. Injected as `DISABLE_ADMIN_UI` env var |
+| `adminOnly` | *bool | — | Restrict UI access to admin users only (`proxy_admin` and `proxy_admin_viewer`). Sets `ui_access_mode: "admin_only"` in `general_settings` |
+| `storeModelInDB` | *bool | — | Store model definitions in the database instead of the config file. Enables adding/editing models from the UI without proxy restart. Written to `general_settings.store_model_in_db` |
+| `defaultTeamDisabled` | *bool | — | Prevent users from creating personal API keys. Keys can only be created under an assigned team. Written to `general_settings.default_team_disabled` |
+| `apiDocBaseURL` | string | — | Custom base URL for the API reference documentation shown in the UI. Useful when the Admin UI is served from a different host. Injected as `LITELLM_UI_API_DOC_BASE_URL` env var |
+| `docsURL` | string | — | Custom path for the docs endpoint (default: `/`). Injected as `DOCS_URL` env var |
+| `rootRedirectURL` | string | — | URL to redirect to when the root path is accessed and `docsURL` is changed. Injected as `ROOT_REDIRECT_URL` env var |
+| `logoURL` | string | — | URL to a hosted logo image displayed in the Admin UI. Injected as `UI_LOGO_PATH` env var |
+| `emailLogoURL` | string | — | URL to a logo image included in email notifications (budget alerts, invitations). Injected as `EMAIL_LOGO_URL` env var |
+| `emailSupportContact` | string | — | Support email address displayed in email notifications. Injected as `EMAIL_SUPPORT_CONTACT` env var |
+| `colorThemeConfigMapRef` | *ConfigMapRef | — | Reference to a ConfigMap containing `enterprise_colors.json` with custom brand colors ([Tremor palette](https://www.tremor.so/docs/layout/color-palette#default-colors)). Mounted at `/app/enterprise/enterprise_ui/enterprise_colors.json` |
+
+::: tip
+`storeModelInDB: true` is recommended for production multi-replica deployments where models should persist across restarts and be shared across instances.
+
+`defaultTeamDisabled: true` pairs well with the operator's `LiteLLMTeam` CRD — it enforces that all keys are team-scoped, making spend tracking and access control more predictable.
+:::
 
 ## Status Fields
 
