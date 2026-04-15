@@ -462,8 +462,19 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 			}
 			Eventually(verifyMetricsServerStarted).Should(Succeed())
 
+			By("resolving the metrics service ClusterIP to avoid in-cluster DNS dependency")
+			var metricsIP string
+			resolveMetricsIP := func(g Gomega) {
+				ipCmd := exec.Command("kubectl", "get", "service", metricsServiceName,
+					"-n", namespace, "-o", "jsonpath={.spec.clusterIP}")
+				out, err := utils.Run(ipCmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(out).NotTo(BeEmpty(), "metrics service has no ClusterIP")
+				metricsIP = strings.TrimSpace(out)
+			}
+			Eventually(resolveMetricsIP).Should(Succeed())
+
 			By("creating the curl-metrics pod to access the metrics endpoint")
-			metricsHost := fmt.Sprintf("%s.%s.svc.cluster.local", metricsServiceName, namespace)
 			curlArgs := fmt.Sprintf(
 				"for i in $(seq 1 60); do "+
 					"if curl -fsS -v -k -H 'Authorization: Bearer %s' "+
@@ -471,7 +482,7 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 					"echo \"attempt $i failed, retrying in 3s...\"; sleep 3; "+
 					"done; "+
 					"echo 'metrics endpoint never became reachable'; exit 1",
-				token, metricsHost,
+				token, metricsIP,
 			)
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
 				"--namespace", namespace,
