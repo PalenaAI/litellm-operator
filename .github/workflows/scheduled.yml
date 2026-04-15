@@ -147,23 +147,27 @@ jobs:
           echo "bundle=ghcr.io/${repo_lc}-bundle:latest" >> "$GITHUB_OUTPUT"
 
       - name: Trivy scan operator image
+        env:
+          IMAGE_REF: ${{ steps.img.outputs.operator }}
         run: |
           trivy image --exit-code 1 \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --format sarif \
             --output trivy-operator.sarif \
-            ${{ steps.img.outputs.operator }}
+            "$IMAGE_REF"
 
       - name: Trivy scan bundle image
         if: always()
+        env:
+          IMAGE_REF: ${{ steps.img.outputs.bundle }}
         run: |
           trivy image --exit-code 1 \
             --severity HIGH,CRITICAL \
             --ignore-unfixed \
             --format sarif \
             --output trivy-bundle.sarif \
-            ${{ steps.img.outputs.bundle }}
+            "$IMAGE_REF"
 
       - name: Upload Trivy SARIF (operator)
         if: always()
