@@ -38,7 +38,7 @@ jobs:
 
       - name: Install kind
         env:
-          KIND_VERSION: v0.25.0
+          KIND_VERSION: v0.31.0
         run: |
           curl -sSfLo /tmp/kind \
             "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
@@ -79,7 +79,7 @@ jobs:
 
       - name: Install kind
         env:
-          KIND_VERSION: v0.25.0
+          KIND_VERSION: v0.31.0
         run: |
           curl -sSfLo /tmp/kind \
             "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"

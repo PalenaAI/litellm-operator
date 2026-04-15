@@ -465,13 +465,13 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 			By("creating the curl-metrics pod to access the metrics endpoint")
 			metricsHost := fmt.Sprintf("%s.%s.svc.cluster.local", metricsServiceName, namespace)
 			curlArgs := fmt.Sprintf(
-				"for i in 1 2 3 4 5 6 7 8 9 10; do "+
-					"if nslookup %s >/dev/null 2>&1; then break; fi; "+
-					"echo \"DNS not ready (attempt $i), retrying in 3s...\"; sleep 3; "+
+				"for i in $(seq 1 60); do "+
+					"if curl -fsS -v -k -H 'Authorization: Bearer %s' "+
+					"https://%s:8443/metrics 2>&1; then exit 0; fi; "+
+					"echo \"attempt $i failed, retrying in 3s...\"; sleep 3; "+
 					"done; "+
-					"curl --retry 5 --retry-connrefused --retry-delay 3 -v -k "+
-					"-H 'Authorization: Bearer %s' https://%s:8443/metrics",
-				metricsHost, token, metricsHost,
+					"echo 'metrics endpoint never became reachable'; exit 1",
+				token, metricsHost,
 			)
 			cmd = exec.Command("kubectl", "run", "curl-metrics", "--restart=Never",
 				"--namespace", namespace,
