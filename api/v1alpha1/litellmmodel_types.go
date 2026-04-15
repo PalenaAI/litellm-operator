@@ -23,21 +23,26 @@ import (
 // LiteLLMModelSpec defines the desired state of LiteLLMModel.
 type LiteLLMModelSpec struct {
 	// Reference to the LiteLLMInstance.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Instance Ref"
 	InstanceRef InstanceRef `json:"instanceRef"`
 
 	// Model name exposed to clients.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Model Name"
 	ModelName string `json:"modelName"`
 
 	// LiteLLM-specific parameters for this model.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="LiteLLM Params"
 	LiteLLMParams LiteLLMModelParams `json:"litellmParams"`
 
 	// Optional model metadata.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Model Info"
 	ModelInfo *ModelInfo `json:"modelInfo,omitempty"`
 
 	// Tags for tag-based routing. Requests with matching tags
 	// will be routed to this model deployment.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Tags"
 	Tags []string `json:"tags,omitempty"`
 }
 
@@ -136,7 +141,7 @@ type LiteLLMModelStatus struct {
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Health",type="string",JSONPath=".status.health"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Model"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Model",resources={{LiteLLMInstance,v1alpha1,""}}
 
 // LiteLLMModel is the Schema for the litellmmodels API.
 type LiteLLMModel struct {

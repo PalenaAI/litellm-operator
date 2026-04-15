@@ -24,153 +24,189 @@ import (
 // LiteLLMInstanceSpec defines the desired state of LiteLLMInstance.
 type LiteLLMInstanceSpec struct {
 	// Image configuration for the LiteLLM proxy.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Image"
 	Image ImageSpec `json:"image,omitempty"`
 
 	// Number of LiteLLM proxy replicas.
 	// +kubebuilder:default=1
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Replicas"
 	Replicas int32 `json:"replicas,omitempty"`
 
 	// Autoscaling configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Autoscaling"
 	Autoscaling *AutoscalingSpec `json:"autoscaling,omitempty"`
 
 	// Master key configuration for LiteLLM admin access.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Master Key"
 	MasterKey MasterKeySpec `json:"masterKey"`
 
 	// Database configuration for LiteLLM state storage.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Database"
 	Database DatabaseSpec `json:"database"`
 
 	// Redis configuration for caching and routing.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Redis"
 	Redis *RedisSpec `json:"redis,omitempty"`
 
 	// Salt key for hashing.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Salt Key"
 	SaltKey *SaltKeySpec `json:"saltKey,omitempty"`
 
 	// General settings for the LiteLLM proxy.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="General Settings"
 	GeneralSettings *GeneralSettingsSpec `json:"generalSettings,omitempty"`
 
 	// Router settings for model routing.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Router Settings"
 	RouterSettings *RouterSettingsSpec `json:"routerSettings,omitempty"`
 
 	// Fallback configuration for model routing.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Fallbacks"
 	Fallbacks *FallbackSpec `json:"fallbacks,omitempty"`
 
 	// Config sync settings for bidirectional synchronization.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Config Sync"
 	ConfigSync *ConfigSyncSpec `json:"configSync,omitempty"`
 
 	// Service configuration.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Service"
 	Service ServiceSpec `json:"service,omitempty"`
 
 	// Ingress configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Ingress"
 	Ingress *IngressSpec `json:"ingress,omitempty"`
 
 	// OpenShift Route configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Route"
 	Route *RouteSpec `json:"route,omitempty"`
 
 	// Gateway API HTTPRoute configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Gateway HTTP Route"
 	GatewayHTTPRoute *GatewayHTTPRouteSpec `json:"gatewayHTTPRoute,omitempty"`
 
 	// Security settings.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Security"
 	Security *SecuritySpec `json:"security,omitempty"`
 
 	// Health check configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Health Check"
 	HealthCheck *HealthCheckSpec `json:"healthCheck,omitempty"`
 
 	// Resource requirements for the LiteLLM container.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Resources"
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 
 	// Pod disruption budget configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Pod Disruption Budget"
 	PodDisruptionBudget *PDBSpec `json:"podDisruptionBudget,omitempty"`
 
 	// Topology spread constraints.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Topology Spread Constraints"
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// Extra environment variables for the LiteLLM container.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Env Vars"
 	ExtraEnvVars []corev1.EnvVar `json:"extraEnvVars,omitempty"`
 
 	// Extra environment variable sources.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Env From"
 	ExtraEnvFrom []corev1.EnvFromSource `json:"extraEnvFrom,omitempty"`
 
 	// Callback configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Callbacks"
 	Callbacks *CallbacksSpec `json:"callbacks,omitempty"`
 
 	// Observability configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Observability"
 	Observability *ObservabilitySpec `json:"observability,omitempty"`
 
 	// Upgrade strategy configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Upgrade"
 	Upgrade *UpgradeSpec `json:"upgrade,omitempty"`
 
 	// SSO configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="SSO"
 	SSO *SSOSpec `json:"sso,omitempty"`
 
 	// SCIM v2 provisioning configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="SCIM"
 	SCIM *SCIMSpec `json:"scim,omitempty"`
 
 	// JWT authentication configuration (enterprise).
 	// Enables API-level authentication via JWT tokens from identity providers.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="JWT Auth"
 	JWTAuth *JWTAuthSpec `json:"jwtAuth,omitempty"`
 
 	// OAuth2 machine-to-machine authentication configuration (enterprise).
 	// Maps JWT fields to LiteLLM attributes for service-to-service auth.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="OAuth2 Auth"
 	OAuth2Auth *OAuth2AuthSpec `json:"oauth2Auth,omitempty"`
 
 	// Response caching configuration.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Caching"
 	Caching *CachingSpec `json:"caching,omitempty"`
 
 	// Pass-through endpoint definitions.
 	// Allows proxying arbitrary API requests to upstream services through LiteLLM.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Pass Through Endpoints"
 	PassThroughEndpoints []PassThroughEndpoint `json:"passThroughEndpoints,omitempty"`
 
 	// Default budget settings applied to all end-users/customers.
 	// Written to litellm_settings.max_end_user_budget / max_end_user_budget_id.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Default Customer Budget"
 	DefaultCustomerBudget *DefaultCustomerBudgetSpec `json:"defaultCustomerBudget,omitempty"`
 
 	// External secret manager configuration.
 	// When configured, LiteLLM fetches secrets from the provider at runtime
 	// instead of reading them from Kubernetes Secrets.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Secret Manager"
 	SecretManager *SecretManagerSpec `json:"secretManager,omitempty"`
 
 	// Role-based access control configuration.
 	// Controls route restrictions, key generation permissions, and per-role access.
 	// Some features (key_generation_settings, role_permissions) require a LiteLLM Enterprise license.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="RBAC"
 	RBAC *RBACSpec `json:"rbac,omitempty"`
 
 	// Logging configuration for the instance.
 	// Controls audit logs, global message logging, and spend log retention.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Logging"
 	Logging *InstanceLoggingSpec `json:"logging,omitempty"`
 
 	// Admin UI configuration.
 	// Controls UI availability, access restrictions, model persistence, and personal key creation.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Admin UI"
 	AdminUI *AdminUISpec `json:"adminUI,omitempty"`
 }
 
@@ -1644,7 +1680,7 @@ type SCIMStatus struct {
 // +kubebuilder:printcolumn:name="Endpoint",type="string",JSONPath=".status.endpoint"
 // +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".status.version"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Instance"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Instance",resources={{ConfigMap,v1,""},{Deployment,apps/v1,""},{HorizontalPodAutoscaler,autoscaling/v2,""},{Ingress,networking.k8s.io/v1,""},{Job,batch/v1,""},{NetworkPolicy,networking.k8s.io/v1,""},{PodDisruptionBudget,policy/v1,""},{Secret,v1,""},{Service,v1,""},{ServiceAccount,v1,""}}
 
 // LiteLLMInstance is the Schema for the litellminstances API.
 type LiteLLMInstance struct {

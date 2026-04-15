@@ -473,7 +473,7 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 							"name": "curl",
 							"image": "curlimages/curl:latest",
 							"command": ["/bin/sh", "-c"],
-							"args": ["curl -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
+							"args": ["for i in 1 2 3 4 5 6 7 8 9 10; do if nslookup %s.%s.svc.cluster.local >/dev/null 2>&1; then break; fi; echo \"DNS not ready (attempt $i), retrying in 3s...\"; sleep 3; done; curl --retry 5 --retry-connrefused --retry-delay 3 -v -k -H 'Authorization: Bearer %s' https://%s.%s.svc.cluster.local:8443/metrics"],
 							"securityContext": {
 								"allowPrivilegeEscalation": false,
 								"capabilities": {
@@ -488,7 +488,7 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 						}],
 						"serviceAccount": "%s"
 					}
-				}`, token, metricsServiceName, namespace, serviceAccountName))
+				}`, metricsServiceName, namespace, token, metricsServiceName, namespace, serviceAccountName))
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(), "Failed to create curl-metrics pod")
 

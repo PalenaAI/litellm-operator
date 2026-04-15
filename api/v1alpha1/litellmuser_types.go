@@ -23,46 +23,57 @@ import (
 // LiteLLMUserSpec defines the desired state of LiteLLMUser.
 type LiteLLMUserSpec struct {
 	// Reference to the LiteLLMInstance.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Instance Ref"
 	InstanceRef InstanceRef `json:"instanceRef"`
 
 	// Unique user identifier (typically email).
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="User ID"
 	UserID string `json:"userId"`
 
 	// User email address.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="User Email"
 	UserEmail string `json:"userEmail,omitempty"`
 
 	// User role.
 	// +kubebuilder:validation:Enum=proxy_admin;proxy_admin_viewer;internal_user;internal_user_viewer
 	// +kubebuilder:default="internal_user"
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="User Role"
 	UserRole string `json:"userRole,omitempty"`
 
 	// Maximum budget in USD.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Max Budget"
 	MaxBudget *float64 `json:"maxBudget,omitempty"`
 
 	// Budget reset duration (e.g., "30d").
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Budget Duration"
 	BudgetDuration string `json:"budgetDuration,omitempty"`
 
 	// Models this user can access.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Models"
 	Models []string `json:"models,omitempty"`
 
 	// Teams this user belongs to.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Teams"
 	Teams []UserTeamMembership `json:"teams,omitempty"`
 
 	// TPM limit for this user.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="TPM Limit"
 	TPMLimit *int `json:"tpmLimit,omitempty"`
 
 	// RPM limit for this user.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="RPM Limit"
 	RPMLimit *int `json:"rpmLimit,omitempty"`
 
 	// Custom metadata.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Metadata"
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
@@ -133,7 +144,7 @@ type ResolvedTeamMembership struct {
 // +kubebuilder:printcolumn:name="Role",type="string",JSONPath=".spec.userRole"
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM User"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM User",resources={{LiteLLMInstance,v1alpha1,""},{LiteLLMTeam,v1alpha1,""}}
 
 // LiteLLMUser is the Schema for the litellmusers API.
 type LiteLLMUser struct {

@@ -23,65 +23,80 @@ import (
 // LiteLLMVirtualKeySpec defines the desired state of LiteLLMVirtualKey.
 type LiteLLMVirtualKeySpec struct {
 	// Reference to the LiteLLMInstance.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Instance Ref"
 	InstanceRef InstanceRef `json:"instanceRef"`
 
 	// Human-readable key alias.
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Key Alias"
 	KeyAlias string `json:"keyAlias"`
 
 	// Reference to a LiteLLMTeam CR that this key belongs to.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Team Ref"
 	TeamRef *InstanceRef `json:"teamRef,omitempty"`
 
 	// Reference to a LiteLLMUser CR that this key belongs to.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="User Ref"
 	UserRef *InstanceRef `json:"userRef,omitempty"`
 
 	// Models this key can access.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Models"
 	Models []string `json:"models,omitempty"`
 
 	// Maximum budget in USD.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Max Budget"
 	MaxBudget *string `json:"maxBudget,omitempty"`
 
 	// Budget reset duration (e.g., "30d").
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Budget Duration"
 	BudgetDuration string `json:"budgetDuration,omitempty"`
 
 	// Key expiration time.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Expires At"
 	ExpiresAt *metav1.Time `json:"expiresAt,omitempty"`
 
 	// TPM limit for this key.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="TPM Limit"
 	TPMLimit *int `json:"tpmLimit,omitempty"`
 
 	// RPM limit for this key.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="RPM Limit"
 	RPMLimit *int `json:"rpmLimit,omitempty"`
 
 	// Custom metadata.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Metadata"
 	Metadata map[string]string `json:"metadata,omitempty"`
 
 	// Per-model spending limits for this key (enterprise).
 	// Key: model name, Value: max budget in USD.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Model Max Budget"
 	ModelMaxBudget map[string]string `json:"modelMaxBudget,omitempty"`
 
 	// Maximum concurrent requests for this key.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Max Parallel Requests"
 	MaxParallelRequests *int `json:"maxParallelRequests,omitempty"`
 
 	// Name for the Secret that stores the generated API key.
 	// Defaults to "{name}-key".
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Key Secret Name"
 	KeySecretName string `json:"keySecretName,omitempty"`
 
 	// Guardrails to activate for this key. Each entry must match the
 	// guardrailName of a LiteLLMGuardrail CR bound to the same instance.
 	// Requires a LiteLLM Enterprise license.
 	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Guardrails"
 	Guardrails []string `json:"guardrails,omitempty"`
 }
 
@@ -124,7 +139,7 @@ type LiteLLMVirtualKeyStatus struct {
 // +kubebuilder:printcolumn:name="Active",type="boolean",JSONPath=".status.isActive"
 // +kubebuilder:printcolumn:name="Synced",type="boolean",JSONPath=".status.synced"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
-// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Virtual Key"
+// +operator-sdk:csv:customresourcedefinitions:displayName="LiteLLM Virtual Key",resources={{LiteLLMInstance,v1alpha1,""},{Secret,v1,""}}
 
 // LiteLLMVirtualKey is the Schema for the litellmvirtualkeys API.
 type LiteLLMVirtualKey struct {
