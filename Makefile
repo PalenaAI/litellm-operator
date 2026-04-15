@@ -49,8 +49,11 @@ endif
 # Set the Operator SDK version to use. By default, what is installed on the system is used.
 # This is useful for CI or a project to utilize a specific version of the operator-sdk toolkit.
 OPERATOR_SDK_VERSION ?= v1.42.1
-# Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+# Image URL to use all building/pushing image targets.
+# Defaults to the released image reference so `make bundle` alone produces a
+# bundle with the correct controller image (not the `controller:latest`
+# placeholder). Override with IMG=... for local builds against other registries.
+IMG ?= ghcr.io/palenaai/litellm-operator:v$(VERSION)
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))

@@ -1,0 +1,19 @@
+# Default owners — reviewed on every PR.
+*                               @PalenaAI/maintainers
+
+# Workflow and release tooling require stricter review: any change here
+# affects supply-chain integrity and publishes artifacts.
+/.github/workflows/             @PalenaAI/maintainers @PalenaAI/security
+/.github/dco.yml                @PalenaAI/maintainers @PalenaAI/security
+/.github/CODEOWNERS             @PalenaAI/maintainers @PalenaAI/security
+/SECURITY.md                    @PalenaAI/maintainers @PalenaAI/security
+/.licenserc.yaml                @PalenaAI/maintainers @PalenaAI/security
+/renovate.json                  @PalenaAI/maintainers
+
+# OLM bundle and CSV must be reviewed by someone familiar with OperatorHub
+# submission requirements.
+/bundle/                        @PalenaAI/maintainers
+/config/manifests/              @PalenaAI/maintainers
+
+# Helm chart — packaging artifact, affects every downstream installer.
+/deploy/charts/                 @PalenaAI/maintainers

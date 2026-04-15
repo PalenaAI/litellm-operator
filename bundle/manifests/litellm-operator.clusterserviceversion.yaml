@@ -411,7 +411,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.10.0
-    createdAt: "2026-04-13T20:58:32Z"
+    createdAt: "2026-04-14T16:34:21Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -731,7 +731,7 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
-                image: controller:latest
+                image: ghcr.io/palenaai/litellm-operator:v0.10.0
                 livenessProbe:
                   httpGet:
                     path: /healthz

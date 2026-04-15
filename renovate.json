@@ -1,0 +1,97 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits",
+    ":semanticCommitTypeAll(chore)",
+    ":dependencyDashboard",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "UTC",
+  "schedule": [
+    "before 6am on Monday"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "prHourlyLimit": 4,
+  "prConcurrentLimit": 10,
+  "rangeStrategy": "bump",
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths"
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": [
+      "security",
+      "dependencies"
+    ],
+    "schedule": [
+      "at any time"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Group minor + patch updates to cut PR noise.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "all non-major dependencies",
+      "groupSlug": "all-minor-patch"
+    },
+    {
+      "description": "Pin all GitHub Actions to full commit SHA.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "pinDigests": true
+    },
+    {
+      "description": "Kubernetes / controller-runtime / client-go move together — group them to avoid partial-upgrade breakage.",
+      "matchPackageNames": [
+        "k8s.io/api",
+        "k8s.io/apimachinery",
+        "k8s.io/client-go",
+        "k8s.io/apiextensions-apiserver",
+        "sigs.k8s.io/controller-runtime"
+      ],
+      "groupName": "kubernetes"
+    },
+    {
+      "description": "Operator SDK ecosystem — gate behind major review.",
+      "matchPackageNames": [
+        "github.com/operator-framework/api",
+        "github.com/operator-framework/operator-lifecycle-manager",
+        "github.com/operator-framework/operator-registry"
+      ],
+      "groupName": "operator-framework"
+    },
+    {
+      "description": "Docker base images in Dockerfiles — pin and auto-update.",
+      "matchManagers": [
+        "dockerfile"
+      ],
+      "pinDigests": true
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update Makefile tool versions.",
+      "fileMatch": [
+        "^Makefile$"
+      ],
+      "matchStrings": [
+        "KUSTOMIZE_VERSION \\?= (?<currentValue>v[\\d\\.]+)",
+        "CONTROLLER_TOOLS_VERSION \\?= (?<currentValue>v[\\d\\.]+)",
+        "GOLANGCI_LINT_VERSION \\?= (?<currentValue>v[\\d\\.]+)",
+        "OPERATOR_SDK_VERSION \\?= (?<currentValue>v[\\d\\.]+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "manual-review",
+      "enabled": false
+    }
+  ]
+}

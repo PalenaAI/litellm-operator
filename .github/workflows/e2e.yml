@@ -1,0 +1,192 @@
+name: E2E
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test-e2e:
+    name: E2E + scorecard + image scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install kind
+        env:
+          KIND_VERSION: v0.25.0
+        run: |
+          curl -sSfLo /tmp/kind \
+            "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          curl -sSfLo /tmp/kind-sha \
+            "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64.sha256sum"
+          expected=$(awk '{print $1}' /tmp/kind-sha)
+          actual=$(sha256sum /tmp/kind | awk '{print $1}')
+          [ "$expected" = "$actual" ] || { echo "kind checksum mismatch"; exit 1; }
+          chmod +x /tmp/kind
+          sudo mv /tmp/kind /usr/local/bin/kind
+          kind version
+
+      - name: Run e2e tests
+        run: make test-e2e
+
+  scorecard:
+    name: Operator scorecard
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install kind
+        env:
+          KIND_VERSION: v0.25.0
+        run: |
+          curl -sSfLo /tmp/kind \
+            "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64"
+          curl -sSfLo /tmp/kind-sha \
+            "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64.sha256sum"
+          expected=$(awk '{print $1}' /tmp/kind-sha)
+          actual=$(sha256sum /tmp/kind | awk '{print $1}')
+          [ "$expected" = "$actual" ] || { echo "kind checksum mismatch"; exit 1; }
+          chmod +x /tmp/kind
+          sudo mv /tmp/kind /usr/local/bin/kind
+
+      - name: Create kind cluster
+        run: kind create cluster --name scorecard
+
+      - name: Generate bundle
+        run: make bundle VERSION=0.0.0-ci IMG=ghcr.io/palenaai/litellm-operator:ci
+
+      - name: Run operator-sdk scorecard
+        run: |
+          ./bin/operator-sdk scorecard ./bundle \
+            --kubeconfig ~/.kube/config \
+            --output text \
+            --wait-time 300s
+
+  container-scan:
+    name: Build and scan image
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5 # v3.8.0
+
+      - name: Build operator image (no push)
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        with:
+          context: .
+          push: false
+          load: true
+          tags: litellm-operator:scan
+
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: 0.58.1
+        run: |
+          curl -sSfLo /tmp/trivy.tar.gz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfLo /tmp/trivy-checksums.txt \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
+          expected=$(grep "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" /tmp/trivy-checksums.txt | awk '{print $1}')
+          actual=$(sha256sum /tmp/trivy.tar.gz | awk '{print $1}')
+          [ "$expected" = "$actual" ] || { echo "Trivy checksum mismatch"; exit 1; }
+          tar -xzf /tmp/trivy.tar.gz -C /tmp
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Trivy scan (fail on HIGH/CRITICAL)
+        run: |
+          trivy image --exit-code 1 \
+            --severity HIGH,CRITICAL \
+            --ignore-unfixed \
+            --format sarif \
+            --output trivy.sarif \
+            litellm-operator:scan
+
+      - name: Upload Trivy SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@48ab28a6f5dbc2a99bf1e0131198dd8f1df78169 # v3.28.0
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+
+      - name: Trivy licenses
+        run: |
+          trivy image --scanners license --license-full \
+            --format json --output trivy-licenses.json \
+            litellm-operator:scan
+
+      - name: Install syft
+        env:
+          SYFT_VERSION: 1.19.0
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin "v${SYFT_VERSION}"
+          syft --version
+
+      - name: Generate SBOM
+        run: syft litellm-operator:scan -o cyclonedx-json > sbom.cdx.json
+
+      - name: Upload scan artifacts
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
+        with:
+          name: container-scan-reports
+          path: |
+            trivy.sarif
+            trivy-licenses.json
+            sbom.cdx.json
+          retention-days: 30

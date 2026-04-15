@@ -5,119 +5,256 @@ on:
     tags:
       - "v*.*.*"
 
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
-
-permissions:
-  contents: write
-  packages: write
-  id-token: write
 
 jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Run tests
-        run: |
-          go mod tidy
-          make test
+        run: make test
 
   release:
-    name: Release
+    name: Build, sign, publish
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
     steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@cb605e52c26070c328afc4562f0b4ada7618a84e # v2.10.4
+        with:
+          egress-policy: audit
+
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
         with:
           go-version-file: go.mod
+          cache: true
 
-      - name: Get version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Setup Helm
+        uses: azure/setup-helm@fe7b79cd5ee1e45176fcad797de68ecaf3ca4814 # v4.2.0
+        with:
+          version: v3.16.3
 
-      - name: Set image name
-        id: image
-        # Docker tags must be lowercase; github.repository preserves org casing
-        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Install cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+        with:
+          cosign-release: v2.4.1
+
+      - name: Derive version and image names
+        id: vars
+        run: |
+          repo_lc=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          {
+            echo "VERSION=${GITHUB_REF_NAME#v}"
+            echo "IMAGE=${REGISTRY}/${repo_lc}"
+            echo "BUNDLE=${REGISTRY}/${repo_lc}-bundle"
+            echo "OWNER_LC=${owner_lc}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Sync Helm chart CRDs
         run: make sync-helm-crds
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@49b3bc8e6bdd4a60e6116a5414239cba5943d3cf # v3.2.0
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@6524bf65af31da8d45b59e8c27de4bd072b392f5 # v3.8.0
 
       - name: Build and push operator image
-        uses: docker/build-push-action@v6
+        id: build-operator
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: mode=max
+          sbom: true
           tags: |
-            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:latest
+            ${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }}
+            ${{ steps.vars.outputs.IMAGE }}:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ github.ref_name }}
             org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Sign operator image (cosign keyless)
+        env:
+          IMG_REF: ${{ steps.vars.outputs.IMAGE }}@${{ steps.build-operator.outputs.digest }}
+        run: cosign sign --yes "$IMG_REF"
 
       - name: Generate install manifest
-        run: |
-          make build-installer IMG=${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ github.ref_name }}
+        run: make build-installer IMG=${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }}
 
       - name: Generate OLM bundle
-        run: |
-          make bundle IMG=${{ env.REGISTRY }}/${{ steps.image.outputs.name }}:${{ github.ref_name }} VERSION=${{ steps.version.outputs.VERSION }}
+        run: make bundle IMG=${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }} VERSION=${{ steps.vars.outputs.VERSION }}
 
       - name: Build and push bundle image
-        uses: docker/build-push-action@v6
+        id: build-bundle
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
         with:
           context: .
           file: ./bundle.Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          provenance: mode=max
+          sbom: true
           tags: |
-            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}-bundle:${{ github.ref_name }}
-            ${{ env.REGISTRY }}/${{ steps.image.outputs.name }}-bundle:latest
+            ${{ steps.vars.outputs.BUNDLE }}:${{ github.ref_name }}
+            ${{ steps.vars.outputs.BUNDLE }}:latest
 
-      - name: Generate changelog for release
-        id: changelog
+      - name: Sign bundle image (cosign keyless)
+        env:
+          IMG_REF: ${{ steps.vars.outputs.BUNDLE }}@${{ steps.build-bundle.outputs.digest }}
+        run: cosign sign --yes "$IMG_REF"
+
+      - name: Package and push Helm chart to GHCR (OCI)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER_LC: ${{ steps.vars.outputs.OWNER_LC }}
+          VERSION: ${{ steps.vars.outputs.VERSION }}
         run: |
-          # Extract the changelog section for this version
-          VERSION="${{ steps.version.outputs.VERSION }}"
-          NOTES=$(awk "/^## \[${VERSION}\]/{found=1; next} /^## \[/{if(found) exit} found{print}" CHANGELOG.md)
+          helm package deploy/charts/litellm-operator \
+            --version "${VERSION}" \
+            --app-version "${VERSION}" \
+            --destination /tmp/helm
+          echo "${GHCR_TOKEN}" | helm registry login \
+            "${REGISTRY}" --username "${{ github.actor }}" --password-stdin
+          helm push "/tmp/helm/litellm-operator-${VERSION}.tgz" \
+            "oci://${REGISTRY}/${OWNER_LC}/charts"
+
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: 0.58.1
+        run: |
+          curl -sSfLo /tmp/trivy.tar.gz \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfLo /tmp/trivy-checksums.txt \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_checksums.txt"
+          expected=$(grep "trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" /tmp/trivy-checksums.txt | awk '{print $1}')
+          actual=$(sha256sum /tmp/trivy.tar.gz | awk '{print $1}')
+          [ "$expected" = "$actual" ] || { echo "Trivy checksum mismatch"; exit 1; }
+          tar -xzf /tmp/trivy.tar.gz -C /tmp
+          sudo mv /tmp/trivy /usr/local/bin/trivy
+
+      - name: Trivy scan published image
+        env:
+          IMG_TAG: ${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }}
+        run: |
+          mkdir -p release-artifacts
+          trivy image --exit-code 0 --format json \
+            --output release-artifacts/trivy-report.json "$IMG_TAG"
+          trivy image --scanners license --license-full --format json \
+            --output release-artifacts/trivy-licenses.json "$IMG_TAG"
+
+      - name: Install syft
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b /usr/local/bin v1.19.0
+
+      - name: Generate SBOM (CycloneDX) for operator image
+        env:
+          IMG_TAG: ${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }}
+        run: syft "$IMG_TAG" -o cyclonedx-json > release-artifacts/sbom.cdx.json
+
+      - name: Install go-licenses
+        run: go install github.com/google/go-licenses@v1.6.0
+
+      - name: Go licenses hard-check (forbidden/restricted)
+        run: go-licenses check ./... --disallowed_types=forbidden,restricted
+
+      - name: Generate THIRD_PARTY_LICENSES report
+        run: |
+          go-licenses report ./... > release-artifacts/THIRD_PARTY_LICENSES.csv 2>/dev/null || true
+          test -s release-artifacts/THIRD_PARTY_LICENSES.csv
+
+      - name: Install scancode-toolkit
+        run: |
+          python3 -m pip install --user scancode-toolkit==32.3.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run scancode-toolkit
+        run: |
+          module_cache="$(go env GOMODCACHE)"
+          scancode \
+            --license --copyright --package \
+            --json-pp release-artifacts/scancode-report.json \
+            --cyclonedx release-artifacts/scancode.cdx.json \
+            --timeout 120 \
+            --processes 4 \
+            "$module_cache" || true
+          test -f release-artifacts/scancode-report.json
+
+      - name: Copy install manifest into release artifacts
+        run: cp dist/install.yaml release-artifacts/
+
+      - name: Generate release notes
+        env:
+          VERSION: ${{ steps.vars.outputs.VERSION }}
+        run: |
+          NOTES=$(awk -v v="$VERSION" '
+            $0 ~ "^## \\[" v "\\]" { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md)
           if [ -z "$NOTES" ]; then
             NOTES="Release ${GITHUB_REF_NAME}"
           fi
-          # Write to file to preserve newlines
           echo "$NOTES" > /tmp/release-notes.md
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@7b4da11513bf3f43f9999e90eabced41ab8bb048 # v2.2.0
         with:
           body_path: /tmp/release-notes.md
           files: |
-            dist/install.yaml
+            release-artifacts/install.yaml
+            release-artifacts/sbom.cdx.json
+            release-artifacts/trivy-report.json
+            release-artifacts/trivy-licenses.json
+            release-artifacts/THIRD_PARTY_LICENSES.csv
+            release-artifacts/scancode-report.json
+            release-artifacts/scancode.cdx.json
           generate_release_notes: true
           make_latest: true
