@@ -1,0 +1,8 @@
+rules:
+  cache-poisoning:
+    ignore:
+      # release.yml only runs on tag pushes (not PRs or forks), so cache
+      # restoration from an untrusted source cannot occur. The low-confidence
+      # cache-poisoning findings against setup-go / buildx are false positives
+      # in this trigger context.
+      - release.yml

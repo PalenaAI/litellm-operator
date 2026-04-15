@@ -126,10 +126,15 @@ jobs:
         run: cosign sign --yes "$IMG_REF"
 
       - name: Generate install manifest
-        run: make build-installer IMG=${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }}
+        env:
+          IMG: ${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }}
+        run: make build-installer IMG="$IMG"
 
       - name: Generate OLM bundle
-        run: make bundle IMG=${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }} VERSION=${{ steps.vars.outputs.VERSION }}
+        env:
+          IMG: ${{ steps.vars.outputs.IMAGE }}:${{ github.ref_name }}
+          VERSION: ${{ steps.vars.outputs.VERSION }}
+        run: make bundle IMG="$IMG" VERSION="$VERSION"
 
       - name: Build and push bundle image
         id: build-bundle
@@ -153,6 +158,7 @@ jobs:
       - name: Package and push Helm chart to GHCR (OCI)
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
           OWNER_LC: ${{ steps.vars.outputs.OWNER_LC }}
           VERSION: ${{ steps.vars.outputs.VERSION }}
         run: |
@@ -161,7 +167,7 @@ jobs:
             --app-version "${VERSION}" \
             --destination /tmp/helm
           echo "${GHCR_TOKEN}" | helm registry login \
-            "${REGISTRY}" --username "${{ github.actor }}" --password-stdin
+            "${REGISTRY}" --username "${GHCR_USER}" --password-stdin
           helm push "/tmp/helm/litellm-operator-${VERSION}.tgz" \
             "oci://${REGISTRY}/${OWNER_LC}/charts"
 
