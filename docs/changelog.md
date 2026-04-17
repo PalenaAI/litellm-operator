@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-04-17
+
+### Fixed
+
+- **Release pipeline — GitHub release upload no longer fails on oversized scancode report.** `scancode-toolkit` in the release workflow previously scanned the entire Go module cache (`$(go env GOMODCACHE)`, ~5 GB of vendored dependencies), which produced a ~50 MB `scancode-report.json`. The scan took ~100 minutes and the oversized report caused `softprops/action-gh-release` to fail with `Request body length does not match content-length header`, leaving releases partially published. The scan is now scoped to the project source tree (`.`) with ignore patterns for build outputs (`bin/`, `dist/`, `testbin/`, `release-artifacts/`, tarballs). Dependency license coverage remains fully intact via `go-licenses` (hard-fail on forbidden/restricted) and the `syft` CycloneDX SBOM.
+- **CI lint — removed dead `customSSOPackageName` constant** in `internal/resources/deployment.go` that was left over after the custom SSO handler refactor. `golangci-lint` was failing the build on the `unused` linter.
+- **CI drift check — regenerated Helm chart CRDs.** The `customSsoHandler` field in `deploy/charts/litellm-operator/crds/litellm.palena.ai_litellminstances.yaml` was still the old plain-string shape instead of the union struct introduced in v0.11.0. `make sync-helm-crds` now produces a clean tree.
+
 ## [0.11.0] - 2026-04-17
 
 ### Added
@@ -120,7 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows for tests, linting, and releases
 - OLM bundle and catalog manifests for OperatorHub distribution
 
-[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.7.0...v0.9.0
