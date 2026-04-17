@@ -1827,8 +1827,48 @@ spec:
                     - name
                     type: object
                   customSsoHandler:
-                    description: Custom SSO handler module path (Python module).
-                    type: string
+                    description: |-
+                      Custom SSO handler invoked by LiteLLM after a successful SSO login.
+                      Written to general_settings.custom_sso as a dotted Python module path.
+                      Provide either an inline module path (handler baked into the image)
+                      or a ConfigMap reference (operator mounts the code at runtime).
+                    properties:
+                      configMapRef:
+                        description: |-
+                          Reference to a ConfigMap containing the handler's Python source.
+                          The operator mounts the ConfigMap at /app/custom_sso_handlers/ and
+                          sets custom_sso to "custom_sso_handlers.<stem>.<functionName>",
+                          where <stem> is fileName with the .py suffix removed.
+                          Mutually exclusive with module.
+                        properties:
+                          fileName:
+                            default: handler.py
+                            description: |-
+                              Key in the ConfigMap whose value is the Python source. The key
+                              becomes the filename in the mounted directory. Must end with ".py".
+                            pattern: ^[A-Za-z_][A-Za-z0-9_]*\.py$
+                            type: string
+                          functionName:
+                            description: |-
+                              Name of the Python function within the handler file. Appended to
+                              the derived module path when writing custom_sso.
+                            pattern: ^[A-Za-z_][A-Za-z0-9_]*$
+                            type: string
+                          name:
+                            description: Name of the ConfigMap in the same namespace
+                              as the LiteLLMInstance.
+                            type: string
+                        required:
+                        - functionName
+                        - name
+                        type: object
+                      module:
+                        description: |-
+                          Dotted Python module path to the handler function
+                          (e.g. "my_package.my_handler"). Use when the handler is baked
+                          into a custom LiteLLM image. Mutually exclusive with configMapRef.
+                        type: string
+                    type: object
                   defaultTeamParams:
                     description: Default parameters for auto-created teams from SSO
                       groups.
@@ -1899,7 +1939,9 @@ spec:
                     description: Enable SSO authentication.
                     type: boolean
                   logoutUrl:
-                    description: Logout redirect URL.
+                    description: |-
+                      Logout redirect URL applied to the Admin UI logout action.
+                      Written to the PROXY_LOGOUT_URL env var on the Deployment.
                     type: string
                   provider:
                     description: SSO provider type.
