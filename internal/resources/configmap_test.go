@@ -2276,3 +2276,111 @@ func TestGenerateProxyConfig_AdminUINil(t *testing.T) {
 		}
 	}
 }
+
+func TestGenerateProxyConfig_SSOCustomHandlerModule(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{
+		Enabled:  true,
+		Provider: "generic-oidc",
+		ClientID: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "id",
+		},
+		ClientSecret: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "secret",
+		},
+		CustomSSOHandler: &litellmv1alpha1.CustomSSOHandlerSpec{
+			Module: "my_package.my_handler",
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["custom_sso"] != "my_package.my_handler" {
+		t.Errorf("expected custom_sso=my_package.my_handler, got %v", gs["custom_sso"])
+	}
+}
+
+func TestGenerateProxyConfig_SSOCustomHandlerConfigMap(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{
+		Enabled:  true,
+		Provider: "generic-oidc",
+		ClientID: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "id",
+		},
+		ClientSecret: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "secret",
+		},
+		CustomSSOHandler: &litellmv1alpha1.CustomSSOHandlerSpec{
+			ConfigMapRef: &litellmv1alpha1.CustomSSOHandlerConfigMapRef{
+				Name:         "my-sso-handler",
+				FileName:     "handler.py",
+				FunctionName: "handle_sso",
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	want := "custom_sso_handlers.handler.handle_sso"
+	if gs["custom_sso"] != want {
+		t.Errorf("expected custom_sso=%s, got %v", want, gs["custom_sso"])
+	}
+}
+
+func TestGenerateProxyConfig_SSODefaultUserParamsTeams(t *testing.T) {
+	instance := newTestInstance()
+	maxBudget := 50.0
+	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{
+		Enabled:  true,
+		Provider: "generic-oidc",
+		ClientID: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "id",
+		},
+		ClientSecret: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "secret",
+		},
+		DefaultUserParams: &litellmv1alpha1.DefaultUserParams{
+			UserRole: "internal_user",
+			Teams: []litellmv1alpha1.DefaultUserTeam{
+				{TeamID: "team-a", Role: "user"},
+				{TeamID: "team-b", Role: "admin", MaxBudgetInTeam: &maxBudget},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil, nil)
+	ls, ok := config["litellm_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected litellm_settings to be present")
+	}
+	dup, ok := ls["default_internal_user_params"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected default_internal_user_params to be present")
+	}
+	teams, ok := dup["teams"].([]map[string]interface{})
+	if !ok {
+		t.Fatalf("expected teams to be []map[string]interface{}, got %T", dup["teams"])
+	}
+	if len(teams) != 2 {
+		t.Fatalf("expected 2 teams, got %d", len(teams))
+	}
+	if teams[0]["team_id"] != "team-a" || teams[0]["user_role"] != "user" {
+		t.Errorf("unexpected first team entry: %v", teams[0])
+	}
+	if teams[1]["team_id"] != "team-b" || teams[1]["user_role"] != "admin" {
+		t.Errorf("unexpected second team entry: %v", teams[1])
+	}
+	if teams[1]["max_budget_in_team"] != 50.0 {
+		t.Errorf("expected max_budget_in_team=50.0, got %v", teams[1]["max_budget_in_team"])
+	}
+	if _, has := teams[0]["max_budget_in_team"]; has {
+		t.Error("team without budget should not have max_budget_in_team")
+	}
+}

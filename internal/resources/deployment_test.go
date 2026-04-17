@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -928,5 +929,175 @@ func TestBuildDeployment_AdminUINil(t *testing.T) {
 		if v.Name == volumeNameColorTheme {
 			t.Error("color-theme volume should not be present when AdminUI is nil")
 		}
+	}
+}
+
+func TestBuildDeployment_SSOLogoutURL(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{
+		Enabled:  true,
+		Provider: "generic-oidc",
+		ClientID: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "id",
+		},
+		ClientSecret: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "secret",
+		},
+		LogoutURL: "https://idp.example.com/logout",
+	}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+
+	var got string
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "PROXY_LOGOUT_URL" {
+			got = env.Value
+		}
+	}
+	if got != "https://idp.example.com/logout" {
+		t.Errorf("expected PROXY_LOGOUT_URL to be set, got %q", got)
+	}
+}
+
+func TestBuildDeployment_SSOLogoutURLNotSetWhenEmpty(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{
+		Enabled:  true,
+		Provider: "generic-oidc",
+		ClientID: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "id",
+		},
+		ClientSecret: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "secret",
+		},
+	}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "PROXY_LOGOUT_URL" {
+			t.Errorf("PROXY_LOGOUT_URL should not be set when logoutUrl is empty, got %q", env.Value)
+		}
+	}
+}
+
+func TestBuildDeployment_CustomSSOHandlerConfigMapMount(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{
+		Enabled:  true,
+		Provider: "generic-oidc",
+		ClientID: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "id",
+		},
+		ClientSecret: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "secret",
+		},
+		CustomSSOHandler: &litellmv1alpha1.CustomSSOHandlerSpec{
+			ConfigMapRef: &litellmv1alpha1.CustomSSOHandlerConfigMapRef{
+				Name:         "my-sso-handler",
+				FileName:     "handler.py",
+				FunctionName: "handle_sso",
+			},
+		},
+	}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+
+	var foundVolume bool
+	for _, v := range dep.Spec.Template.Spec.Volumes {
+		if v.Name == volumeNameCustomSSO {
+			foundVolume = true
+			if v.ConfigMap == nil || v.ConfigMap.Name != "my-sso-handler" {
+				t.Errorf("expected ConfigMap volume 'my-sso-handler', got %+v", v.ConfigMap)
+			}
+		}
+	}
+	if !foundVolume {
+		t.Fatal("custom SSO handler volume not found")
+	}
+
+	var foundMount bool
+	for _, m := range dep.Spec.Template.Spec.Containers[0].VolumeMounts {
+		if m.Name == volumeNameCustomSSO {
+			foundMount = true
+			if m.MountPath != customSSOMountDir {
+				t.Errorf("expected mount path %q, got %q", customSSOMountDir, m.MountPath)
+			}
+			if !m.ReadOnly {
+				t.Error("custom SSO handler mount should be read-only")
+			}
+		}
+	}
+	if !foundMount {
+		t.Fatal("custom SSO handler volume mount not found on container")
+	}
+}
+
+func TestBuildDeployment_CustomSSOHandlerModuleNoMount(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{
+		Enabled:  true,
+		Provider: "generic-oidc",
+		ClientID: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "id",
+		},
+		ClientSecret: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "secret",
+		},
+		CustomSSOHandler: &litellmv1alpha1.CustomSSOHandlerSpec{
+			Module: "my_package.my_handler",
+		},
+	}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+
+	for _, v := range dep.Spec.Template.Spec.Volumes {
+		if v.Name == volumeNameCustomSSO {
+			t.Error("custom SSO handler volume should not be mounted when using module path")
+		}
+	}
+}
+
+func TestBuildDeployment_ExtraEnvVarsOverrideOperatorVars(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.SSO = &litellmv1alpha1.SSOSpec{
+		Enabled:  true,
+		Provider: "azure-entra",
+		ClientID: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "id",
+		},
+		ClientSecret: litellmv1alpha1.SecretKeyRef{
+			Name: "sso", Key: "secret",
+		},
+	}
+	instance.Spec.ExtraEnvVars = []corev1.EnvVar{
+		{Name: "PROXY_BASE_URL", Value: "https://gateway.example.com"},
+		{Name: "CUSTOM_ONLY", Value: "hello"},
+	}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+
+	env := dep.Spec.Template.Spec.Containers[0].Env
+	var proxyHits int
+	var customHits int
+	var proxyValue string
+	for _, e := range env {
+		switch e.Name {
+		case "PROXY_BASE_URL":
+			proxyHits++
+			proxyValue = e.Value
+		case "CUSTOM_ONLY":
+			customHits++
+		}
+	}
+
+	if proxyHits != 1 {
+		t.Errorf("expected exactly one PROXY_BASE_URL env var, got %d", proxyHits)
+	}
+	if proxyValue != "https://gateway.example.com" {
+		t.Errorf("expected PROXY_BASE_URL to be overridden, got %q", proxyValue)
+	}
+	if customHits != 1 {
+		t.Errorf("expected CUSTOM_ONLY to be present exactly once, got %d", customHits)
 	}
 }

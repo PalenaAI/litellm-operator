@@ -36,6 +36,16 @@ const (
 	nonRootImageRepo = "ghcr.io/berriai/litellm-non_root"
 	// volumeNameColorTheme is the volume name for the Admin UI color theme ConfigMap.
 	volumeNameColorTheme = "color-theme"
+	// volumeNameCustomSSO is the volume name for the custom SSO handler ConfigMap.
+	volumeNameCustomSSO = "custom-sso-handler"
+	// customSSOMountDir is the directory inside the LiteLLM pod where the
+	// custom SSO handler ConfigMap is mounted. The containing package name
+	// is the last path segment, so LiteLLM imports handlers as
+	// "custom_sso_handlers.<stem>.<function>".
+	customSSOMountDir = "/app/custom_sso_handlers"
+	// customSSOPackageName mirrors the last segment of customSSOMountDir —
+	// used to build the dotted Python import path.
+	customSSOPackageName = "custom_sso_handlers"
 )
 
 func podSecurityContext(nonRoot bool) *corev1.PodSecurityContext {
@@ -85,7 +95,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 	envVars := buildEnvVars(instance, licenseSecretName)
 	envVars = append(envVars, credentialEnvVars(instance, credentials)...)
 	envVars = append(envVars, guardrailEnvVars(instance, guardrails)...)
-	envVars = append(envVars, instance.Spec.ExtraEnvVars...)
+	envVars = mergeEnvVars(envVars, instance.Spec.ExtraEnvVars)
 
 	envFrom := append(secretManagerEnvFrom(instance), instance.Spec.ExtraEnvFrom...)
 
@@ -413,6 +423,10 @@ func ssoEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
 		{Name: "PROXY_BASE_URL", Value: proxyBaseURL(instance)},
 	}
 
+	if sso.LogoutURL != "" {
+		vars = append(vars, corev1.EnvVar{Name: "PROXY_LOGOUT_URL", Value: sso.LogoutURL})
+	}
+
 	switch sso.Provider {
 	case "azure-entra":
 		vars = append(vars,
@@ -488,6 +502,37 @@ func envFromSecret(envName string, ref litellmv1alpha1.SecretKeyRef) corev1.EnvV
 	}
 }
 
+// mergeEnvVars returns operator envs with any entries in user overriding by
+// name. Operator ordering is preserved for overridden entries; user-only
+// entries are appended in their original order.
+func mergeEnvVars(operator, user []corev1.EnvVar) []corev1.EnvVar {
+	if len(user) == 0 {
+		return operator
+	}
+	byName := make(map[string]corev1.EnvVar, len(user))
+	for _, e := range user {
+		byName[e.Name] = e
+	}
+	merged := make([]corev1.EnvVar, 0, len(operator)+len(user))
+	seen := make(map[string]bool, len(user))
+	for _, e := range operator {
+		if override, ok := byName[e.Name]; ok {
+			merged = append(merged, override)
+			seen[e.Name] = true
+			continue
+		}
+		merged = append(merged, e)
+	}
+	for _, e := range user {
+		if seen[e.Name] {
+			continue
+		}
+		merged = append(merged, e)
+		seen[e.Name] = true
+	}
+	return merged
+}
+
 func proxyBaseURL(instance *litellmv1alpha1.LiteLLMInstance) string {
 	if instance.Spec.Ingress != nil && instance.Spec.Ingress.Enabled && instance.Spec.Ingress.Host != "" {
 		scheme := "http"
@@ -523,7 +568,24 @@ func buildVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volum
 			ReadOnly:  true,
 		})
 	}
+	if customSSOConfigMapName(instance) != "" {
+		mounts = append(mounts, corev1.VolumeMount{
+			Name:      volumeNameCustomSSO,
+			MountPath: customSSOMountDir,
+			ReadOnly:  true,
+		})
+	}
 	return mounts
+}
+
+// customSSOConfigMapName returns the ConfigMap name backing the custom SSO
+// handler mount, or "" if no ConfigMap-backed handler is configured.
+func customSSOConfigMapName(instance *litellmv1alpha1.LiteLLMInstance) string {
+	sso := instance.Spec.SSO
+	if sso == nil || !sso.Enabled || sso.CustomSSOHandler == nil || sso.CustomSSOHandler.ConfigMapRef == nil {
+		return ""
+	}
+	return sso.CustomSSOHandler.ConfigMapRef.Name
 }
 
 func buildVolumes(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volume {
@@ -553,6 +615,16 @@ func buildVolumes(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volume {
 					LocalObjectReference: corev1.LocalObjectReference{
 						Name: instance.Spec.AdminUI.ColorThemeConfigMapRef.Name,
 					},
+				},
+			},
+		})
+	}
+	if name := customSSOConfigMapName(instance); name != "" {
+		volumes = append(volumes, corev1.Volume{
+			Name: volumeNameCustomSSO,
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: name},
 				},
 			},
 		})

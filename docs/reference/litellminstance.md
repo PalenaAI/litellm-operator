@@ -634,6 +634,27 @@ Instance-level logging configuration. Controls audit logs, message content loggi
 | `maxRetentionPeriod` | string | Maximum retention period (e.g., `90d`, `1y`). Written to `general_settings.maximum_spend_logs_retention_period` |
 | `cleanupInterval` | string | Cleanup interval (e.g., `1d`, `1h`). Written to `general_settings.maximum_spend_logs_retention_interval` |
 
+### `extraEnvVars` / `extraEnvFrom`
+
+Inject additional environment variables into the LiteLLM container.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `extraEnvVars` | []corev1.EnvVar | Extra env vars appended to the container. Entries override operator-set env vars of the same name (e.g. `PROXY_BASE_URL`) |
+| `extraEnvFrom` | []corev1.EnvFromSource | Extra `envFrom` sources (Secret or ConfigMap) mounted into the container |
+
+::: tip
+`extraEnvVars` is an escape hatch for env vars the operator derives automatically. A common case is `PROXY_BASE_URL`: the operator derives it from `spec.ingress.host`, falling back to the in-cluster Service DNS when ingress is not used. If you expose the gateway through an OpenShift Route, a Gateway API HTTPRoute, or an external load balancer, set `PROXY_BASE_URL` here to your public URL so SSO redirects land on the correct host.
+
+```yaml
+spec:
+  extraEnvVars:
+    - name: PROXY_BASE_URL
+      value: https://gateway.example.com
+```
+
+:::
+
 ### `adminUI`
 
 Admin UI configuration. Controls UI availability, access restrictions, model persistence, and personal key creation policy.

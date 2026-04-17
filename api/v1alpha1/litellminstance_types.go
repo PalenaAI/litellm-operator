@@ -1177,13 +1177,53 @@ type SSOSpec struct {
 	// +optional
 	DefaultTeamParams *DefaultTeamParams `json:"defaultTeamParams,omitempty"`
 
-	// Custom SSO handler module path (Python module).
+	// Custom SSO handler invoked by LiteLLM after a successful SSO login.
+	// Written to general_settings.custom_sso as a dotted Python module path.
+	// Provide either an inline module path (handler baked into the image)
+	// or a ConfigMap reference (operator mounts the code at runtime).
 	// +optional
-	CustomSSOHandler string `json:"customSsoHandler,omitempty"`
+	CustomSSOHandler *CustomSSOHandlerSpec `json:"customSsoHandler,omitempty"`
 
-	// Logout redirect URL.
+	// Logout redirect URL applied to the Admin UI logout action.
+	// Written to the PROXY_LOGOUT_URL env var on the Deployment.
 	// +optional
 	LogoutURL string `json:"logoutUrl,omitempty"`
+}
+
+// CustomSSOHandlerSpec configures the LiteLLM custom SSO handler.
+// Exactly one of module or configMapRef must be set.
+type CustomSSOHandlerSpec struct {
+	// Dotted Python module path to the handler function
+	// (e.g. "my_package.my_handler"). Use when the handler is baked
+	// into a custom LiteLLM image. Mutually exclusive with configMapRef.
+	// +optional
+	Module string `json:"module,omitempty"`
+
+	// Reference to a ConfigMap containing the handler's Python source.
+	// The operator mounts the ConfigMap at /app/custom_sso_handlers/ and
+	// sets custom_sso to "custom_sso_handlers.<stem>.<functionName>",
+	// where <stem> is fileName with the .py suffix removed.
+	// Mutually exclusive with module.
+	// +optional
+	ConfigMapRef *CustomSSOHandlerConfigMapRef `json:"configMapRef,omitempty"`
+}
+
+// CustomSSOHandlerConfigMapRef references a ConfigMap key holding Python source
+// and the function name to call within it.
+type CustomSSOHandlerConfigMapRef struct {
+	// Name of the ConfigMap in the same namespace as the LiteLLMInstance.
+	Name string `json:"name"`
+
+	// Key in the ConfigMap whose value is the Python source. The key
+	// becomes the filename in the mounted directory. Must end with ".py".
+	// +kubebuilder:default="handler.py"
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*\.py$`
+	FileName string `json:"fileName,omitempty"`
+
+	// Name of the Python function within the handler file. Appended to
+	// the derived module path when writing custom_sso.
+	// +kubebuilder:validation:Pattern=`^[A-Za-z_][A-Za-z0-9_]*$`
+	FunctionName string `json:"functionName"`
 }
 
 // UserAttributeMappings defines SSO user attribute mappings.

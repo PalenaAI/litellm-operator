@@ -277,6 +277,33 @@ func buildSSOConfig(sso *litellmv1alpha1.SSOSpec, config map[string]interface{})
 			"team_ids_jwt_field": sso.TeamIDsJWTField,
 		}
 	}
+
+	if path := customSSOModulePath(sso.CustomSSOHandler); path != "" {
+		gs := ensureGeneralSettings(config)
+		gs["custom_sso"] = path
+	}
+}
+
+// customSSOModulePath returns the dotted Python import path to write into
+// general_settings.custom_sso. Returns "" when the handler is not configured.
+// For configMapRef it derives "custom_sso_handlers.<stem>.<functionName>",
+// mirroring where the operator mounts the ConfigMap in the pod.
+func customSSOModulePath(handler *litellmv1alpha1.CustomSSOHandlerSpec) string {
+	if handler == nil {
+		return ""
+	}
+	if handler.Module != "" {
+		return handler.Module
+	}
+	if handler.ConfigMapRef == nil || handler.ConfigMapRef.FunctionName == "" {
+		return ""
+	}
+	fileName := handler.ConfigMapRef.FileName
+	if fileName == "" {
+		fileName = "handler.py"
+	}
+	stem := strings.TrimSuffix(fileName, ".py")
+	return fmt.Sprintf("custom_sso_handlers.%s.%s", stem, handler.ConfigMapRef.FunctionName)
 }
 
 // buildJWTAuthConfig writes JWT authentication settings into general_settings.
@@ -852,6 +879,20 @@ func mapDefaultUserParams(p *litellmv1alpha1.DefaultUserParams) map[string]inter
 	}
 	if p.UserRole != "" {
 		m["user_role"] = p.UserRole
+	}
+	if len(p.Teams) > 0 {
+		teams := make([]map[string]interface{}, 0, len(p.Teams))
+		for _, t := range p.Teams {
+			entry := map[string]interface{}{"team_id": t.TeamID}
+			if t.Role != "" {
+				entry["user_role"] = t.Role
+			}
+			if t.MaxBudgetInTeam != nil {
+				entry["max_budget_in_team"] = *t.MaxBudgetInTeam
+			}
+			teams = append(teams, entry)
+		}
+		m["teams"] = teams
 	}
 	return m
 }
