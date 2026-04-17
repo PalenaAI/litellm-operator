@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-17
+
+### Added
+
+- **SSO logout redirect** — `spec.sso.logoutUrl` on `LiteLLMInstance` is now wired to the `PROXY_LOGOUT_URL` env var on the Deployment. When set, the Admin UI's logout action redirects to the IdP's end-session endpoint so users are signed out of both LiteLLM and the IdP in one click.
+- **SSO custom handler (ConfigMap-backed)** — `spec.sso.customSsoHandler` is now wired to `general_settings.custom_sso` and supports two modes: `module` (dotted Python path to a handler baked into a custom image) or `configMapRef` (operator mounts the handler source from a ConfigMap at `/app/custom_sso_handlers/` and writes the derived module path — `custom_sso_handlers.<stem>.<functionName>`). Handlers run inside the LiteLLM pod with the gateway's privileges; ConfigMap changes require a pod rollout to take effect.
+- **SSO default-user team auto-assignment** — `spec.sso.defaultUserParams.teams` is now emitted under `litellm_settings.default_internal_user_params.teams` in the generated `proxy_server_config.yaml`. Each entry maps `teamId` → `team_id`, `role` → `user_role`, and optional `maxBudgetInTeam` → `max_budget_in_team`. New SSO users are auto-enrolled in the listed teams on first login.
+
+### Changed
+
+- **BREAKING:** `spec.sso.customSsoHandler` changes shape from a plain string (previously unwired) to a union struct (`{module | configMapRef}`). Anyone who had set the old string form was not getting any behaviour; on upgrade, migrate the value into `sso.customSsoHandler.module`.
+- **`extraEnvVars` now overrides operator-set env vars by name.** Previously, putting a variable like `PROXY_BASE_URL` in `spec.extraEnvVars` resulted in two entries with the same name in the Pod spec (operator value first, user value second). The operator now merges user-supplied env vars over operator-derived ones: the user entry replaces the operator entry in place and no duplicates are emitted. Useful for overriding `PROXY_BASE_URL` when exposing the gateway via Gateway API HTTPRoute, OpenShift Route, or an external load balancer — cases where the operator's ingress-based derivation falls back to in-cluster Service DNS.
+
 ## [0.10.0] - 2026-04-13
 
 ### Added
@@ -107,7 +120,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows for tests, linting, and releases
 - OLM bundle and catalog manifests for OperatorHub distribution
 
-[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.7.0...v0.9.0
 [0.7.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.6.0...v0.7.0
