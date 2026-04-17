@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-17
+
 ### Added
 
 - **SSO logout redirect** — `spec.sso.logoutUrl` on `LiteLLMInstance` is now wired to the `PROXY_LOGOUT_URL` env var on the Deployment. When set, the Admin UI's logout action redirects to the IdP's end-session endpoint so users are signed out of both LiteLLM and the IdP in one click.
@@ -118,7 +120,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows for tests, linting, and releases
 - OLM bundle and catalog manifests for OperatorHub distribution
 
-[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.7.0...v0.9.0
 [0.7.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.6.0...v0.7.0

@@ -1,38 +1,88 @@
-# LiteLLM Operator
+<p align="center">
+  <img src="docs/public/logo.png" width="120" alt="LiteLLM Operator" />
+</p>
 
-A Kubernetes operator for deploying and managing production-ready [LiteLLM](https://github.com/BerriAI/litellm) AI Gateway instances. Built with [Operator SDK](https://sdk.operatorframework.io/) for OLM integration, OperatorHub distribution, and first-class OpenShift support.
+<h1 align="center">LiteLLM Operator</h1>
 
-Replaces manual Helm-based deployments with a declarative, reconciliation-based approach that keeps CRD state and the LiteLLM API in sync.
+<p align="center">
+  Production-grade Kubernetes operator for <a href="https://github.com/BerriAI/litellm">LiteLLM</a> — declarative AI gateway deployments, bidirectional config sync, and first-class OpenShift support.
+</p>
+
+<p align="center">
+  <a href="https://github.com/PalenaAI/litellm-operator/releases"><img src="https://img.shields.io/github/v/release/PalenaAI/litellm-operator?include_prereleases&sort=semver&label=release" alt="Release" /></a>
+  <a href="https://github.com/PalenaAI/litellm-operator/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/PalenaAI/litellm-operator/ci.yml?branch=main&label=ci" alt="CI" /></a>
+  <a href="https://github.com/PalenaAI/litellm-operator/blob/main/LICENSE"><img src="https://img.shields.io/github/license/PalenaAI/litellm-operator" alt="License" /></a>
+  <a href="https://github.com/PalenaAI/litellm-operator"><img src="https://img.shields.io/github/go-mod/go-version/PalenaAI/litellm-operator" alt="Go version" /></a>
+  <img src="https://img.shields.io/badge/kubernetes-%E2%89%A5%201.28-blue" alt="Kubernetes" />
+  <img src="https://img.shields.io/badge/openshift-supported-ee0000" alt="OpenShift" />
+  <img src="https://img.shields.io/badge/operator--sdk-v1.38+-5f87af" alt="Operator SDK" />
+</p>
+
+---
+
+## Why this operator?
+
+The community LiteLLM Helm chart deploys the proxy, but leaves you with a hard trade-off: manage models and keys through the **Admin UI** (convenient, but not GitOps-friendly) or through `proxy_server_config.yaml` (reproducible, but no UI). Pick one and you lose the other.
+
+This operator dissolves that trade-off. Every resource — instances, organizations, models, teams, users, keys, credentials, guardrails — is a first-class Kubernetes CRD, reconciled continuously against the LiteLLM REST API. Git is the source of truth; Admin-UI drift is detected on every sync interval and resolved per your policy (`crd-wins`, `api-wins`, or `manual`). You get GitOps **and** the Admin UI, backed by the same state.
+
+It also handles the parts a Helm chart can't: finalizer-based cleanup that deletes upstream API objects, generated virtual keys stored as garbage-collected Kubernetes Secrets, enterprise license activation, rollback-on-failure, OpenShift-native routing, six-backend response caching, and external secret-manager integration so provider API keys never touch etcd.
+
+## Architecture at a glance
+
+```text
+                        kubectl apply
+                             │
+                             ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │                        Kubernetes API                       │
+ │                                                             │
+ │   LiteLLMInstance     LiteLLMOrganization   LiteLLMModel    │
+ │   LiteLLMTeam         LiteLLMUser           LiteLLMCustomer │
+ │   LiteLLMVirtualKey   LiteLLMCredential     LiteLLMGuardrail│
+ └──────────────────────────────┬──────────────────────────────┘
+                                │   watches / reconciles
+                                ▼
+                     ┌────────────────────┐
+                     │  LiteLLM Operator  │
+                     └─────────┬──────────┘
+         ┌───────────────────┬─┴─┬───────────────────────┐
+         │ Deployment        │   │  LiteLLM REST API     │
+         │ ConfigMap         │   │  (bidirectional sync) │
+         │ Secrets / HPA     │   │  crd-wins · api-wins  │
+         │ Ingress / Route / │   │  preserve · prune     │
+         │ HTTPRoute         │   │  adopt                │
+         │ ServiceMonitor    │   │                       │
+         │ PrometheusRule    │   │                       │
+         │ Grafana dashboard │   │                       │
+         └─────────┬─────────┘   └───────────┬───────────┘
+                   ▼                         ▼
+         ┌──────────────────────────────────────────┐
+         │  LiteLLM Proxy  +  Postgres  +  Redis    │
+         └──────────────────────────────────────────┘
+```
 
 ## Features
 
-- **Declarative LiteLLM deployment** — manage proxy instances, organizations, models, teams, users, credentials, guardrails, and API keys as Kubernetes custom resources
-- **Reusable provider credentials** — declare provider API keys once as `LiteLLMCredential` CRs and reference them from many `LiteLLMModel` resources via `credentialRef`; credentials are materialized into the proxy's `credential_list` and injected as env vars so secret values stay out of the operator's memory
-- **Guardrails (content moderation / safety)** — declare guardrail integrations (Aporia, Lakera, Presidio, AWS Bedrock, LLM Guard, Guardrails AI, Azure, Google Text Moderation, custom) as `LiteLLMGuardrail` CRs; each is rendered into the proxy's `guardrails` section with the API key injected via `secretKeyRef`. Per-key and per-team opt-in via `spec.guardrails` on `LiteLLMVirtualKey` and `LiteLLMTeam` (enterprise)
-- **Multi-tenancy** — full Organization > Team > User > Key hierarchy with org-scoped budgets, model access, and member management
-- **Bidirectional config sync** — reconciles CRD state with the LiteLLM REST API on every sync interval
-- **Team member management** — three modes: `crd` (CRD authoritative), `sso` (IdP authoritative), `mixed` (additive)
-- **VirtualKey secret management** — generated API keys are stored in Kubernetes Secrets with owner references for automatic cleanup
-- **SSO/SCIM support** — configure Azure Entra ID, Okta, Google, or generic OIDC providers declaratively
-- **JWT/OAuth2 authentication (enterprise)** — API-level authentication via JWT tokens from identity providers with claim-to-role/team/org mapping, scope-to-model access control, and OAuth2 machine-to-machine auth
-- **Flexible ingress** — Kubernetes Ingress, OpenShift Route, and Gateway API HTTPRoute support
-- **Production-ready** — HPA, PDB, NetworkPolicy, health checks, resource limits, security contexts
-- **OpenShift / non-root support** — `spec.security.runAsNonRoot: true` automatically uses the official non-root image and applies restricted security contexts
-- **Multiple install methods** — OLM bundles (OperatorHub/OpenShift) or Helm chart
-- **CloudNativePG backup/restore** — scheduled backups via CNPG `ScheduledBackup` CRs with configurable schedule, retention, and method
-- **External secret managers** — connect LiteLLM to AWS Secret Manager, AWS KMS, Azure Key Vault, Google Secret Manager, Google KMS, or HashiCorp Vault at runtime so API keys never touch Kubernetes etcd; supports IRSA and workload identity
-- **Enterprise license activation** — convention-based license Secret detection (`{instance}-license` or `litellm-license`) with automatic `LITELLM_LICENSE` env var injection
-- **Auto-rollback** — automatically rolls back failed deployments when `spec.upgrade.autoRollback: true`
-- **Response caching** — 6 cache backends (Redis, S3, GCS, Qdrant semantic, Redis semantic, local) with TTL, namespace isolation, call-type filtering, and default-off mode
-- **Tag-based routing** — route requests to model deployments by tags, assign tags to teams for team-scoped routing
-- **Fallback chains** — default fallbacks, per-model fallbacks, content policy fallbacks, context window fallbacks, and per-error-type retry policies
-- **Pass-through endpoints** — proxy arbitrary API requests to upstream services (image generation, fine-tuning, etc.) with static and secret-backed headers, sub-path routing, and optional LiteLLM authentication
-- **Advanced budget controls** — global proxy budget, per-provider spending caps, per-model budgets per key (enterprise), and concurrency limits at proxy/deployment/team/key levels
-- **IP allowlisting (enterprise)** — restrict API access to specific IP addresses or CIDR ranges via `spec.security.ipAllowlist`, with `X-Forwarded-For` support and max request/response size limits
-- **RBAC** — enforce role-based access control with admin-only routes, allowed routes, key generation restrictions, per-role permissions, and personal key disabling via `spec.rbac`
-- **Admin UI management** — disable the Admin UI, restrict access to admins, enable dynamic model management in DB, prevent personal key creation, and customize docs URLs via `spec.adminUI`
-- **Prometheus integration** — ServiceMonitor and PrometheusRule with six built-in alerts (instance down, degraded, pod restarts, not ready, high memory, high CPU) and runbooks
-- **Grafana dashboard** — auto-provisioned dashboard via ConfigMap with replica status, resource usage, and deployment condition panels
+| Area | What you get |
+| --- | --- |
+| **Infrastructure** | Declarative Deployment, ConfigMap, Service, Secrets, HPA v2, PDB, NetworkPolicy; migration Jobs per image tag; auto-rollback on `ProgressDeadlineExceeded`; topology spread constraints; `runAsNonRoot` mode using the official non-root image |
+| **Networking** | Kubernetes Ingress, OpenShift Route, Gateway API HTTPRoute — pick one declaratively per instance |
+| **Multi-tenancy** | Full Organization → Team → User → Key hierarchy with budgets, member management (`crd` / `sso` / `mixed` modes), and org-scoped model access |
+| **API-managed CRDs** | `LiteLLMOrganization`, `LiteLLMModel`, `LiteLLMTeam`, `LiteLLMUser`, `LiteLLMCustomer`, `LiteLLMVirtualKey` — reconciled via the LiteLLM REST API with finalizer-based cleanup and spec-hash change detection |
+| **Config-managed CRDs** | `LiteLLMCredential` (reusable provider API keys via `credentialRef`) and `LiteLLMGuardrail` (Aporia, Lakera, Presidio, Bedrock, LLM Guard, Guardrails AI, Azure, Google Text Moderation, custom) — materialized into `proxy_server_config.yaml`, keys injected via `secretKeyRef` (never read into operator memory) |
+| **Bidirectional sync** | Periodic drift detection with `crd-wins` / `api-wins` / `manual` resolution and `preserve` / `prune` / `adopt` policies for unmanaged resources |
+| **VirtualKey lifecycle** | Generated API keys stored in owner-referenced Kubernetes Secrets; rotation and revocation follow CRD deletion |
+| **Authentication** | SSO for Azure Entra, Okta, Google, generic OIDC; SCIM v2 provisioning; JWT and OAuth2 auth for M2M flows; custom SSO handlers via ConfigMap or image |
+| **Security** | IP allowlisting with `X-Forwarded-For` support, RBAC via `spec.rbac`, external secret managers (AWS Secrets Manager / KMS, Azure Key Vault, Google Secret Manager / KMS, HashiCorp Vault) with IRSA and workload-identity support |
+| **Reliability** | 6-backend response caching (Redis / S3 / GCS / Qdrant / Redis-semantic / local), fallback chains (default, per-model, content-policy, context-window), per-error-type retry policies, tag-based routing, per-provider budget caps |
+| **Observability** | ServiceMonitor + PrometheusRule with 6 built-in alerts and runbook annotations; auto-provisioned Grafana dashboard ConfigMap |
+| **Data** | Optional CloudNativePG integration with `ScheduledBackup` (snapshot or `barmanObjectStore`) |
+| **Admin UI** | Disable, admin-only mode, DB-backed model management, personal-key gating, custom docs URL, logo, email branding, color themes via ConfigMap |
+| **Distribution** | OLM bundle for OperatorHub / OpenShift Catalog **and** a Helm chart for clusters without OLM |
+| **Enterprise** | Convention-based license Secret detection (`{instance}-license` or `litellm-license`) with `EnterpriseLicenseRequired` status conditions when unlicensed enterprise features are requested |
+
+> **Full documentation:** see the [`docs/`](docs/) folder — guides for [SSO](docs/guide/sso.md), [config sync](docs/guide/config-sync.md), [caching](docs/guide/caching.md), [RBAC](docs/guide/rbac.md), [observability](docs/guide/observability.md), [secret managers](docs/guide/secret-managers.md), and per-CRD reference pages under [`docs/reference/`](docs/reference/).
 
 ## Custom Resource Definitions
 
@@ -591,7 +641,7 @@ make deploy        # Deploy operator
 ### OLM (OpenShift / clusters with OLM)
 
 ```sh
-operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:v0.10.0
+operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:v0.11.0
 ```
 
 ### Helm
