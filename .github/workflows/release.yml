@@ -223,14 +223,18 @@ jobs:
 
       - name: Run scancode-toolkit
         run: |
-          module_cache="$(go env GOMODCACHE)"
           scancode \
             --license --copyright --package \
             --json-pp release-artifacts/scancode-report.json \
             --cyclonedx release-artifacts/scancode.cdx.json \
             --timeout 120 \
             --processes 4 \
-            "$module_cache" || true
+            --ignore "bin/*" \
+            --ignore "dist/*" \
+            --ignore "release-artifacts/*" \
+            --ignore "testbin/*" \
+            --ignore "*.tar.gz" \
+            .
           test -f release-artifacts/scancode-report.json
 
       - name: Copy install manifest into release artifacts

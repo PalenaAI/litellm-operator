@@ -43,9 +43,6 @@ const (
 	// is the last path segment, so LiteLLM imports handlers as
 	// "custom_sso_handlers.<stem>.<function>".
 	customSSOMountDir = "/app/custom_sso_handlers"
-	// customSSOPackageName mirrors the last segment of customSSOMountDir —
-	// used to build the dotted Python import path.
-	customSSOPackageName = "custom_sso_handlers"
 )
 
 func podSecurityContext(nonRoot bool) *corev1.PodSecurityContext {
