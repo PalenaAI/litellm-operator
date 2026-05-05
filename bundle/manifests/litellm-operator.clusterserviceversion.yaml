@@ -982,9 +982,6 @@ spec:
     - (Optional) Redis for caching and rate limiting
     - (Optional) An OIDC provider for SSO (Azure Entra ID, Okta, Google, or generic OIDC)
   displayName: LiteLLM Operator
-  icon:
-  - base64data: ""
-    mediatype: image/svg+xml
   install:
     spec:
       clusterPermissions:

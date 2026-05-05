@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Weekly scheduled scans no longer fail on the published OLM bundle.** Two unrelated bugs caused the `Scheduled scans` workflow to fail every Monday and auto-open false-positive Trivy CVE issues. (1) The `litellm-operator-bundle` GHCR package was private, so anonymous Trivy and `operator-sdk bundle validate` calls returned `UNAUTHORIZED`; the package has been switched to public visibility to match the operator image. (2) `operator-sdk bundle validate` was being passed a `docker://…` reference, but it shells out to `docker pull` which does not understand that scheme — the prefix has been removed.
+- **OLM bundle CSV — empty `icon` block removed.** The CSV declared an icon entry with empty `base64data`, which made `operator-sdk bundle validate --select-optional suite=operatorframework` fail with `csv.Spec.Icon elements should contain both data and mediatype`. The block has been removed from both the kustomize base and the generated bundle manifest; a real icon can be added later when an SVG asset is available.
+
+### Security
+
+- **Dockerfile base images pinned by digest.** `golang:1.25` and `gcr.io/distroless/static:nonroot` are now pinned by SHA256 digest in addition to their tags, addressing the OpenSSF Scorecard `Pinned-Dependencies` finding for the operator container. Renovate continues to manage updates via tag rules.
+
 ## [0.11.1] - 2026-04-17
 
 ### Fixed

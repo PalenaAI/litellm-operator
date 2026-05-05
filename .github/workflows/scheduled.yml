@@ -233,5 +233,5 @@ jobs:
       - name: Validate latest bundle image
         run: |
           repo_lc=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
-          ./bin/operator-sdk bundle validate "docker://ghcr.io/${repo_lc}-bundle:latest" \
+          ./bin/operator-sdk bundle validate "ghcr.io/${repo_lc}-bundle:latest" \
             --select-optional suite=operatorframework
