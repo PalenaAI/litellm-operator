@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **Dockerfile base images pinned by digest.** `golang:1.25` and `gcr.io/distroless/static:nonroot` are now pinned by SHA256 digest in addition to their tags, addressing the OpenSSF Scorecard `Pinned-Dependencies` finding for the operator container. Renovate continues to manage updates via tag rules.
+- **Go toolchain bumped to 1.25.10 (via base-image digest).** Repinned `golang:1.25` from the 1.25.9 digest to the 1.25.10 digest. This clears five HIGH stdlib CVEs that Trivy was failing the E2E pipeline on: `CVE-2026-33811` (cgo DNS resolver long-CNAME parsing), `CVE-2026-33814` (HTTP/2 SETTINGS infinite loop), `CVE-2026-39820` (`net/mail` address parsing DoS), `CVE-2026-39836` (Windows `Dial`/`LookupPort` NUL-byte panic), and `CVE-2026-42499` (`consumePhrase` DoS).
+- **Trivy bumped 0.69.3 → 0.70.0** across `e2e.yml`, `release.yml`, and `scheduled.yml` for up-to-date scanner behaviour and vulnerability DB compatibility.
 
 ## [0.11.1] - 2026-04-17
 

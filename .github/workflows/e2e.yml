@@ -135,7 +135,7 @@ jobs:
 
       - name: Install Trivy
         env:
-          TRIVY_VERSION: 0.69.3
+          TRIVY_VERSION: 0.70.0
         run: |
           curl -sSfLo /tmp/trivy.tar.gz \
             "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
