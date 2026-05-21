@@ -410,7 +410,7 @@ metadata:
       ]
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.11.1
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.11.2
     createdAt: "2026-04-17T14:29:07Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
@@ -418,7 +418,7 @@ metadata:
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/PalenaAI/litellm-operator
     support: bitkaio LLC
-  name: litellm-operator.v0.11.1
+  name: litellm-operator.v0.11.2
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -1208,7 +1208,7 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
-                image: ghcr.io/palenaai/litellm-operator:v0.11.1
+                image: ghcr.io/palenaai/litellm-operator:v0.11.2
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -1307,5 +1307,5 @@ spec:
   provider:
     name: bitkaio LLC
     url: https://palena.ai
-  version: 0.11.1
-  replaces: litellm-operator.v0.11.0
+  version: 0.11.2
+  replaces: litellm-operator.v0.11.1
