@@ -7,10 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-05-21
+
 ### Fixed
 
 - **Weekly scheduled scans no longer fail on the published OLM bundle.** Two unrelated bugs caused the `Scheduled scans` workflow to fail every Monday and auto-open false-positive Trivy CVE issues. (1) The `litellm-operator-bundle` GHCR package was private, so anonymous Trivy and `operator-sdk bundle validate` calls returned `UNAUTHORIZED`; the package has been switched to public visibility to match the operator image. (2) `operator-sdk bundle validate` was being passed a `docker://…` reference, but it shells out to `docker pull` which does not understand that scheme — the prefix has been removed.
 - **OLM bundle CSV — empty `icon` block removed.** The CSV declared an icon entry with empty `base64data`, which made `operator-sdk bundle validate --select-optional suite=operatorframework` fail with `csv.Spec.Icon elements should contain both data and mediatype`. The block has been removed from both the kustomize base and the generated bundle manifest; a real icon can be added later when an SVG asset is available.
+- **Helm chart — operator ClusterRole synced with the kustomize source.** The hand-maintained Helm `clusterrole.yaml` had drifted significantly from `config/rbac/role.yaml` (generated from `+kubebuilder:rbac` markers). On v0.11.x the operator pod crashed at startup with `failed to wait for caches to sync` because list/watch on `litellmcredentials` and `litellmguardrails` (added in v0.11.x) was forbidden. Several other features were also silently broken for Helm-installed operators: Gateway API `httproutes`, OpenShift `routes`, Prometheus `servicemonitors` + `prometheusrules`, and CloudNativePG `scheduledbackups` were all missing from the chart's ClusterRole. The template now mirrors the kustomize ruleset 1:1 (verified by tuple-diff). OLM/kustomize installs were not affected.
 
 ### Security
 
@@ -137,7 +140,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Actions workflows for tests, linting, and releases
 - OLM bundle and catalog manifests for OperatorHub distribution
 
-[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.2...HEAD
+[0.11.2]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/PalenaAI/litellm-operator/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/PalenaAI/litellm-operator/compare/v0.9.0...v0.10.0
