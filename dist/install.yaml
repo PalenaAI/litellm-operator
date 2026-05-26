@@ -5395,7 +5395,7 @@ spec:
         - --health-probe-bind-address=:8081
         command:
         - /manager
-        image: ghcr.io/palenaai/litellm-operator:v0.11.0
+        image: ghcr.io/palenaai/litellm-operator:v0.11.2
         livenessProbe:
           httpGet:
             path: /healthz

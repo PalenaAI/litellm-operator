@@ -45,12 +45,12 @@ const (
 )
 
 // BuildConfigMap creates the ConfigMap containing proxy_server_config.yaml.
-// credentials are the LiteLLMCredential CRs bound to this instance (used to
-// populate the `credential_list` section); pass nil if none. guardrails are
-// the LiteLLMGuardrail CRs bound to this instance (used to populate the
-// top-level `guardrails` section); pass nil if none.
-func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) (*corev1.ConfigMap, error) {
-	config := GenerateProxyConfig(instance, credentials, guardrails)
+// guardrails are the LiteLLMGuardrail CRs bound to this instance (used to
+// populate the top-level `guardrails` section); pass nil if none.
+// Credentials are registered against the proxy's /credentials API by the
+// credential controller and are not rendered into the config file.
+func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, guardrails []litellmv1alpha1.LiteLLMGuardrail) (*corev1.ConfigMap, error) {
+	config := GenerateProxyConfig(instance, guardrails)
 	configYAML, err := yaml.Marshal(config)
 	if err != nil {
 		return nil, err
@@ -69,9 +69,8 @@ func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string
 }
 
 // GenerateProxyConfig generates the proxy_server_config structure from the instance spec.
-// credentials, when non-empty, are serialized into the top-level `credential_list` section.
 // guardrails, when non-empty, are serialized into the top-level `guardrails` section.
-func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) map[string]interface{} {
+func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, guardrails []litellmv1alpha1.LiteLLMGuardrail) map[string]interface{} {
 	config := map[string]interface{}{
 		"model_list": []interface{}{},
 	}
@@ -138,7 +137,6 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, credentials 
 		buildAdminUIConfig(instance.Spec.AdminUI, config)
 	}
 
-	buildCredentialList(instance, credentials, config)
 	buildGuardrailsList(instance, guardrails, config)
 
 	return config
@@ -365,54 +363,6 @@ func buildOAuth2AuthConfig(oauth2 *litellmv1alpha1.OAuth2AuthSpec, config map[st
 		}
 		gs["oauth2_config_mappings"] = mappings
 	}
-}
-
-// buildCredentialList serializes LiteLLMCredential CRs bound to this instance
-// into the list-of-maps format LiteLLM expects for `credential_list`, and
-// writes the result under config["credential_list"] when any entries match.
-// Each credential's API key is referenced by env var (see CredentialEnvVarName).
-// Credentials bound to other instances or an empty slice are a no-op.
-func buildCredentialList(instance *litellmv1alpha1.LiteLLMInstance, credentials []litellmv1alpha1.LiteLLMCredential, config map[string]interface{}) {
-	if len(credentials) == 0 {
-		return
-	}
-	entries := make([]map[string]interface{}, 0, len(credentials))
-	for _, c := range credentials {
-		if c.Spec.InstanceRef.Name != instance.Name {
-			continue
-		}
-		info := map[string]interface{}{
-			"api_key": fmt.Sprintf("os.environ/%s", CredentialEnvVarName(c.Spec.CredentialName)),
-		}
-		if c.Spec.APIBase != "" {
-			info["api_base"] = c.Spec.APIBase
-		}
-		if c.Spec.APIVersion != "" {
-			info["api_version"] = c.Spec.APIVersion
-		}
-		for k, v := range c.Spec.Params {
-			// Don't let params override the keys we set explicitly.
-			if _, reserved := info[k]; reserved {
-				continue
-			}
-			info[k] = v
-		}
-		entries = append(entries, map[string]interface{}{
-			"credential_name": c.Spec.CredentialName,
-			"credential_info": info,
-		})
-	}
-	if len(entries) > 0 {
-		config["credential_list"] = entries
-	}
-}
-
-// CredentialEnvVarName returns the env var name the operator uses to inject a
-// LiteLLMCredential's API key into the proxy Deployment. The same name is
-// referenced from the generated `credential_list` config.
-func CredentialEnvVarName(credentialName string) string {
-	sanitized := sanitizeEnvVarSegment.ReplaceAllString(credentialName, "_")
-	return strings.ToUpper("CREDENTIAL_" + sanitized + "_API_KEY")
 }
 
 // GuardrailEnvVarName returns the env var name the operator uses to inject a

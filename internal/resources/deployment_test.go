@@ -58,7 +58,7 @@ func TestBuildDeployment_WithLicenseSecret(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "my-gateway-license", nil, nil)
+	dep := BuildDeployment(instance, labels, "my-gateway-license", nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -85,7 +85,7 @@ func TestBuildDeployment_WithoutLicenseSecret(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "LITELLM_LICENSE" {
@@ -98,8 +98,8 @@ func TestBuildDeployment_LicenseSecretChangesTemplate(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	depWithout := BuildDeployment(instance, labels, "", nil, nil)
-	depWith := BuildDeployment(instance, labels, "my-license", nil, nil)
+	depWithout := BuildDeployment(instance, labels, "", nil)
+	depWith := BuildDeployment(instance, labels, "my-license", nil)
 
 	envCountWithout := len(depWithout.Spec.Template.Spec.Containers[0].Env)
 	envCountWith := len(depWith.Spec.Template.Spec.Containers[0].Env)
@@ -113,7 +113,7 @@ func TestBuildDeployment_CachingDisabled(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "CACHE_REDIS_PASSWORD" || env.Name == "CACHE_S3_ACCESS_KEY_ID" || env.Name == "CACHE_QDRANT_API_KEY" {
@@ -137,7 +137,7 @@ func TestBuildDeployment_CachingRedisPassword(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -175,7 +175,7 @@ func TestBuildDeployment_CachingS3Credentials(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -211,7 +211,7 @@ func TestBuildDeployment_PassThroughSecretEnvVars(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -247,7 +247,7 @@ func TestBuildDeployment_PassThroughNoSecrets(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "PASSTHROUGH_BRIA_CONTENT_TYPE" {
@@ -282,7 +282,7 @@ func TestBuildDeployment_PassThroughMultipleEndpoints(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -313,7 +313,7 @@ func TestBuildDeployment_CachingQdrantAPIKey(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -330,105 +330,10 @@ func TestBuildDeployment_CachingQdrantAPIKey(t *testing.T) {
 	}
 }
 
-func TestBuildDeployment_CredentialEnvVars(t *testing.T) {
-	instance := newTestInstance()
-	labels := map[string]string{"app": "litellm"}
-	credentials := []litellmv1alpha1.LiteLLMCredential{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "openai-prod", Namespace: "default"},
-			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
-				InstanceRef:    litellmv1alpha1.InstanceRef{Name: "test-instance"},
-				CredentialName: "openai-prod",
-				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{
-					Name: "openai-secret",
-					Key:  testSecretKeyAPIKey,
-				},
-			},
-		},
-	}
-
-	dep := BuildDeployment(instance, labels, "", credentials, nil)
-
-	found := false
-	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "CREDENTIAL_OPENAI_PROD_API_KEY" {
-			found = true
-			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
-				t.Fatal("credential env var should use secretKeyRef")
-			}
-			if env.ValueFrom.SecretKeyRef.Name != "openai-secret" {
-				t.Errorf("expected secret name 'openai-secret', got %q", env.ValueFrom.SecretKeyRef.Name)
-			}
-			if env.ValueFrom.SecretKeyRef.Key != testSecretKeyAPIKey {
-				t.Errorf("expected secret key 'api-key', got %q", env.ValueFrom.SecretKeyRef.Key)
-			}
-			break
-		}
-	}
-	if !found {
-		t.Error("CREDENTIAL_OPENAI_PROD_API_KEY env var not found")
-	}
-}
-
-func TestBuildDeployment_CredentialEnvVarsFiltersOtherInstances(t *testing.T) {
-	instance := newTestInstance() // name: test-instance
-	labels := map[string]string{"app": "litellm"}
-	credentials := []litellmv1alpha1.LiteLLMCredential{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "other", Namespace: "default"},
-			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
-				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "other-instance"},
-				CredentialName:  "other",
-				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "s", Key: "k"},
-			},
-		},
-	}
-
-	dep := BuildDeployment(instance, labels, "", credentials, nil)
-
-	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "CREDENTIAL_OTHER_API_KEY" {
-			t.Error("credential bound to a different instance should not produce env vars on this deployment")
-		}
-	}
-}
-
-func TestBuildDeployment_CredentialEnvVarsDedup(t *testing.T) {
-	instance := newTestInstance()
-	labels := map[string]string{"app": "litellm"}
-	// Two credentials with the same credentialName (e.g. duplicate definition)
-	// should only produce one env var.
-	credentials := []litellmv1alpha1.LiteLLMCredential{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"},
-			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
-				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "test-instance"},
-				CredentialName:  "shared",
-				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "secret-a", Key: "k"},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"},
-			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
-				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "test-instance"},
-				CredentialName:  "shared",
-				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "secret-b", Key: "k"},
-			},
-		},
-	}
-
-	dep := BuildDeployment(instance, labels, "", credentials, nil)
-
-	count := 0
-	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
-		if env.Name == "CREDENTIAL_SHARED_API_KEY" {
-			count++
-		}
-	}
-	if count != 1 {
-		t.Errorf("expected exactly 1 CREDENTIAL_SHARED_API_KEY env var, got %d", count)
-	}
-}
+// NOTE: credentials no longer require env-var injection on the proxy
+// Deployment. The credential controller registers them directly with the
+// LiteLLM /credentials API and LiteLLM encrypts the value at rest using
+// LITELLM_SALT_KEY. See internal/controller/litellmcredential_controller_test.go.
 
 func TestBuildDeployment_GuardrailEnvVarsFromSecretRef(t *testing.T) {
 	instance := newTestInstance()
@@ -449,7 +354,7 @@ func TestBuildDeployment_GuardrailEnvVarsFromSecretRef(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, labels, "", nil, guardrails)
+	dep := BuildDeployment(instance, labels, "", guardrails)
 
 	found := false
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -490,7 +395,7 @@ func TestBuildDeployment_GuardrailEnvVarsFiltersOtherInstances(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, labels, "", nil, guardrails)
+	dep := BuildDeployment(instance, labels, "", guardrails)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "GUARDRAIL_OTHER_API_KEY" {
@@ -516,7 +421,7 @@ func TestBuildDeployment_GuardrailEnvVarsNoAPIKeyOK(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, labels, "", nil, guardrails)
+	dep := BuildDeployment(instance, labels, "", guardrails)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "GUARDRAIL_PRESIDIO_API_KEY" {
@@ -529,7 +434,7 @@ func TestBuildDeployment_SecretManagerNone(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "AWS_REGION_NAME" || env.Name == "HCP_VAULT_ADDR" || env.Name == "AZURE_KEY_VAULT_URI" {
@@ -552,7 +457,7 @@ func TestBuildDeployment_SecretManagerAWSEnvVars(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	// Check env vars
 	envMap := map[string]string{}
@@ -600,7 +505,7 @@ func TestBuildDeployment_SecretManagerVaultEnvVars(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -634,7 +539,7 @@ func TestBuildDeployment_SecretManagerAzureEnvVars(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -658,7 +563,7 @@ func TestBuildDeployment_SecretManagerNoCredentialsSecret(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	// No envFrom should be added for secret manager when no credentials Secret
 	container := dep.Spec.Template.Spec.Containers[0]
@@ -680,7 +585,7 @@ func TestBuildDeployment_SecretManagerAWSWithIRSA(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -708,7 +613,7 @@ func TestBuildDeployment_AdminUIDisabled(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -728,7 +633,7 @@ func TestBuildDeployment_AdminUIDisabledFalse(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "DISABLE_ADMIN_UI" {
@@ -744,7 +649,7 @@ func TestBuildDeployment_AdminUIAPIDocBaseURL(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -765,7 +670,7 @@ func TestBuildDeployment_AdminUIDocsAndRedirect(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -791,7 +696,7 @@ func TestBuildDeployment_AdminUIAllEnvVars(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -821,7 +726,7 @@ func TestBuildDeployment_AdminUIBranding(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	envMap := map[string]string{}
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -850,7 +755,7 @@ func TestBuildDeployment_AdminUIColorTheme(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	// Check volume exists
 	foundVolume := false
@@ -894,7 +799,7 @@ func TestBuildDeployment_AdminUINoColorTheme(t *testing.T) {
 	}
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	for _, v := range dep.Spec.Template.Spec.Volumes {
 		if v.Name == volumeNameColorTheme {
@@ -912,7 +817,7 @@ func TestBuildDeployment_AdminUINil(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
 
-	dep := BuildDeployment(instance, labels, "", nil, nil)
+	dep := BuildDeployment(instance, labels, "", nil)
 
 	forbidden := []string{
 		"DISABLE_ADMIN_UI", "LITELLM_UI_API_DOC_BASE_URL", "DOCS_URL", "ROOT_REDIRECT_URL",
@@ -946,7 +851,7 @@ func TestBuildDeployment_SSOLogoutURL(t *testing.T) {
 		LogoutURL: "https://idp.example.com/logout",
 	}
 
-	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
 
 	var got string
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
@@ -972,7 +877,7 @@ func TestBuildDeployment_SSOLogoutURLNotSetWhenEmpty(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
 
 	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
 		if env.Name == "PROXY_LOGOUT_URL" {
@@ -1001,7 +906,7 @@ func TestBuildDeployment_CustomSSOHandlerConfigMapMount(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
 
 	var foundVolume bool
 	for _, v := range dep.Spec.Template.Spec.Volumes {
@@ -1049,7 +954,7 @@ func TestBuildDeployment_CustomSSOHandlerModuleNoMount(t *testing.T) {
 		},
 	}
 
-	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
 
 	for _, v := range dep.Spec.Template.Spec.Volumes {
 		if v.Name == volumeNameCustomSSO {
@@ -1075,7 +980,7 @@ func TestBuildDeployment_ExtraEnvVarsOverrideOperatorVars(t *testing.T) {
 		{Name: "CUSTOM_ONLY", Value: "hello"},
 	}
 
-	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil, nil)
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
 
 	env := dep.Spec.Template.Spec.Containers[0].Env
 	var proxyHits int

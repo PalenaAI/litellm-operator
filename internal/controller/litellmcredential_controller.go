@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -31,23 +32,26 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
+	"github.com/PalenaAI/litellm-operator/internal/litellm"
 )
 
 // LiteLLMCredentialReconciler reconciles a LiteLLMCredential object.
 //
-// Credentials are config-level resources: the actual credential_list entries
-// are materialized by the LiteLLMInstance controller when it rebuilds the
-// ConfigMap + Deployment. This controller's job is to validate the CR,
-// surface status conditions, and count models that reference it. Instance
-// reconciliation is triggered via a Watch on LiteLLMCredential from the
-// instance controller, so we do not need to poke it from here.
+// Credentials are registered against the LiteLLM proxy's /credentials API
+// (DB-backed). These are visible in the Admin UI and merged into models
+// referenced via `litellm_credential_name` at request time. Rotation of the
+// referenced Kubernetes Secret triggers an immediate PATCH /credentials/{name}
+// via the Secret watch.
 type LiteLLMCredentialReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme               *runtime.Scheme
+	Recorder             record.EventRecorder
+	LiteLLMClientFactory litellm.ClientFactory
 }
 
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmcredentials,verbs=get;list;watch;create;update;patch;delete
@@ -74,98 +78,195 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	// Validate the referenced instance exists (but does not have to be Ready;
-	// credentials are config-level so they can be defined before the instance
-	// rollout completes).
-	var instance litellmv1alpha1.LiteLLMInstance
-	err := r.Get(ctx, types.NamespacedName{Name: cred.Spec.InstanceRef.Name, Namespace: cred.Namespace}, &instance)
+	resolved, err := resolveInstance(ctx, r.Client, cred.Namespace, cred.Spec.InstanceRef)
 	if err != nil {
-		reason := "InstanceFetchFailed"
-		if apierrors.IsNotFound(err) {
+		reason := "InstanceNotReady"
+		if apierrors.IsNotFound(errors.Unwrap(err)) {
 			reason = "InstanceNotFound"
 		}
 		emitEvent(r.Recorder, &cred, corev1.EventTypeWarning, EventReasonInstanceNotReady,
-			"Credential %q: %s: %v", cred.Spec.CredentialName, reason, err)
-		meta.SetStatusCondition(&cred.Status.Conditions, metav1.Condition{
-			Type:               ConditionReady,
-			Status:             metav1.ConditionFalse,
-			Reason:             reason,
-			Message:            err.Error(),
-			ObservedGeneration: cred.Generation,
-		})
-		cred.Status.Configured = false
-		_ = r.Status().Update(ctx, &cred)
+			"Credential %q: %v", cred.Spec.CredentialName, err)
+		r.setStatus(ctx, &cred, false, reason, err.Error())
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Validate the API key Secret exists and has the expected key.
+	apiKey, err := r.fetchAPIKey(ctx, &cred)
+	if err != nil {
+		reason := "SecretFetchFailed"
+		if apierrors.IsNotFound(errors.Unwrap(err)) {
+			reason = "SecretNotFound"
+		}
+		if errors.Is(err, errSecretKeyMissing) {
+			reason = "SecretKeyMissing"
+		}
+		emitEvent(r.Recorder, &cred, corev1.EventTypeWarning, EventReasonSecretNotFound,
+			"Credential %q: %v", cred.Spec.CredentialName, err)
+		r.setStatus(ctx, &cred, false, reason, err.Error())
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	}
+
+	payload := buildCredentialPayload(&cred, apiKey)
+	currentHash := computeSpecHash(struct {
+		Spec    litellmv1alpha1.LiteLLMCredentialSpec
+		APIKey  string
+		Payload litellm.CredentialPayload
+	}{cred.Spec, apiKey, payload})
+
+	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+	desiredAction := r.planAction(&cred, currentHash)
+
+	switch desiredAction {
+	case actionCreate:
+		if err := apiClient.Credentials().Create(ctx, payload); err != nil {
+			// Treat 4xx conflict (already exists) as an update — covers the
+			// case where we crashed after creating in LiteLLM but before
+			// persisting the sync-hash.
+			if apiErr, ok := litellm.IsAPIError(err); ok && apiErr.StatusCode == 400 {
+				if uerr := apiClient.Credentials().Update(ctx, payload); uerr != nil {
+					return r.reportAPIError(ctx, &cred, "create credential (fallback to update)", uerr)
+				}
+			} else {
+				return r.reportAPIError(ctx, &cred, "create credential", err)
+			}
+		}
+		log.Info("created credential", "name", cred.Spec.CredentialName)
+		emitEvent(r.Recorder, &cred, corev1.EventTypeNormal, EventReasonCreated,
+			"Credential %q registered with LiteLLM", cred.Spec.CredentialName)
+
+	case actionUpdate:
+		if err := apiClient.Credentials().Update(ctx, payload); err != nil {
+			// If the credential was deleted out-of-band, recreate it.
+			if apiErr, ok := litellm.IsAPIError(err); ok && apiErr.IsNotFound() {
+				if cerr := apiClient.Credentials().Create(ctx, payload); cerr != nil {
+					return r.reportAPIError(ctx, &cred, "recreate credential after 404", cerr)
+				}
+			} else {
+				return r.reportAPIError(ctx, &cred, "update credential", err)
+			}
+		}
+		log.Info("updated credential", "name", cred.Spec.CredentialName)
+		emitEvent(r.Recorder, &cred, corev1.EventTypeNormal, EventReasonUpdated,
+			"Credential %q updated in LiteLLM", cred.Spec.CredentialName)
+
+	case actionNoop:
+		// hash matches; nothing to push.
+	}
+
+	// Persist sync-hash on the CR (annotation, not status) — same pattern
+	// model/team/user controllers use.
+	if cred.Annotations == nil {
+		cred.Annotations = map[string]string{}
+	}
+	if cred.Annotations[AnnotationSyncHash] != currentHash {
+		cred.Annotations[AnnotationSyncHash] = currentHash
+		if err := r.Update(ctx, &cred); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
+	refCount, _ := r.countReferencingModels(ctx, &cred)
+	cred.Status.ReferencedByModels = refCount
+	r.setStatus(ctx, &cred, true, "Synced", "Credential registered with LiteLLM")
+
+	// Periodic resync as a safety net for missed Secret-watch events.
+	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+type credentialAction int
+
+const (
+	actionNoop credentialAction = iota
+	actionCreate
+	actionUpdate
+)
+
+// planAction decides what to push to LiteLLM based on local state.
+func (r *LiteLLMCredentialReconciler) planAction(cred *litellmv1alpha1.LiteLLMCredential, currentHash string) credentialAction {
+	if !cred.Status.Configured {
+		return actionCreate
+	}
+	if cred.Annotations[AnnotationSyncHash] != currentHash {
+		return actionUpdate
+	}
+	return actionNoop
+}
+
+var errSecretKeyMissing = errors.New("key not found in Secret")
+
+func (r *LiteLLMCredentialReconciler) fetchAPIKey(ctx context.Context, cred *litellmv1alpha1.LiteLLMCredential) (string, error) {
 	var secret corev1.Secret
 	if err := r.Get(ctx, types.NamespacedName{
 		Name:      cred.Spec.APIKeySecretRef.Name,
 		Namespace: cred.Namespace,
 	}, &secret); err != nil {
-		reason := "SecretFetchFailed"
-		if apierrors.IsNotFound(err) {
-			reason = "SecretNotFound"
+		return "", fmt.Errorf("get Secret %q: %w", cred.Spec.APIKeySecretRef.Name, err)
+	}
+	val, ok := secret.Data[cred.Spec.APIKeySecretRef.Key]
+	if !ok {
+		return "", fmt.Errorf("Secret %q: %w: %s",
+			cred.Spec.APIKeySecretRef.Name, errSecretKeyMissing, cred.Spec.APIKeySecretRef.Key)
+	}
+	return string(val), nil
+}
+
+// buildCredentialPayload constructs the body sent to POST/PATCH /credentials.
+// credential_values holds the provider auth (api_key, api_base, api_version,
+// plus any free-form params). credential_info is reserved for metadata.
+func buildCredentialPayload(cred *litellmv1alpha1.LiteLLMCredential, apiKey string) litellm.CredentialPayload {
+	values := map[string]interface{}{
+		"api_key": apiKey,
+	}
+	if cred.Spec.APIBase != "" {
+		values["api_base"] = cred.Spec.APIBase
+	}
+	if cred.Spec.APIVersion != "" {
+		values["api_version"] = cred.Spec.APIVersion
+	}
+	for k, v := range cred.Spec.Params {
+		if _, reserved := values[k]; reserved {
+			continue
 		}
-		emitEvent(r.Recorder, &cred, corev1.EventTypeWarning, EventReasonSecretNotFound,
-			"Credential %q API key Secret %q: %v", cred.Spec.CredentialName, cred.Spec.APIKeySecretRef.Name, err)
-		meta.SetStatusCondition(&cred.Status.Conditions, metav1.Condition{
-			Type:               ConditionReady,
-			Status:             metav1.ConditionFalse,
-			Reason:             reason,
-			Message:            fmt.Sprintf("API key Secret %q: %s", cred.Spec.APIKeySecretRef.Name, err.Error()),
-			ObservedGeneration: cred.Generation,
-		})
-		cred.Status.Configured = false
-		_ = r.Status().Update(ctx, &cred)
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+		values[k] = v
 	}
-	if _, ok := secret.Data[cred.Spec.APIKeySecretRef.Key]; !ok {
-		emitEvent(r.Recorder, &cred, corev1.EventTypeWarning, EventReasonValidationFailed,
-			"Credential %q: key %q not found in Secret %q", cred.Spec.CredentialName, cred.Spec.APIKeySecretRef.Key, cred.Spec.APIKeySecretRef.Name)
-		meta.SetStatusCondition(&cred.Status.Conditions, metav1.Condition{
-			Type:               ConditionReady,
-			Status:             metav1.ConditionFalse,
-			Reason:             "SecretKeyMissing",
-			Message:            fmt.Sprintf("key %q not found in Secret %q", cred.Spec.APIKeySecretRef.Key, cred.Spec.APIKeySecretRef.Name),
-			ObservedGeneration: cred.Generation,
-		})
-		cred.Status.Configured = false
-		_ = r.Status().Update(ctx, &cred)
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+	return litellm.CredentialPayload{
+		CredentialName:   cred.Spec.CredentialName,
+		CredentialValues: values,
+		CredentialInfo: map[string]interface{}{
+			"managed_by": "litellm-operator",
+		},
 	}
+}
 
-	// Count LiteLLMModel CRs in the same namespace that reference this credential.
-	refCount, err := r.countReferencingModels(ctx, &cred)
-	if err != nil {
-		log.V(1).Info("failed to count referencing models", "error", err)
-	} else {
-		cred.Status.ReferencedByModels = refCount
-	}
-
-	wasReady := meta.IsStatusConditionTrue(cred.Status.Conditions, ConditionReady)
-	cred.Status.Configured = true
+func (r *LiteLLMCredentialReconciler) setStatus(ctx context.Context, cred *litellmv1alpha1.LiteLLMCredential, configured bool, reason, message string) {
+	cred.Status.Configured = configured
 	now := metav1.Now()
 	cred.Status.LastSyncTime = &now
+	status := metav1.ConditionFalse
+	if configured {
+		status = metav1.ConditionTrue
+	}
 	meta.SetStatusCondition(&cred.Status.Conditions, metav1.Condition{
 		Type:               ConditionReady,
-		Status:             metav1.ConditionTrue,
-		Reason:             "Validated",
-		Message:            "Credential is valid; referenced Secret exists",
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
 		ObservedGeneration: cred.Generation,
 	})
-	if !wasReady {
-		emitEvent(r.Recorder, &cred, corev1.EventTypeNormal, EventReasonSynced,
-			"Credential %q validated (referenced by %d model(s))", cred.Spec.CredentialName, cred.Status.ReferencedByModels)
+	if err := r.Status().Update(ctx, cred); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to update credential status")
 	}
+}
 
-	if err := r.Status().Update(ctx, &cred); err != nil {
-		log.Error(err, "failed to update credential status")
+func (r *LiteLLMCredentialReconciler) reportAPIError(ctx context.Context, cred *litellmv1alpha1.LiteLLMCredential, op string, err error) (ctrl.Result, error) {
+	emitEvent(r.Recorder, cred, corev1.EventTypeWarning, EventReasonReconcileFailed,
+		"Credential %q %s: %v", cred.Spec.CredentialName, op, err)
+	r.setStatus(ctx, cred, false, "APIError", fmt.Sprintf("%s: %v", op, err))
+	if apiErr, ok := litellm.IsAPIError(err); ok && !apiErr.IsTransient() {
+		// Permanent error: don't requeue immediately; wait for next periodic
+		// resync or the next spec/Secret change.
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
-
-	// Requeue periodically to refresh referenced-by count and re-validate the Secret.
-	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 }
 
 func (r *LiteLLMCredentialReconciler) countReferencingModels(ctx context.Context, cred *litellmv1alpha1.LiteLLMCredential) (int, error) {
@@ -186,17 +287,61 @@ func (r *LiteLLMCredentialReconciler) handleDeletion(ctx context.Context, cred *
 	if !controllerutil.ContainsFinalizer(cred, FinalizerName) {
 		return ctrl.Result{}, nil
 	}
-	// Nothing to clean up remotely — credential_list entries live in the
-	// instance's ConfigMap, which the instance controller rewrites when this
-	// CR is removed (it observes the deletion via its Watch).
+	log := logf.FromContext(ctx)
+
+	// Best-effort delete on LiteLLM. If the instance is unreachable we still
+	// remove the finalizer — orphaning a DB credential is preferable to
+	// blocking CR deletion forever, and consistent with how the other API-
+	// backed controllers handle this case.
+	if cred.Status.Configured {
+		resolved, err := resolveInstance(ctx, r.Client, cred.Namespace, cred.Spec.InstanceRef)
+		if err == nil {
+			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+			if derr := apiClient.Credentials().Delete(ctx, cred.Spec.CredentialName); derr != nil {
+				if apiErr, ok := litellm.IsAPIError(derr); !ok || !apiErr.IsNotFound() {
+					log.Error(derr, "failed to delete credential from LiteLLM (proceeding with finalizer removal)",
+						"name", cred.Spec.CredentialName)
+				}
+			}
+		} else {
+			log.Info("instance not reachable during deletion; removing finalizer anyway",
+				"name", cred.Spec.CredentialName, "error", err.Error())
+		}
+	}
+
 	controllerutil.RemoveFinalizer(cred, FinalizerName)
 	return ctrl.Result{}, r.Update(ctx, cred)
+}
+
+// findCredentialsForSecret enqueues every LiteLLMCredential in the namespace
+// of the changed Secret whose apiKeySecretRef points at it. This is what gives
+// us near-real-time key rotation.
+func (r *LiteLLMCredentialReconciler) findCredentialsForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+	var creds litellmv1alpha1.LiteLLMCredentialList
+	if err := r.List(ctx, &creds, client.InNamespace(secret.Namespace)); err != nil {
+		return nil
+	}
+	var out []reconcile.Request
+	for _, c := range creds.Items {
+		if c.Spec.APIKeySecretRef.Name == secret.Name {
+			out = append(out, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      c.Name,
+				Namespace: c.Namespace,
+			}})
+		}
+	}
+	return out
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *LiteLLMCredentialReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&litellmv1alpha1.LiteLLMCredential{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.findCredentialsForSecret)).
 		Named("litellmcredential").
 		Complete(r)
 }

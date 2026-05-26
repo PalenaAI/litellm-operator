@@ -299,9 +299,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.LiteLLMCredentialReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
-		Recorder: mgr.GetEventRecorderFor("litellmcredential-controller"),
+		Client:               mgr.GetClient(),
+		Scheme:               mgr.GetScheme(),
+		Recorder:             mgr.GetEventRecorderFor("litellmcredential-controller"),
+		LiteLLMClientFactory: clientFactory,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "LiteLLMCredential")
 		os.Exit(1)

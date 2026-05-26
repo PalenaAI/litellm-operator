@@ -37,7 +37,7 @@ func TestGenerateProxyConfig_DefaultFallbacks(t *testing.T) {
 		DefaultFallbacks: []string{"gpt-4-mini", testModelClaude3Haiku},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -60,7 +60,7 @@ func TestGenerateProxyConfig_ModelFallbacks(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -90,7 +90,7 @@ func TestGenerateProxyConfig_ContentPolicyFallbacks(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -116,7 +116,7 @@ func TestGenerateProxyConfig_ContextWindowFallbacks(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -141,7 +141,7 @@ func TestGenerateProxyConfig_MaxFallbacks(t *testing.T) {
 		MaxFallbacks: intPtr(5),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -161,7 +161,7 @@ func TestGenerateProxyConfig_RetryPolicy(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -190,7 +190,7 @@ func TestGenerateProxyConfig_ModelGroupRetryPolicy(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -223,7 +223,7 @@ func TestGenerateProxyConfig_FallbacksWithExistingSettings(t *testing.T) {
 		MaxFallbacks: intPtr(2),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	// litellm_settings should have both callbacks and default_fallbacks
 	ls := config["litellm_settings"].(map[string]interface{})
@@ -251,7 +251,7 @@ func TestGenerateProxyConfig_NoFallbacks(t *testing.T) {
 	instance := newTestInstance()
 	// No fallbacks set
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if _, ok := config["litellm_settings"]; ok {
 		t.Error("litellm_settings should not be present when no fallbacks/callbacks/SSO set")
@@ -265,7 +265,7 @@ func TestGenerateProxyConfig_CachingDisabled(t *testing.T) {
 	instance := newTestInstance()
 	// No caching set at all
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if _, ok := config["litellm_settings"]; ok {
 		t.Error("litellm_settings should not be present when caching is not configured")
@@ -279,7 +279,7 @@ func TestGenerateProxyConfig_CachingEnabledFalse(t *testing.T) {
 		Type:    cacheTypeRedis,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if _, ok := config["litellm_settings"]; ok {
 		t.Error("litellm_settings should not be present when caching.enabled is false")
@@ -308,7 +308,7 @@ func TestGenerateProxyConfig_CachingRedis(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -371,7 +371,7 @@ func TestGenerateProxyConfig_CachingRedisReusesInstanceRedis(t *testing.T) {
 		// No Redis block — should reuse instance Redis
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
@@ -402,7 +402,7 @@ func TestGenerateProxyConfig_CachingS3(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
@@ -436,7 +436,7 @@ func TestGenerateProxyConfig_CachingQdrant(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
@@ -464,7 +464,7 @@ func TestGenerateProxyConfig_CachingLocal(t *testing.T) {
 		TTL:     &ttl,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	params := ls["cache_params"].(map[string]interface{})
@@ -483,7 +483,7 @@ func TestGenerateProxyConfig_TagFilteringEnabled(t *testing.T) {
 		EnableTagFiltering: boolPtr(true),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -504,7 +504,7 @@ func TestGenerateProxyConfig_TagFilteringMatchAny(t *testing.T) {
 		TagFilteringMatchAny: boolPtr(true),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	rs := config["router_settings"].(map[string]interface{})
 	if rs["enable_tag_filtering"] != true {
@@ -521,7 +521,7 @@ func TestGenerateProxyConfig_TagFilteringDisabled(t *testing.T) {
 		EnableTagFiltering: boolPtr(false),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	// enable_tag_filtering=false should not emit the key
 	if rs, ok := config["router_settings"].(map[string]interface{}); ok {
@@ -540,7 +540,7 @@ func TestGenerateProxyConfig_IPAllowlist(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -568,7 +568,7 @@ func TestGenerateProxyConfig_IPAllowlistWithXForwardedFor(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["use_x_forwarded_for"] != true {
@@ -589,7 +589,7 @@ func TestGenerateProxyConfig_IPAllowlistWithMaxSizes(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["max_request_size_mb"] != 10 {
@@ -609,7 +609,7 @@ func TestGenerateProxyConfig_IPAllowlistDisabled(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
 		if _, ok := gs["allowed_ips"]; ok {
@@ -630,7 +630,7 @@ func TestGenerateProxyConfig_IPAllowlistWithExistingGeneralSettings(t *testing.T
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["proxy_batch_write_at"] != 10 {
@@ -654,7 +654,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_Basic(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -699,7 +699,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_AllFields(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
@@ -743,7 +743,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_SecretHeaders(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
@@ -776,7 +776,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_MixedHeaders(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
@@ -802,7 +802,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_WithExistingGeneralSettings(t 
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["proxy_batch_write_at"] != 10 {
@@ -823,7 +823,7 @@ func TestGenerateProxyConfig_PassThroughEndpoints_OmitsOptionalFields(t *testing
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	endpoints := gs["pass_through_endpoints"].([]map[string]interface{})
@@ -876,7 +876,7 @@ func TestGenerateProxyConfig_CachingWithExistingSettings(t *testing.T) {
 		Type:    "local",
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	if _, ok := ls["success_callback"]; !ok {
@@ -896,7 +896,7 @@ func TestGenerateProxyConfig_GlobalBudget(t *testing.T) {
 		BudgetDuration: "30d",
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -916,7 +916,7 @@ func TestGenerateProxyConfig_GlobalMaxParallelRequests(t *testing.T) {
 		GlobalMaxParallelRequests: intPtr(100),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -934,7 +934,7 @@ func TestGenerateProxyConfig_BudgetRescheduler(t *testing.T) {
 		BudgetReschedulerMaxTime: intPtr(600),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -954,7 +954,7 @@ func TestGenerateProxyConfig_DefaultMaxParallelRequests(t *testing.T) {
 		DefaultMaxParallelRequests: intPtr(10),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -980,7 +980,7 @@ func TestGenerateProxyConfig_ProviderBudgetConfig(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	rs, ok := config["router_settings"].(map[string]interface{})
 	if !ok {
@@ -1025,7 +1025,7 @@ func TestGenerateProxyConfig_AllBudgetSettings(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["max_budget"] != "5000.00" {
@@ -1061,7 +1061,7 @@ func TestGenerateProxyConfig_DefaultCustomerBudget_MaxBudget(t *testing.T) {
 		MaxBudget: &budget,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -1081,7 +1081,7 @@ func TestGenerateProxyConfig_DefaultCustomerBudget_BudgetID(t *testing.T) {
 		BudgetID: "tier-free",
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
@@ -1096,7 +1096,7 @@ func TestGenerateProxyConfig_DefaultCustomerBudget_Empty(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.DefaultCustomerBudget = &litellmv1alpha1.DefaultCustomerBudgetSpec{}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if ls, ok := config["litellm_settings"].(map[string]interface{}); ok {
 		if _, present := ls["max_end_user_budget"]; present {
@@ -1108,144 +1108,15 @@ func TestGenerateProxyConfig_DefaultCustomerBudget_Empty(t *testing.T) {
 	}
 }
 
-func TestGenerateProxyConfig_CredentialListNoCredentials(t *testing.T) {
-	instance := newTestInstance()
-
-	config := GenerateProxyConfig(instance, nil, nil)
-
-	if _, present := config["credential_list"]; present {
-		t.Error("credential_list should be absent when no credentials are provided")
-	}
-}
-
-func TestGenerateProxyConfig_CredentialListSingleCredential(t *testing.T) {
-	instance := newTestInstance()
-	credentials := []litellmv1alpha1.LiteLLMCredential{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "openai-prod", Namespace: "default"},
-			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
-				InstanceRef:    litellmv1alpha1.InstanceRef{Name: "test-instance"},
-				CredentialName: "openai-prod",
-				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{
-					Name: "openai-secret",
-					Key:  "api-key",
-				},
-			},
-		},
-	}
-
-	config := GenerateProxyConfig(instance, credentials, nil)
-
-	entries, ok := config["credential_list"].([]map[string]interface{})
-	if !ok {
-		t.Fatalf("credential_list should be []map[string]interface{}, got %T", config["credential_list"])
-	}
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 credential entry, got %d", len(entries))
-	}
-	if entries[0]["credential_name"] != "openai-prod" {
-		t.Errorf("expected credential_name=openai-prod, got %v", entries[0]["credential_name"])
-	}
-	info, ok := entries[0]["credential_info"].(map[string]interface{})
-	if !ok {
-		t.Fatal("credential_info should be a map")
-	}
-	if info["api_key"] != "os.environ/CREDENTIAL_OPENAI_PROD_API_KEY" {
-		t.Errorf("expected os.environ/CREDENTIAL_OPENAI_PROD_API_KEY, got %v", info["api_key"])
-	}
-}
-
-func TestGenerateProxyConfig_CredentialListWithAPIBaseAndParams(t *testing.T) {
-	instance := newTestInstance()
-	credentials := []litellmv1alpha1.LiteLLMCredential{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "azure-east", Namespace: "default"},
-			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
-				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "test-instance"},
-				CredentialName:  "azure-east",
-				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "azure-secret", Key: "key"},
-				APIBase:         "https://azure-east.openai.azure.com",
-				APIVersion:      "2024-02-01",
-				Params: map[string]string{
-					"azure_ad_token": "token-value",
-					// api_base is reserved — should not override
-					"api_base": "https://malicious.example.com",
-				},
-			},
-		},
-	}
-
-	config := GenerateProxyConfig(instance, credentials, nil)
-
-	entries, _ := config["credential_list"].([]map[string]interface{})
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
-	}
-	info, _ := entries[0]["credential_info"].(map[string]interface{})
-
-	if info["api_base"] != "https://azure-east.openai.azure.com" {
-		t.Errorf("api_base was overridden by params: %v", info["api_base"])
-	}
-	if info["api_version"] != "2024-02-01" {
-		t.Errorf("expected api_version=2024-02-01, got %v", info["api_version"])
-	}
-	if info["azure_ad_token"] != "token-value" {
-		t.Errorf("expected azure_ad_token passthrough, got %v", info["azure_ad_token"])
-	}
-}
-
-func TestGenerateProxyConfig_CredentialListFiltersByInstance(t *testing.T) {
-	instance := newTestInstance() // name: test-instance
-	credentials := []litellmv1alpha1.LiteLLMCredential{
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "mine", Namespace: "default"},
-			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
-				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "test-instance"},
-				CredentialName:  "mine",
-				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "s", Key: "k"},
-			},
-		},
-		{
-			ObjectMeta: metav1.ObjectMeta{Name: "theirs", Namespace: "default"},
-			Spec: litellmv1alpha1.LiteLLMCredentialSpec{
-				InstanceRef:     litellmv1alpha1.InstanceRef{Name: "other-instance"},
-				CredentialName:  "theirs",
-				APIKeySecretRef: litellmv1alpha1.SecretKeyRef{Name: "s", Key: "k"},
-			},
-		},
-	}
-
-	config := GenerateProxyConfig(instance, credentials, nil)
-
-	entries, _ := config["credential_list"].([]map[string]interface{})
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry (filtered), got %d", len(entries))
-	}
-	if entries[0]["credential_name"] != "mine" {
-		t.Errorf("expected mine, got %v", entries[0]["credential_name"])
-	}
-}
-
-func TestCredentialEnvVarName_Sanitization(t *testing.T) {
-	cases := map[string]string{
-		"openai-prod":           "CREDENTIAL_OPENAI_PROD_API_KEY",
-		"azure.east.1":          "CREDENTIAL_AZURE_EAST_1_API_KEY",
-		"cred with spaces":      "CREDENTIAL_CRED_WITH_SPACES_API_KEY",
-		"already_underscored":   "CREDENTIAL_ALREADY_UNDERSCORED_API_KEY",
-		"mixed-case_Cred.Value": "CREDENTIAL_MIXED_CASE_CRED_VALUE_API_KEY",
-	}
-	for in, want := range cases {
-		got := CredentialEnvVarName(in)
-		if got != want {
-			t.Errorf("CredentialEnvVarName(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
+// NOTE: credentials are no longer rendered into proxy_server_config.yaml.
+// They are registered against the LiteLLM proxy's /credentials API by
+// internal/controller/litellmcredential_controller.go; see that controller's
+// tests for coverage of CRUD, Secret-rotation, and hash-based change detection.
 
 func TestGenerateProxyConfig_GuardrailsNone(t *testing.T) {
 	instance := newTestInstance()
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if _, present := config["guardrails"]; present {
 		t.Error("guardrails should be absent when no guardrails are provided")
@@ -1273,7 +1144,7 @@ func TestGenerateProxyConfig_GuardrailsSingleEntry(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, guardrails)
+	config := GenerateProxyConfig(instance, guardrails)
 
 	entries, ok := config["guardrails"].([]map[string]interface{})
 	if !ok {
@@ -1323,7 +1194,7 @@ func TestGenerateProxyConfig_GuardrailsNoAPIKey(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, guardrails)
+	config := GenerateProxyConfig(instance, guardrails)
 
 	entries, _ := config["guardrails"].([]map[string]interface{})
 	params, _ := entries[0]["litellm_params"].(map[string]interface{})
@@ -1354,7 +1225,7 @@ func TestGenerateProxyConfig_GuardrailsWithParamsNotOverridingReserved(t *testin
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, guardrails)
+	config := GenerateProxyConfig(instance, guardrails)
 
 	entries, _ := config["guardrails"].([]map[string]interface{})
 	params, _ := entries[0]["litellm_params"].(map[string]interface{})
@@ -1396,7 +1267,7 @@ func TestGenerateProxyConfig_GuardrailsFilterByInstance(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, guardrails)
+	config := GenerateProxyConfig(instance, guardrails)
 
 	entries, _ := config["guardrails"].([]map[string]interface{})
 	if len(entries) != 1 {
@@ -1424,7 +1295,7 @@ func TestGuardrailEnvVarName_Sanitization(t *testing.T) {
 
 func TestGenerateProxyConfig_SecretManagerNone(t *testing.T) {
 	instance := newTestInstance()
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, _ := config["general_settings"].(map[string]interface{})
 	if gs != nil {
@@ -1446,7 +1317,7 @@ func TestGenerateProxyConfig_SecretManagerAWS(t *testing.T) {
 		PrimarySecretName:          "litellm/all-keys",
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -1486,7 +1357,7 @@ func TestGenerateProxyConfig_SecretManagerMinimal(t *testing.T) {
 		Provider: "google_secret_manager",
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -1509,7 +1380,7 @@ func TestGenerateProxyConfig_SecretManagerWithExistingGeneralSettings(t *testing
 		Provider: "hashicorp_vault",
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -1541,7 +1412,7 @@ func TestGenerateProxyConfig_JWTAuthEnabled(t *testing.T) {
 		PublicKeyTTL:       intPtr(600),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -1593,7 +1464,7 @@ func TestGenerateProxyConfig_JWTAuthMinimal(t *testing.T) {
 		Enabled: true,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -1618,7 +1489,7 @@ func TestGenerateProxyConfig_JWTAuthScopeModelMappings(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	jwtauth := gs["litellm_jwtauth"].(map[string]interface{})
@@ -1642,7 +1513,7 @@ func TestGenerateProxyConfig_JWTAuthDisabled(t *testing.T) {
 		UserIDJWTField: testJWTFieldSub,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	// When disabled, no JWT auth config should be written
 	gs, ok := config["general_settings"].(map[string]interface{})
@@ -1663,7 +1534,7 @@ func TestGenerateProxyConfig_OAuth2AuthEnabled(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -1704,7 +1575,7 @@ func TestGenerateProxyConfig_OAuth2AuthMinimal(t *testing.T) {
 		Enabled: true,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -1727,7 +1598,7 @@ func TestGenerateProxyConfig_OAuth2AuthDisabled(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if ok {
@@ -1747,7 +1618,7 @@ func TestGenerateProxyConfig_JWTAuthWithExistingGeneralSettings(t *testing.T) {
 		UserIDJWTField: testJWTFieldSub,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	// Existing settings preserved
@@ -1770,7 +1641,7 @@ func TestGenerateProxyConfig_RBACEnabled(t *testing.T) {
 		Enabled: true,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
@@ -1787,7 +1658,7 @@ func TestGenerateProxyConfig_RBACDisabled(t *testing.T) {
 		Enabled: false,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
 		if _, ok := gs["enforce_rbac"]; ok {
@@ -1803,7 +1674,7 @@ func TestGenerateProxyConfig_RBACAdminOnlyRoutes(t *testing.T) {
 		AdminOnlyRoutes: []string{testRouteModelNew, "/model/delete", "/organization/new"},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	routes, ok := gs["admin_only_routes"].([]string)
@@ -1822,7 +1693,7 @@ func TestGenerateProxyConfig_RBACAllowedRoutes(t *testing.T) {
 		AllowedRoutes: []string{"/chat/completions", "/embeddings", "/key/info"},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	routes, ok := gs["allowed_routes"].([]string)
@@ -1841,7 +1712,7 @@ func TestGenerateProxyConfig_RBACDefaultTeamDisabled(t *testing.T) {
 		DefaultTeamDisabled: boolPtr(true),
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["default_team_disabled"] != true {
@@ -1863,7 +1734,7 @@ func TestGenerateProxyConfig_RBACKeyGeneration(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	kgs, ok := gs["key_generation_settings"].(map[string]interface{})
@@ -1908,7 +1779,7 @@ func TestGenerateProxyConfig_RBACRolePermissions(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	rp, ok := gs["role_permissions"].(map[string]interface{})
@@ -1954,7 +1825,7 @@ func TestGenerateProxyConfig_RBACFull(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["enforce_rbac"] != true {
@@ -1995,7 +1866,7 @@ func TestGenerateProxyConfig_RBACWithExistingGeneralSettings(t *testing.T) {
 		AdminOnlyRoutes: []string{testRouteModelNew},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["proxy_batch_write_at"] != 10 {
@@ -2020,7 +1891,7 @@ func TestGenerateProxyConfig_LoggingAuditLogs(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["store_audit_logs"] != true {
@@ -2040,7 +1911,7 @@ func TestGenerateProxyConfig_LoggingAuditLogsNoRetention(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["store_audit_logs"] != true {
@@ -2063,7 +1934,7 @@ func TestGenerateProxyConfig_LoggingAuditLogsDisabled(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
 		if _, has := gs["store_audit_logs"]; has {
@@ -2079,7 +1950,7 @@ func TestGenerateProxyConfig_LoggingTurnOffMessageLogging(t *testing.T) {
 		TurnOffMessageLogging: &turnOff,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	if ls["turn_off_message_logging"] != true {
@@ -2094,7 +1965,7 @@ func TestGenerateProxyConfig_LoggingRedactUserAPIKeyInfo(t *testing.T) {
 		RedactUserAPIKeyInfo: &redact,
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	ls := config["litellm_settings"].(map[string]interface{})
 	if ls["redact_user_api_key_info"] != true {
@@ -2111,7 +1982,7 @@ func TestGenerateProxyConfig_LoggingSpendLogRetention(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["maximum_spend_logs_retention_period"] != "90d" {
@@ -2140,7 +2011,7 @@ func TestGenerateProxyConfig_LoggingAllSettings(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["store_audit_logs"] != true {
@@ -2168,7 +2039,7 @@ func TestGenerateProxyConfig_LoggingAllSettings(t *testing.T) {
 func TestGenerateProxyConfig_LoggingNil(t *testing.T) {
 	instance := newTestInstance()
 	// No Logging spec set — should not produce any logging settings
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 
 	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
 		if _, has := gs["store_audit_logs"]; has {
@@ -2189,7 +2060,7 @@ func TestGenerateProxyConfig_AdminUIAdminOnly(t *testing.T) {
 	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
 		AdminOnly: boolPtr(true),
 	}
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["ui_access_mode"] != uiAccessModeAdminOnly {
 		t.Errorf("expected ui_access_mode=admin_only, got %v", gs["ui_access_mode"])
@@ -2201,7 +2072,7 @@ func TestGenerateProxyConfig_AdminUIAdminOnlyFalse(t *testing.T) {
 	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
 		AdminOnly: boolPtr(false),
 	}
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
 		if _, has := gs["ui_access_mode"]; has {
 			t.Error("ui_access_mode should not be set when adminOnly is false")
@@ -2214,7 +2085,7 @@ func TestGenerateProxyConfig_AdminUIStoreModelInDB(t *testing.T) {
 	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
 		StoreModelInDB: boolPtr(true),
 	}
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["store_model_in_db"] != true {
 		t.Errorf("expected store_model_in_db=true, got %v", gs["store_model_in_db"])
@@ -2226,7 +2097,7 @@ func TestGenerateProxyConfig_AdminUIStoreModelInDBFalse(t *testing.T) {
 	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
 		StoreModelInDB: boolPtr(false),
 	}
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["store_model_in_db"] != false {
 		t.Errorf("expected store_model_in_db=false, got %v", gs["store_model_in_db"])
@@ -2238,7 +2109,7 @@ func TestGenerateProxyConfig_AdminUIDefaultTeamDisabled(t *testing.T) {
 	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{
 		DefaultTeamDisabled: boolPtr(true),
 	}
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["default_team_disabled"] != true {
 		t.Errorf("expected default_team_disabled=true, got %v", gs["default_team_disabled"])
@@ -2252,7 +2123,7 @@ func TestGenerateProxyConfig_AdminUIAllSettings(t *testing.T) {
 		StoreModelInDB:      boolPtr(true),
 		DefaultTeamDisabled: boolPtr(true),
 	}
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	gs := config["general_settings"].(map[string]interface{})
 	if gs["ui_access_mode"] != uiAccessModeAdminOnly {
 		t.Errorf("expected ui_access_mode=admin_only, got %v", gs["ui_access_mode"])
@@ -2267,7 +2138,7 @@ func TestGenerateProxyConfig_AdminUIAllSettings(t *testing.T) {
 
 func TestGenerateProxyConfig_AdminUINil(t *testing.T) {
 	instance := newTestInstance()
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	if gs, ok := config["general_settings"].(map[string]interface{}); ok {
 		for _, key := range []string{"ui_access_mode", "store_model_in_db", "default_team_disabled"} {
 			if _, has := gs[key]; has {
@@ -2293,7 +2164,7 @@ func TestGenerateProxyConfig_SSOCustomHandlerModule(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
 		t.Fatal("expected general_settings to be present")
@@ -2323,7 +2194,7 @@ func TestGenerateProxyConfig_SSOCustomHandlerConfigMap(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	gs, ok := config["general_settings"].(map[string]interface{})
 	if !ok {
 		t.Fatal("expected general_settings to be present")
@@ -2355,7 +2226,7 @@ func TestGenerateProxyConfig_SSODefaultUserParamsTeams(t *testing.T) {
 		},
 	}
 
-	config := GenerateProxyConfig(instance, nil, nil)
+	config := GenerateProxyConfig(instance, nil)
 	ls, ok := config["litellm_settings"].(map[string]interface{})
 	if !ok {
 		t.Fatal("expected litellm_settings to be present")

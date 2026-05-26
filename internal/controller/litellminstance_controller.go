@@ -100,14 +100,6 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Detect license Secret
 	licenseSecretName := r.reconcileLicense(ctx, &instance)
 
-	// Fetch LiteLLMCredential CRs bound to this instance. A list failure
-	// is non-fatal — we proceed with an empty list and let the instance
-	// reconcile without credentials.
-	credentials, err := r.listCredentialsForInstance(ctx, &instance)
-	if err != nil {
-		logf.FromContext(ctx).Error(err, "failed to list credentials for instance")
-	}
-
 	// Fetch LiteLLMGuardrail CRs bound to this instance. Failure is
 	// non-fatal — guardrails are an optional config-level feature.
 	guardrails, err := r.listGuardrailsForInstance(ctx, &instance)
@@ -119,7 +111,7 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	r.reconcileMigrationStatus(ctx, &instance, labels)
 
 	// Reconcile all managed resources
-	reconcileErr := r.reconcileResources(ctx, &instance, labels, licenseSecretName, credentials, guardrails)
+	reconcileErr := r.reconcileResources(ctx, &instance, labels, licenseSecretName, guardrails)
 
 	// Auto-rollback: track successful deployment revision and rollback on failure
 	r.reconcileAutoRollback(ctx, &instance)
@@ -180,23 +172,6 @@ func (r *LiteLLMInstanceReconciler) reconcileMigrationStatus(ctx context.Context
 	}
 }
 
-// listCredentialsForInstance returns every LiteLLMCredential in the instance's
-// namespace whose spec.instanceRef.name matches the instance. Returned items
-// are filtered client-side so we keep a single cached list per namespace.
-func (r *LiteLLMInstanceReconciler) listCredentialsForInstance(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) ([]litellmv1alpha1.LiteLLMCredential, error) {
-	var list litellmv1alpha1.LiteLLMCredentialList
-	if err := r.List(ctx, &list, client.InNamespace(instance.Namespace)); err != nil {
-		return nil, err
-	}
-	filtered := make([]litellmv1alpha1.LiteLLMCredential, 0, len(list.Items))
-	for _, c := range list.Items {
-		if c.Spec.InstanceRef.Name == instance.Name {
-			filtered = append(filtered, c)
-		}
-	}
-	return filtered, nil
-}
-
 // listGuardrailsForInstance returns every LiteLLMGuardrail in the instance's
 // namespace whose spec.instanceRef.name matches the instance.
 func (r *LiteLLMInstanceReconciler) listGuardrailsForInstance(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) ([]litellmv1alpha1.LiteLLMGuardrail, error) {
@@ -214,7 +189,7 @@ func (r *LiteLLMInstanceReconciler) listGuardrailsForInstance(ctx context.Contex
 }
 
 // reconcileResources reconciles all managed sub-resources for the instance.
-func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
+func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
 	log := logf.FromContext(ctx)
 	var reconcileErr error
 
@@ -223,7 +198,7 @@ func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, inst
 		log.Error(err, "failed to reconcile secrets")
 	}
 
-	if err := r.reconcileConfigMap(ctx, instance, labels, credentials, guardrails); err != nil {
+	if err := r.reconcileConfigMap(ctx, instance, labels, guardrails); err != nil {
 		reconcileErr = err
 		log.Error(err, "failed to reconcile ConfigMap")
 	}
@@ -233,7 +208,7 @@ func (r *LiteLLMInstanceReconciler) reconcileResources(ctx context.Context, inst
 		log.Error(err, "failed to reconcile ServiceAccount")
 	}
 
-	if err := r.reconcileDeployment(ctx, instance, labels, licenseSecretName, credentials, guardrails); err != nil {
+	if err := r.reconcileDeployment(ctx, instance, labels, licenseSecretName, guardrails); err != nil {
 		reconcileErr = err
 		log.Error(err, "failed to reconcile Deployment")
 	}
@@ -516,8 +491,8 @@ func (r *LiteLLMInstanceReconciler) ensureGeneratedSecret(ctx context.Context, i
 	return r.Create(ctx, secret)
 }
 
-func (r *LiteLLMInstanceReconciler) reconcileConfigMap(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
-	desired, err := resources.BuildConfigMap(instance, labels, credentials, guardrails)
+func (r *LiteLLMInstanceReconciler) reconcileConfigMap(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
+	desired, err := resources.BuildConfigMap(instance, labels, guardrails)
 	if err != nil {
 		return err
 	}
@@ -569,8 +544,8 @@ func (r *LiteLLMInstanceReconciler) reconcileMigrationJob(ctx context.Context, i
 	return false, nil // still running
 }
 
-func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
-	desired := resources.BuildDeployment(instance, labels, licenseSecretName, credentials, guardrails)
+func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, guardrails []litellmv1alpha1.LiteLLMGuardrail) error {
+	desired := resources.BuildDeployment(instance, labels, licenseSecretName, guardrails)
 	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
 		return err
 	}
@@ -1127,22 +1102,6 @@ func generateRandomToken(length int) string {
 	return hex.EncodeToString(b)
 }
 
-// findInstanceForCredential maps a LiteLLMCredential event to the LiteLLMInstance
-// it references, so credential CRUD triggers an instance reconcile that rewrites
-// the ConfigMap and Deployment.
-func (r *LiteLLMInstanceReconciler) findInstanceForCredential(_ context.Context, obj client.Object) []reconcile.Request {
-	cred, ok := obj.(*litellmv1alpha1.LiteLLMCredential)
-	if !ok || cred.Spec.InstanceRef.Name == "" {
-		return nil
-	}
-	return []reconcile.Request{{
-		NamespacedName: types.NamespacedName{
-			Name:      cred.Spec.InstanceRef.Name,
-			Namespace: cred.Namespace,
-		},
-	}}
-}
-
 // findInstanceForGuardrail maps a LiteLLMGuardrail event to the LiteLLMInstance
 // it references, so guardrail CRUD triggers an instance reconcile that rewrites
 // the ConfigMap and Deployment.
@@ -1174,13 +1133,7 @@ func (r *LiteLLMInstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			handler.EnqueueRequestsFromMapFunc(r.findInstanceForLicenseSecret),
 			builder.WithPredicates(predicate.ResourceVersionChangedPredicate{}),
 		).
-		// Credentials are referenced from this instance's ConfigMap /
-		// Deployment, so mutations must trigger an instance reconcile.
-		Watches(
-			&litellmv1alpha1.LiteLLMCredential{},
-			handler.EnqueueRequestsFromMapFunc(r.findInstanceForCredential),
-		).
-		// Guardrails are also config-level and must trigger an instance
+		// Guardrails are config-level and must trigger an instance
 		// reconcile whenever any CR changes so the `guardrails` config
 		// section and guardrail env vars stay in sync with the Deployment.
 		Watches(

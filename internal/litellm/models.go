@@ -40,12 +40,11 @@ type ModelCreateRequest struct {
 
 // ModelParams defines provider-specific model parameters.
 type ModelParams struct {
-	Model string `json:"model"`
-	// LiteLLMCredentialName references an entry in the proxy's credential_list
-	// and, when set, takes precedence over inline APIKey/APIBase.
+	Model                 string   `json:"model"`
 	LiteLLMCredentialName string   `json:"litellm_credential_name,omitempty"`
 	APIBase               string   `json:"api_base,omitempty"`
 	APIKey                string   `json:"api_key,omitempty"`
+	APIVersion            string   `json:"api_version,omitempty"`
 	RPM                   *int     `json:"rpm,omitempty"`
 	TPM                   *int     `json:"tpm,omitempty"`
 	Timeout               *int     `json:"timeout,omitempty"`

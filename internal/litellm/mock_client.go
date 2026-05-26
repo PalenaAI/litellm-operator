@@ -26,6 +26,7 @@ type MockClient struct {
 	MockKeys          *MockKeyService
 	MockOrganizations *MockOrganizationService
 	MockCustomers     *MockCustomerService
+	MockCredentials   *MockCredentialService
 	MockHealth        *MockHealthService
 }
 
@@ -38,6 +39,7 @@ func NewMockClient() *MockClient {
 		MockKeys:          &MockKeyService{},
 		MockOrganizations: &MockOrganizationService{},
 		MockCustomers:     &MockCustomerService{},
+		MockCredentials:   &MockCredentialService{},
 		MockHealth:        &MockHealthService{},
 	}
 }
@@ -48,6 +50,7 @@ func (m *MockClient) Users() UserService                 { return m.MockUsers }
 func (m *MockClient) Keys() KeyService                   { return m.MockKeys }
 func (m *MockClient) Organizations() OrganizationService { return m.MockOrganizations }
 func (m *MockClient) Customers() CustomerService         { return m.MockCustomers }
+func (m *MockClient) Credentials() CredentialService     { return m.MockCredentials }
 func (m *MockClient) Health() HealthService              { return m.MockHealth }
 
 // MockModelService records calls and returns configured responses.
@@ -368,6 +371,42 @@ func (m *MockCustomerService) List(ctx context.Context) ([]CustomerInfo, error) 
 		return m.ListFunc(ctx)
 	}
 	return nil, nil
+}
+
+// MockCredentialService records calls and returns configured responses.
+type MockCredentialService struct {
+	CreateFunc func(ctx context.Context, payload CredentialPayload) error
+	UpdateFunc func(ctx context.Context, payload CredentialPayload) error
+	DeleteFunc func(ctx context.Context, credentialName string) error
+	GetFunc    func(ctx context.Context, credentialName string) (*CredentialInfoResponse, error)
+}
+
+func (m *MockCredentialService) Create(ctx context.Context, payload CredentialPayload) error {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(ctx, payload)
+	}
+	return nil
+}
+
+func (m *MockCredentialService) Update(ctx context.Context, payload CredentialPayload) error {
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(ctx, payload)
+	}
+	return nil
+}
+
+func (m *MockCredentialService) Delete(ctx context.Context, credentialName string) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, credentialName)
+	}
+	return nil
+}
+
+func (m *MockCredentialService) Get(ctx context.Context, credentialName string) (*CredentialInfoResponse, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, credentialName)
+	}
+	return &CredentialInfoResponse{CredentialName: credentialName}, nil
 }
 
 // MockHealthService records calls and returns configured responses.

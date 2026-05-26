@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-05-26
+
+### Fixed
+
+- **`LiteLLMCredential` is now actually honored at request time.** The credential controller previously rendered credentials into `credential_list` inside `proxy_server_config.yaml`. LiteLLM only merges `credential_list` entries into models defined in the config file's `model_list`; models registered via `POST /model/new` (which is how the operator registers every `LiteLLMModel`) are stored in the DB and *do not* see config-level credentials. Net effect: `LiteLLMModel.spec.litellmParams.credentialRef` was silently a no-op for the entire v0.11.x series, and any provider that requires `api_base`/`api_version` (notably all Azure OpenAI / Azure AI Foundry models) failed with `Must provide one of the base_url or azure_endpoint arguments`. The controller now reconciles credentials against LiteLLM's `/credentials` API (`POST` / `PATCH` / `DELETE` `/credentials/{name}`), which stores them in the DB encrypted with `LITELLM_SALT_KEY` and merges them into request-time `litellm_params`. The credential is now also visible in the Admin UI's Credentials tab.
+
+### Changed
+
+- **Kubernetes Secret rotation now propagates to LiteLLM in seconds.** The credential controller adds a Secret watch: when the referenced `apiKeySecretRef` Secret changes, the controller is enqueued immediately, computes a fresh `(spec + secret-value)` hash, and pushes a `PATCH /credentials/{name}` if the hash differs from the one stored in the `litellm.palena.ai/sync-hash` annotation. No proxy pod restart is required — DB credentials are looked up on each request.
+- **BREAKING (internal):** `BuildConfigMap`, `BuildDeployment`, and `GenerateProxyConfig` in `internal/resources` no longer take a `[]LiteLLMCredential` parameter. The `CREDENTIAL_<name>_API_KEY` env var the operator used to inject on the proxy Deployment (so config-level `os.environ/...` references resolved at startup) is no longer emitted, and the `credential_list` block in `proxy_server_config.yaml` is no longer rendered. This is a no-op for end users — credentials still work the same from the CR side — but anyone reading the rendered ConfigMap directly will notice the section is gone.
+- **`LiteLLMCredential` controller now requires a Ready `LiteLLMInstance`.** Previously the controller could validate a credential against a not-yet-ready instance (because rendering into a config file did not need the proxy reachable). The new flow needs the proxy `/credentials` endpoint, so credentials whose instance is not Ready stay `Configured=false` with `reason=InstanceNotReady` until the instance reports ready. Order of CR creation does not matter — once the instance is ready, the Secret-watch + periodic resync push the credential automatically.
+
+### Notes
+
+- **Migrating an existing v0.11.x cluster:** on upgrade, the new controller will register each `LiteLLMCredential` against `/credentials` on its first reconcile. The old `credential_list` block in the proxy `ConfigMap` is dropped on the next instance reconcile, the proxy rolls once (because the ConfigMap hash changes), and from then on credentials are DB-backed. Any existing `LiteLLMModel` with `credentialRef` continues to send `litellm_credential_name` in its params — that wire format is unchanged; only what's behind the lookup moved from config to DB.
+
 ## [0.11.2] - 2026-05-21
 
 ### Fixed

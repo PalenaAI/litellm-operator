@@ -59,12 +59,11 @@ func podSecurityContext(nonRoot bool) *corev1.PodSecurityContext {
 // BuildDeployment creates the LiteLLM Deployment.
 // licenseSecretName is the name of the Secret containing the enterprise license key.
 // Pass empty string when no license Secret is detected.
-// credentials are the LiteLLMCredential CRs bound to this instance whose
-// API keys need to be injected as env vars for the proxy to resolve them
-// via os.environ/… references in credential_list. Pass nil if none.
 // guardrails are the LiteLLMGuardrail CRs bound to this instance whose API
 // keys and extra env vars need to be injected. Pass nil if none.
-func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, credentials []litellmv1alpha1.LiteLLMCredential, guardrails []litellmv1alpha1.LiteLLMGuardrail) *appsv1.Deployment {
+// Credentials are registered against the proxy's /credentials API and do not
+// need env-var injection here.
+func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string, licenseSecretName string, guardrails []litellmv1alpha1.LiteLLMGuardrail) *appsv1.Deployment {
 	replicas := instance.Spec.Replicas
 	if replicas == 0 {
 		replicas = 1
@@ -90,7 +89,6 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 	}
 
 	envVars := buildEnvVars(instance, licenseSecretName)
-	envVars = append(envVars, credentialEnvVars(instance, credentials)...)
 	envVars = append(envVars, guardrailEnvVars(instance, guardrails)...)
 	envVars = mergeEnvVars(envVars, instance.Spec.ExtraEnvVars)
 
@@ -695,37 +693,6 @@ func guardrailEnvVars(instance *litellmv1alpha1.LiteLLMInstance, guardrails []li
 	return vars
 }
 
-// credentialEnvVars injects API keys from LiteLLMCredential CRs as env vars
-// so the proxy can resolve them via the `os.environ/CREDENTIAL_…_API_KEY`
-// references in credential_list. Credentials whose InstanceRef points
-// elsewhere are skipped.
-func credentialEnvVars(instance *litellmv1alpha1.LiteLLMInstance, credentials []litellmv1alpha1.LiteLLMCredential) []corev1.EnvVar {
-	if len(credentials) == 0 {
-		return nil
-	}
-	vars := make([]corev1.EnvVar, 0, len(credentials))
-	seen := make(map[string]struct{}, len(credentials))
-	for _, c := range credentials {
-		if c.Spec.InstanceRef.Name != instance.Name {
-			continue
-		}
-		envName := CredentialEnvVarName(c.Spec.CredentialName)
-		if _, dup := seen[envName]; dup {
-			continue
-		}
-		seen[envName] = struct{}{}
-		vars = append(vars, corev1.EnvVar{
-			Name: envName,
-			ValueFrom: &corev1.EnvVarSource{
-				SecretKeyRef: &corev1.SecretKeySelector{
-					LocalObjectReference: corev1.LocalObjectReference{Name: c.Spec.APIKeySecretRef.Name},
-					Key:                  c.Spec.APIKeySecretRef.Key,
-				},
-			},
-		})
-	}
-	return vars
-}
 
 func passThroughEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
 	var vars []corev1.EnvVar

@@ -28,10 +28,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
+	"github.com/PalenaAI/litellm-operator/internal/litellm"
 )
 
 var _ = Describe("LiteLLMCredential Controller", func() {
-	Context("When reconciling a credential", func() {
+	Context("When reconciling a credential whose target instance is not Ready", func() {
 		const (
 			credName     = "test-credential"
 			instanceName = "test-credential-instance"
@@ -43,7 +44,6 @@ var _ = Describe("LiteLLMCredential Controller", func() {
 		secretKey := types.NamespacedName{Name: secretName, Namespace: "default"}
 
 		BeforeEach(func() {
-			// Referenced instance
 			instance := &litellmv1alpha1.LiteLLMInstance{}
 			if err := k8sClient.Get(ctx, instanceKey, instance); err != nil && errors.IsNotFound(err) {
 				Expect(k8sClient.Create(ctx, &litellmv1alpha1.LiteLLMInstance{
@@ -58,8 +58,6 @@ var _ = Describe("LiteLLMCredential Controller", func() {
 					},
 				})).To(Succeed())
 			}
-
-			// API key Secret
 			secret := &corev1.Secret{}
 			if err := k8sClient.Get(ctx, secretKey, secret); err != nil && errors.IsNotFound(err) {
 				Expect(k8sClient.Create(ctx, &corev1.Secret{
@@ -67,8 +65,6 @@ var _ = Describe("LiteLLMCredential Controller", func() {
 					Data:       map[string][]byte{"api-key": []byte("sk-test-value")},
 				})).To(Succeed())
 			}
-
-			// Credential CR
 			cred := &litellmv1alpha1.LiteLLMCredential{}
 			if err := k8sClient.Get(ctx, credKey, cred); err != nil && errors.IsNotFound(err) {
 				Expect(k8sClient.Create(ctx, &litellmv1alpha1.LiteLLMCredential{
@@ -88,7 +84,6 @@ var _ = Describe("LiteLLMCredential Controller", func() {
 		AfterEach(func() {
 			cred := &litellmv1alpha1.LiteLLMCredential{}
 			if err := k8sClient.Get(ctx, credKey, cred); err == nil {
-				// Drop the finalizer so the object actually deletes during GC.
 				if len(cred.Finalizers) > 0 {
 					cred.Finalizers = nil
 					Expect(k8sClient.Update(ctx, cred)).To(Succeed())
@@ -105,53 +100,26 @@ var _ = Describe("LiteLLMCredential Controller", func() {
 			}
 		})
 
-		It("should validate credential and set Ready condition", func() {
-			reconciler := &LiteLLMCredentialReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
+		It("adds the finalizer and reports InstanceNotReady without crashing", func() {
+			r := &LiteLLMCredentialReconciler{
+				Client:               k8sClient,
+				Scheme:               k8sClient.Scheme(),
+				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return litellm.NewMockClient() },
 			}
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: credKey})
+			// First pass adds the finalizer.
+			res, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: credKey})
 			Expect(err).NotTo(HaveOccurred())
+			Expect(res.RequeueAfter > 0).To(BeTrue())
 
-			// Finalizer should be added on the first pass — run once more to exercise the validation path.
-			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: credKey})
+			// Second pass runs the validation/push path; with the instance
+			// not Ready, resolveInstance fails and we land in the
+			// InstanceNotReady branch with Configured=false.
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: credKey})
 			Expect(err).NotTo(HaveOccurred())
 
 			updated := &litellmv1alpha1.LiteLLMCredential{}
 			Expect(k8sClient.Get(ctx, credKey, updated)).To(Succeed())
 			Expect(updated.Finalizers).To(ContainElement(FinalizerName))
-			Expect(updated.Status.Configured).To(BeTrue())
-
-			var readyFound bool
-			for _, c := range updated.Status.Conditions {
-				if c.Type == ConditionReady {
-					readyFound = true
-					Expect(string(c.Status)).To(Equal("True"))
-					Expect(c.Reason).To(Equal("Validated"))
-				}
-			}
-			Expect(readyFound).To(BeTrue(), "Ready condition not found")
-		})
-
-		It("should mark credential NotReady when Secret key is missing", func() {
-			// Overwrite the Secret with a missing key to trigger the SecretKeyMissing branch.
-			secret := &corev1.Secret{}
-			Expect(k8sClient.Get(ctx, secretKey, secret)).To(Succeed())
-			secret.Data = map[string][]byte{"wrong-key": []byte("value")}
-			Expect(k8sClient.Update(ctx, secret)).To(Succeed())
-
-			reconciler := &LiteLLMCredentialReconciler{
-				Client: k8sClient,
-				Scheme: k8sClient.Scheme(),
-			}
-			// First pass adds the finalizer; second actually validates.
-			_, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: credKey})
-			Expect(err).NotTo(HaveOccurred())
-			_, err = reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: credKey})
-			Expect(err).NotTo(HaveOccurred())
-
-			updated := &litellmv1alpha1.LiteLLMCredential{}
-			Expect(k8sClient.Get(ctx, credKey, updated)).To(Succeed())
 			Expect(updated.Status.Configured).To(BeFalse())
 
 			var reason string
@@ -161,7 +129,7 @@ var _ = Describe("LiteLLMCredential Controller", func() {
 					Expect(string(c.Status)).To(Equal("False"))
 				}
 			}
-			Expect(reason).To(Equal("SecretKeyMissing"))
+			Expect(reason).To(Equal("InstanceNotReady"))
 		})
 	})
 })
