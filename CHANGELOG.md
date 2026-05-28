@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`LiteLLMGuardrail` — HTTP/API guardrails via `generic_guardrail_api`.** You can now point the proxy at any HTTP service you host (e.g. a container running in your cluster) instead of baking a Python class into the proxy image. Set `spec.provider: generic_guardrail_api` and `spec.apiBase` to your guardrail Service; LiteLLM POSTs request/response content to `{apiBase}/beta/litellm_basic_guardrail_api` and acts on the `{action, blocked_reason, texts, images}` verdict it returns. New `spec.unreachableFallback` field (`fail_closed` / `fail_open`) controls behavior when the endpoint is unreachable, `spec.apiKeySecretRef` is sent as a Bearer token, and `spec.params` are forwarded under `additional_provider_specific_params`. The controller validates that `apiBase` is set for this provider and that `unreachableFallback` is only used with it. Note: this is a BETA LiteLLM feature — its request/response contract may change.
+- **`LiteLLMGuardrail` — `custom_guardrail` class path support.** Added `spec.guardrailClass`, the dotted Python import path to a `CustomGuardrail` subclass (e.g. `my_pkg.adapters.MyGuardrail`). Previously `provider: custom_guardrail` emitted the literal `guardrail: custom_guardrail` into `proxy_server_config.yaml`, which LiteLLM cannot resolve, so custom guardrails were unusable end-to-end. The operator now writes the class path as `litellm_params.guardrail`, and the controller enforces that `guardrailClass` is set iff the provider is `custom_guardrail`. The class and its dependencies must be present in the proxy image (custom image via `spec.image`).
+
 ## [0.11.3] - 2026-05-26
+
+### Security
+
+- **Go toolchain bumped to 1.25.10.** The previous Dockerfile pin (`cd05a378…`) and `go.mod` directive (`go 1.25.0`) both resolved to Go 1.25.9 in practice, which carries five HIGH stdlib CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) that broke the weekly Trivy scan against `:latest` and the govulncheck CI step. `go.mod` is now `go 1.25.10` and the Dockerfile pins `golang:1.25@sha256:c138bff7…` (= Go 1.25.10). All seven `actions/setup-go` invocations in CI / E2E / release / scheduled now use `check-latest: true` so future Go patch releases flow in via the latest matching `go 1.25.x` without requiring a `go.mod` edit.
+- **`golang.org/x/net` bumped 0.52.0 → 0.55.0** to clear GO-2026-4918 (HTTP/2 server-push DoS) — the only third-party finding from govulncheck. Pulled in by `go mod tidy`; `x/sys`, `x/term`, `x/text`, and `x/tools` came along as transitive bumps.
 
 ### Fixed
 

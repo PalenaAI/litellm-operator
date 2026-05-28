@@ -30,6 +30,7 @@ jobs:
         uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
 
       - name: Initialize CodeQL
@@ -67,6 +68,7 @@ jobs:
         uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
 
       - name: Install govulncheck
@@ -225,6 +227,7 @@ jobs:
         uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
         with:
           go-version-file: go.mod
+          check-latest: true
           cache: true
 
       - name: Install operator-sdk via Makefile

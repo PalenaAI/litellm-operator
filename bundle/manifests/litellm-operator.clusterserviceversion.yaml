@@ -157,6 +157,57 @@ metadata:
         },
         {
           "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMGuardrail",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "my-http-guardrail"
+          },
+          "spec": {
+            "apiBase": "http://my-guardrail.guardrails.svc.cluster.local:8080",
+            "apiKeySecretRef": {
+              "key": "API_KEY",
+              "name": "my-guardrail-credentials"
+            },
+            "guardrailName": "my-http-guardrail",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            },
+            "mode": "pre_call",
+            "params": {
+              "threshold": "0.8"
+            },
+            "provider": "generic_guardrail_api",
+            "unreachableFallback": "fail_closed"
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMGuardrail",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "my-custom-guardrail"
+          },
+          "spec": {
+            "guardrailClass": "my_pkg.adapters.MyGuardrail",
+            "guardrailName": "my-custom-guardrail",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            },
+            "mode": "pre_call",
+            "params": {
+              "threshold": "0.8"
+            },
+            "provider": "custom_guardrail"
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
           "kind": "LiteLLMInstance",
           "metadata": {
             "labels": {

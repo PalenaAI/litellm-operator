@@ -395,8 +395,15 @@ func buildGuardrailsList(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 		if g.Spec.InstanceRef.Name != instance.Name {
 			continue
 		}
+		// For custom_guardrail, LiteLLM expects `guardrail` to be the dotted
+		// Python import path of a CustomGuardrail subclass, not the provider
+		// keyword. All other providers use the provider keyword verbatim.
+		guardrailValue := g.Spec.Provider
+		if g.Spec.Provider == "custom_guardrail" {
+			guardrailValue = g.Spec.GuardrailClass
+		}
 		params := map[string]interface{}{
-			"guardrail": g.Spec.Provider,
+			"guardrail": guardrailValue,
 			"mode":      g.Spec.Mode,
 		}
 		if g.Spec.APIKeySecretRef != nil {
@@ -408,12 +415,28 @@ func buildGuardrailsList(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 		if g.Spec.DefaultOn != nil {
 			params["default_on"] = *g.Spec.DefaultOn
 		}
-		for k, v := range g.Spec.Params {
-			// Don't let user params override the keys we set explicitly.
-			if _, reserved := params[k]; reserved {
-				continue
+		if g.Spec.UnreachableFallback != "" {
+			params["unreachable_fallback"] = g.Spec.UnreachableFallback
+		}
+		if g.Spec.Provider == "generic_guardrail_api" {
+			// The generic guardrail API reads custom params from a nested
+			// `additional_provider_specific_params` map rather than from the
+			// top-level litellm_params, so nest them there.
+			if len(g.Spec.Params) > 0 {
+				extra := make(map[string]interface{}, len(g.Spec.Params))
+				for k, v := range g.Spec.Params {
+					extra[k] = v
+				}
+				params["additional_provider_specific_params"] = extra
 			}
-			params[k] = v
+		} else {
+			for k, v := range g.Spec.Params {
+				// Don't let user params override the keys we set explicitly.
+				if _, reserved := params[k]; reserved {
+					continue
+				}
+				params[k] = v
+			}
 		}
 		entries = append(entries, map[string]interface{}{
 			"guardrail_name": g.Spec.GuardrailName,

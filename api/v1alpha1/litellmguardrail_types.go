@@ -41,8 +41,30 @@ type LiteLLMGuardrailSpec struct {
 	GuardrailName string `json:"guardrailName"`
 
 	// Guardrail provider. Must be a LiteLLM-supported integration.
-	// +kubebuilder:validation:Enum=aporia;lakera;bedrock;presidio;guardrails_ai;azure;llm_guard;llamaguard;google_text_moderation;custom_guardrail
+	//
+	// "generic_guardrail_api" points the proxy at any HTTP service (e.g. a
+	// container you host in-cluster): LiteLLM POSTs request/response content
+	// to `{apiBase}/beta/litellm_basic_guardrail_api` and expects a verdict
+	// back. No Python class is required. Use `apiBase` for the endpoint,
+	// `apiKeySecretRef` for Bearer auth, `unreachableFallback` for failure
+	// behavior, and `params` for `additional_provider_specific_params`.
+	// +kubebuilder:validation:Enum=aporia;lakera;bedrock;presidio;guardrails_ai;azure;llm_guard;llamaguard;google_text_moderation;custom_guardrail;generic_guardrail_api
 	Provider string `json:"provider"`
+
+	// GuardrailClass is the dotted Python import path to a litellm
+	// CustomGuardrail subclass. REQUIRED when provider == "custom_guardrail";
+	// must be empty for all other providers.
+	// +optional
+	GuardrailClass string `json:"guardrailClass,omitempty"`
+
+	// UnreachableFallback controls proxy behavior when the guardrail endpoint
+	// is unreachable (network error, or upstream 502/503/504). Only applies
+	// when provider == "generic_guardrail_api"; must be empty otherwise.
+	//   fail_closed — reject the request (LiteLLM default)
+	//   fail_open   — log a critical error and let the request proceed
+	// +kubebuilder:validation:Enum=fail_closed;fail_open
+	// +optional
+	UnreachableFallback string `json:"unreachableFallback,omitempty"`
 
 	// Execution mode for the guardrail.
 	//   pre_call      — runs before the LLM request is dispatched
@@ -72,6 +94,10 @@ type LiteLLMGuardrailSpec struct {
 	// guardrail's `litellm_params` section. For example, Bedrock guardrails
 	// use `guardrailIdentifier` and `guardrailVersion`; Presidio uses
 	// `presidio_analyzer_api_base`; Lakera uses `category_thresholds`.
+	//
+	// For provider == "generic_guardrail_api", these are nested under
+	// `additional_provider_specific_params` instead of being merged at the
+	// top level, since that is where the generic guardrail API reads them.
 	// +optional
 	Params map[string]string `json:"params,omitempty"`
 

@@ -1244,6 +1244,106 @@ func TestGenerateProxyConfig_GuardrailsWithParamsNotOverridingReserved(t *testin
 	}
 }
 
+func TestGenerateProxyConfig_GuardrailsCustomGuardrailClass(t *testing.T) {
+	// For provider=custom_guardrail, litellm_params.guardrail must be the
+	// dotted Python import path from spec.guardrailClass, not the provider
+	// keyword.
+	instance := newTestInstance()
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "my-custom", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:    litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName:  "my-custom",
+				Provider:       "custom_guardrail",
+				Mode:           "pre_call",
+				GuardrailClass: "my_pkg.adapters.MyGuardrail",
+				Params: map[string]string{
+					"some_setting": "value",
+					// reserved key — must not override the class path
+					"guardrail": "should_be_ignored",
+				},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, guardrails)
+
+	entries, _ := config["guardrails"].([]map[string]interface{})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 guardrail entry, got %d", len(entries))
+	}
+	params, _ := entries[0]["litellm_params"].(map[string]interface{})
+	if params["guardrail"] != "my_pkg.adapters.MyGuardrail" {
+		t.Errorf("expected guardrail=my_pkg.adapters.MyGuardrail, got %v", params["guardrail"])
+	}
+	if params["mode"] != "pre_call" {
+		t.Errorf("expected mode=pre_call, got %v", params["mode"])
+	}
+	if params["some_setting"] != "value" {
+		t.Errorf("expected some_setting=value passthrough, got %v", params["some_setting"])
+	}
+}
+
+func TestGenerateProxyConfig_GuardrailsGenericAPI(t *testing.T) {
+	// provider=generic_guardrail_api renders the provider literal as the
+	// guardrail value, sets unreachable_fallback, and nests spec.params under
+	// additional_provider_specific_params (not flat in litellm_params).
+	instance := newTestInstance()
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "ext-http", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:         litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName:       "ext-http",
+				Provider:            "generic_guardrail_api",
+				Mode:                "pre_call",
+				APIBase:             "http://my-guardrail.guardrails.svc.cluster.local:8080",
+				UnreachableFallback: "fail_open",
+				APIKeySecretRef:     &litellmv1alpha1.SecretKeyRef{Name: "gr-secret", Key: "api-key"},
+				Params: map[string]string{
+					"threshold": "0.8",
+					"language":  "en",
+				},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, guardrails)
+
+	entries, _ := config["guardrails"].([]map[string]interface{})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 guardrail entry, got %d", len(entries))
+	}
+	params, _ := entries[0]["litellm_params"].(map[string]interface{})
+	if params["guardrail"] != "generic_guardrail_api" {
+		t.Errorf("expected guardrail=generic_guardrail_api, got %v", params["guardrail"])
+	}
+	if params["api_base"] != "http://my-guardrail.guardrails.svc.cluster.local:8080" {
+		t.Errorf("unexpected api_base: %v", params["api_base"])
+	}
+	if params["api_key"] != "os.environ/GUARDRAIL_EXT_HTTP_API_KEY" {
+		t.Errorf("unexpected api_key: %v", params["api_key"])
+	}
+	if params["unreachable_fallback"] != "fail_open" {
+		t.Errorf("expected unreachable_fallback=fail_open, got %v", params["unreachable_fallback"])
+	}
+	// Custom params must be nested, not flat.
+	if _, flat := params["threshold"]; flat {
+		t.Error("threshold should be nested under additional_provider_specific_params, not flat")
+	}
+	extra, ok := params["additional_provider_specific_params"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("additional_provider_specific_params should be a map, got %T", params["additional_provider_specific_params"])
+	}
+	if extra["threshold"] != "0.8" {
+		t.Errorf("expected nested threshold=0.8, got %v", extra["threshold"])
+	}
+	if extra["language"] != "en" {
+		t.Errorf("expected nested language=en, got %v", extra["language"])
+	}
+}
+
 func TestGenerateProxyConfig_GuardrailsFilterByInstance(t *testing.T) {
 	instance := newTestInstance() // name: test-instance
 	guardrails := []litellmv1alpha1.LiteLLMGuardrail{

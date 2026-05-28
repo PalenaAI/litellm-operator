@@ -74,6 +74,71 @@ func (r *LiteLLMGuardrailReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		}
 	}
 
+	// Validate guardrailClass is set iff the provider is custom_guardrail.
+	// custom_guardrail needs the dotted Python import path of a
+	// CustomGuardrail subclass; every other provider uses a fixed keyword and
+	// must not carry a class path.
+	if g.Spec.Provider == "custom_guardrail" && g.Spec.GuardrailClass == "" {
+		emitEvent(r.Recorder, &g, corev1.EventTypeWarning, EventReasonValidationFailed,
+			"Guardrail %q: provider custom_guardrail requires spec.guardrailClass", g.Spec.GuardrailName)
+		meta.SetStatusCondition(&g.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "GuardrailClassRequired",
+			Message:            "provider custom_guardrail requires spec.guardrailClass (dotted path to a CustomGuardrail subclass)",
+			ObservedGeneration: g.Generation,
+		})
+		g.Status.Configured = false
+		_ = r.Status().Update(ctx, &g)
+		return ctrl.Result{}, nil
+	}
+	if g.Spec.Provider != "custom_guardrail" && g.Spec.GuardrailClass != "" {
+		emitEvent(r.Recorder, &g, corev1.EventTypeWarning, EventReasonValidationFailed,
+			"Guardrail %q: spec.guardrailClass is only valid for provider custom_guardrail", g.Spec.GuardrailName)
+		meta.SetStatusCondition(&g.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "GuardrailClassNotAllowed",
+			Message:            fmt.Sprintf("spec.guardrailClass must be empty for provider %q", g.Spec.Provider),
+			ObservedGeneration: g.Generation,
+		})
+		g.Status.Configured = false
+		_ = r.Status().Update(ctx, &g)
+		return ctrl.Result{}, nil
+	}
+
+	// generic_guardrail_api points the proxy at an external HTTP endpoint, so
+	// apiBase is mandatory. unreachableFallback only makes sense for this
+	// provider; reject it elsewhere to avoid silently-ignored config.
+	if g.Spec.Provider == "generic_guardrail_api" && g.Spec.APIBase == "" {
+		emitEvent(r.Recorder, &g, corev1.EventTypeWarning, EventReasonValidationFailed,
+			"Guardrail %q: provider generic_guardrail_api requires spec.apiBase", g.Spec.GuardrailName)
+		meta.SetStatusCondition(&g.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "APIBaseRequired",
+			Message:            "provider generic_guardrail_api requires spec.apiBase (the guardrail HTTP endpoint)",
+			ObservedGeneration: g.Generation,
+		})
+		g.Status.Configured = false
+		_ = r.Status().Update(ctx, &g)
+		return ctrl.Result{}, nil
+	}
+	if g.Spec.UnreachableFallback != "" && g.Spec.Provider != "generic_guardrail_api" {
+		emitEvent(r.Recorder, &g, corev1.EventTypeWarning, EventReasonValidationFailed,
+			"Guardrail %q: spec.unreachableFallback is only valid for provider generic_guardrail_api", g.Spec.GuardrailName)
+		meta.SetStatusCondition(&g.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "UnreachableFallbackNotAllowed",
+			Message:            fmt.Sprintf("spec.unreachableFallback must be empty for provider %q", g.Spec.Provider),
+			ObservedGeneration: g.Generation,
+		})
+		g.Status.Configured = false
+		_ = r.Status().Update(ctx, &g)
+		return ctrl.Result{}, nil
+	}
+
 	// Validate the referenced instance exists. Like credentials, guardrails
 	// are config-level so they don't require the instance to be Ready; the
 	// instance controller will pick them up on its next reconcile.

@@ -23,7 +23,8 @@ LiteLLM supports a large number of third-party guardrail providers that inspect 
 | `llm_guard` | LLM Guard — open-source prompt/response scanning |
 | `llamaguard` | Meta Llama Guard — LLM-based content classification |
 | `google_text_moderation` | Google Cloud Natural Language text moderation |
-| `custom_guardrail` | Your own service behind the [LiteLLM custom guardrail interface](https://docs.litellm.ai/docs/proxy/guardrails/custom_guardrail) |
+| `custom_guardrail` | Your own service behind the [LiteLLM custom guardrail interface](https://docs.litellm.ai/docs/proxy/guardrails/custom_guardrail) (requires a Python class baked into the proxy image) |
+| `generic_guardrail_api` | Any HTTP service you host (e.g. a container in your cluster) via the [Generic Guardrail API](https://docs.litellm.ai/docs/adding_provider/generic_guardrail_api) — **no Python required** |
 
 ## Execution modes
 
@@ -103,6 +104,107 @@ spec:
           key: AWS_ACCESS_KEY_ID
 ```
 
+### Custom guardrail (your own CustomGuardrail subclass)
+
+For provider `custom_guardrail`, LiteLLM expects `litellm_params.guardrail` to be the **dotted Python import path** of a [`CustomGuardrail`](https://docs.litellm.ai/docs/proxy/guardrails/custom_guardrail) subclass — not a provider keyword. Set this path via `spec.guardrailClass`. It is **required** for `custom_guardrail` and **must be empty** for every other provider.
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMGuardrail
+metadata:
+  name: my-custom-guardrail
+spec:
+  instanceRef:
+    name: my-gateway
+  guardrailName: my-custom-guardrail
+  provider: custom_guardrail
+  mode: pre_call
+  guardrailClass: my_pkg.adapters.MyGuardrail
+  params:
+    # optional config overrides merged into litellm_params (string values)
+    threshold: "0.8"
+  envVars:
+    # provider/runtime config (e.g. REDIS_URL, presidio service URLs)
+    - name: REDIS_URL
+      value: redis://redis.guardrails.svc.cluster.local:6379
+```
+
+The class and all of its dependencies **must be present in the proxy image** — build a custom image and set it via `spec.image` on the LiteLLMInstance. Arbitrary configuration flows in through `params` (string values, merged into `litellm_params`) and `envVars` (container env vars on the Deployment). This renders as:
+
+```yaml
+guardrails:
+  - guardrail_name: my-custom-guardrail
+    litellm_params:
+      guardrail: my_pkg.adapters.MyGuardrail
+      mode: pre_call
+      threshold: "0.8"
+```
+
+### Generic Guardrail API (host your own HTTP service — no Python)
+
+If you want to run your own guardrail as a **containerized HTTP service** in the cluster (rather than baking a Python class into the proxy image), use `provider: generic_guardrail_api`. LiteLLM POSTs request/response content to your endpoint and acts on the verdict it returns. This is the recommended path for "bring your own guardrail container."
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMGuardrail
+metadata:
+  name: my-http-guardrail
+spec:
+  instanceRef:
+    name: my-gateway
+  guardrailName: my-http-guardrail
+  provider: generic_guardrail_api
+  mode: pre_call
+  # Required: your in-cluster guardrail Service. LiteLLM appends
+  # /beta/litellm_basic_guardrail_api to this base URL.
+  apiBase: http://my-guardrail.guardrails.svc.cluster.local:8080
+  # Optional: sent as a Bearer token to your endpoint.
+  apiKeySecretRef:
+    name: my-guardrail-credentials
+    key: API_KEY
+  # Optional: what to do if your endpoint is unreachable / returns 502/503/504.
+  unreachableFallback: fail_closed   # or fail_open
+  defaultOn: false
+  # Optional: forwarded to your endpoint under additional_provider_specific_params.
+  params:
+    threshold: "0.8"
+    language: "en"
+```
+
+This renders as:
+
+```yaml
+guardrails:
+  - guardrail_name: my-http-guardrail
+    litellm_params:
+      guardrail: generic_guardrail_api
+      mode: pre_call
+      api_base: http://my-guardrail.guardrails.svc.cluster.local:8080
+      api_key: os.environ/GUARDRAIL_MY_HTTP_GUARDRAIL_API_KEY
+      unreachable_fallback: fail_closed
+      default_on: false
+      additional_provider_specific_params:
+        threshold: "0.8"
+        language: "en"
+```
+
+**The endpoint contract.** LiteLLM `POST`s to `{apiBase}/beta/litellm_basic_guardrail_api` with a JSON body containing `input_type` (`request`/`response`), `texts`, `structured_messages`, `images`, `tools`, `tool_calls`, `request_data` (caller identity), `request_headers` (sanitized inbound headers, forwarded automatically), `litellm_call_id`, and your `additional_provider_specific_params`. Your service responds with:
+
+```json
+{ "action": "NONE | BLOCKED | GUARDRAIL_INTERVENED", "blocked_reason": "...", "texts": ["..."], "images": ["..."] }
+```
+
+- `NONE` — allow through unchanged.
+- `BLOCKED` — reject the request (use `blocked_reason` for the error).
+- `GUARDRAIL_INTERVENED` — proceed with the modified `texts`/`images` you return (e.g. redacted content).
+
+Notes:
+
+- Unlike `custom_guardrail`, **no Python class and no custom proxy image are required** — your guardrail is a separate Deployment/Service.
+- `params` values are strings (`map[string]string`) and are nested under `additional_provider_specific_params`; they are **not** merged flat into `litellm_params`.
+- `unreachableFallback` is only valid for `generic_guardrail_api`; setting it on another provider fails validation.
+- The Generic Guardrail API is a **BETA** LiteLLM feature — the request/response contract may change in future LiteLLM releases.
+
 ### Assigning guardrails to keys and teams (enterprise)
 
 Once a guardrail is declared, virtual keys and teams opt in by name:
@@ -140,12 +242,14 @@ The names must match `spec.guardrailName` on a LiteLLMGuardrail CR bound to the 
 | --- | --- | --- | --- |
 | `instanceRef` | InstanceRef | Yes | Reference to the LiteLLMInstance this guardrail belongs to |
 | `guardrailName` | string | Yes | Unique name for this guardrail; referenced by keys/teams via `spec.guardrails` |
-| `provider` | enum | Yes | One of `aporia`, `lakera`, `bedrock`, `presidio`, `guardrails_ai`, `azure`, `llm_guard`, `llamaguard`, `google_text_moderation`, `custom_guardrail` |
+| `provider` | enum | Yes | One of `aporia`, `lakera`, `bedrock`, `presidio`, `guardrails_ai`, `azure`, `llm_guard`, `llamaguard`, `google_text_moderation`, `custom_guardrail`, `generic_guardrail_api` |
+| `guardrailClass` | string | Conditional | Dotted Python import path to a `CustomGuardrail` subclass. **Required** when `provider == custom_guardrail`; **must be empty** otherwise. The class and its deps must be present in the proxy image |
 | `mode` | enum | Yes | One of `pre_call`, `post_call`, `during_call`, `logging_only` |
-| `apiKeySecretRef` | SecretKeyRef | No | Reference to a Secret containing the provider API key. Omit for local/internal providers like presidio or a `custom_guardrail` pointing at an in-cluster service |
-| `apiBase` | string | No | Provider API base URL |
+| `apiKeySecretRef` | SecretKeyRef | No | Reference to a Secret containing the provider API key. Omit for local/internal providers like presidio or a `custom_guardrail` pointing at an in-cluster service. For `generic_guardrail_api` it is sent to your endpoint as a Bearer token |
+| `apiBase` | string | Conditional | Provider API base URL. **Required** when `provider == generic_guardrail_api` (your guardrail HTTP endpoint) |
 | `defaultOn` | bool | No | When true, the guardrail runs on every request even when keys/teams do not explicitly opt in |
-| `params` | map[string]string | No | Provider-specific parameters merged into `litellm_params`. Reserved keys (`guardrail`, `mode`, `api_key`, `api_base`, `default_on`) cannot be overridden |
+| `unreachableFallback` | enum | Conditional | `fail_closed` (reject) or `fail_open` (allow) when the guardrail endpoint is unreachable. Only valid when `provider == generic_guardrail_api`; **must be empty** otherwise |
+| `params` | map[string]string | No | Provider-specific parameters merged into `litellm_params`. Reserved keys (`guardrail`, `mode`, `api_key`, `api_base`, `default_on`) cannot be overridden. For `generic_guardrail_api` they are nested under `additional_provider_specific_params` instead |
 | `envVars` | []EnvVar | No | Additional env vars for this guardrail (e.g., `AWS_ACCESS_KEY_ID`, `AWS_REGION`) — each becomes a container env var on the LiteLLM Deployment |
 
 ## Status Fields
@@ -161,6 +265,10 @@ The names must match `spec.guardrailName` on a LiteLLMGuardrail CR bound to the 
 | Reason | Meaning |
 | --- | --- |
 | `Validated` | Guardrail spec is valid and will be rendered by the instance controller |
+| `GuardrailClassRequired` | `provider == custom_guardrail` but `spec.guardrailClass` is empty |
+| `GuardrailClassNotAllowed` | `spec.guardrailClass` is set on a provider other than `custom_guardrail` |
+| `APIBaseRequired` | `provider == generic_guardrail_api` but `spec.apiBase` is empty |
+| `UnreachableFallbackNotAllowed` | `spec.unreachableFallback` is set on a provider other than `generic_guardrail_api` |
 | `InstanceNotFound` | `spec.instanceRef.name` does not resolve to a LiteLLMInstance in the same namespace |
 | `SecretNotFound` | `spec.apiKeySecretRef.name` does not exist |
 | `SecretKeyMissing` | The referenced Secret exists but does not contain `spec.apiKeySecretRef.key` |

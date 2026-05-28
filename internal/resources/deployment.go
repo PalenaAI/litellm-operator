@@ -693,7 +693,6 @@ func guardrailEnvVars(instance *litellmv1alpha1.LiteLLMInstance, guardrails []li
 	return vars
 }
 
-
 func passThroughEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
 	var vars []corev1.EnvVar
 	for _, ep := range instance.Spec.PassThroughEndpoints {

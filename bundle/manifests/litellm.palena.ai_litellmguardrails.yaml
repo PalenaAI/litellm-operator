@@ -221,6 +221,12 @@ spec:
                   - name
                   type: object
                 type: array
+              guardrailClass:
+                description: |-
+                  GuardrailClass is the dotted Python import path to a litellm
+                  CustomGuardrail subclass. REQUIRED when provider == "custom_guardrail";
+                  must be empty for all other providers.
+                type: string
               guardrailName:
                 description: |-
                   Unique name for this guardrail. Used both as the `guardrail_name` in
@@ -259,9 +265,21 @@ spec:
                   guardrail's `litellm_params` section. For example, Bedrock guardrails
                   use `guardrailIdentifier` and `guardrailVersion`; Presidio uses
                   `presidio_analyzer_api_base`; Lakera uses `category_thresholds`.
+
+                  For provider == "generic_guardrail_api", these are nested under
+                  `additional_provider_specific_params` instead of being merged at the
+                  top level, since that is where the generic guardrail API reads them.
                 type: object
               provider:
-                description: Guardrail provider. Must be a LiteLLM-supported integration.
+                description: |-
+                  Guardrail provider. Must be a LiteLLM-supported integration.
+
+                  "generic_guardrail_api" points the proxy at any HTTP service (e.g. a
+                  container you host in-cluster): LiteLLM POSTs request/response content
+                  to `{apiBase}/beta/litellm_basic_guardrail_api` and expects a verdict
+                  back. No Python class is required. Use `apiBase` for the endpoint,
+                  `apiKeySecretRef` for Bearer auth, `unreachableFallback` for failure
+                  behavior, and `params` for `additional_provider_specific_params`.
                 enum:
                 - aporia
                 - lakera
@@ -273,6 +291,18 @@ spec:
                 - llamaguard
                 - google_text_moderation
                 - custom_guardrail
+                - generic_guardrail_api
+                type: string
+              unreachableFallback:
+                description: |-
+                  UnreachableFallback controls proxy behavior when the guardrail endpoint
+                  is unreachable (network error, or upstream 502/503/504). Only applies
+                  when provider == "generic_guardrail_api"; must be empty otherwise.
+                    fail_closed — reject the request (LiteLLM default)
+                    fail_open   — log a critical error and let the request proceed
+                enum:
+                - fail_closed
+                - fail_open
                 type: string
             required:
             - guardrailName

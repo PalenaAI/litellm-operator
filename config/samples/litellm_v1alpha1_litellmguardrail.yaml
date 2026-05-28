@@ -57,3 +57,48 @@ spec:
     guardrailIdentifier: abc123
     guardrailVersion: DRAFT
     aws_region_name: us-east-1
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMGuardrail
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: my-http-guardrail
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  guardrailName: my-http-guardrail
+  # Point the proxy at any HTTP service you host in-cluster — no Python
+  # required. LiteLLM POSTs to {apiBase}/beta/litellm_basic_guardrail_api.
+  provider: generic_guardrail_api
+  mode: pre_call
+  apiBase: http://my-guardrail.guardrails.svc.cluster.local:8080
+  # Optional: sent to your endpoint as a Bearer token.
+  apiKeySecretRef:
+    name: my-guardrail-credentials
+    key: API_KEY
+  # What to do if your endpoint is unreachable: fail_closed (reject) or fail_open (allow).
+  unreachableFallback: fail_closed
+  # Forwarded to your endpoint under additional_provider_specific_params.
+  params:
+    threshold: "0.8"
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMGuardrail
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: my-custom-guardrail
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  guardrailName: my-custom-guardrail
+  # Run your own CustomGuardrail subclass baked into the proxy image
+  # (set LiteLLMInstance.spec.image to a custom build containing the class).
+  provider: custom_guardrail
+  mode: pre_call
+  guardrailClass: my_pkg.adapters.MyGuardrail
+  params:
+    threshold: "0.8"
