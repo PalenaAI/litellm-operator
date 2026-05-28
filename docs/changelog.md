@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`LiteLLMGuardrail` — HTTP/API guardrails via `generic_guardrail_api`.** You can now point the proxy at any HTTP service you host (e.g. a container running in your cluster) instead of baking a Python class into the proxy image. Set `spec.provider: generic_guardrail_api` and `spec.apiBase` to your guardrail Service; LiteLLM POSTs request/response content to `{apiBase}/beta/litellm_basic_guardrail_api` and acts on the `{action, blocked_reason, texts, images}` verdict it returns. New `spec.unreachableFallback` field (`fail_closed` / `fail_open`) controls behavior when the endpoint is unreachable, `spec.apiKeySecretRef` is sent as a Bearer token, and `spec.params` are forwarded under `additional_provider_specific_params`. The controller validates that `apiBase` is set for this provider and that `unreachableFallback` is only used with it. Note: this is a BETA LiteLLM feature — its request/response contract may change.
+- **`LiteLLMGuardrail` — `custom_guardrail` class path support.** Added `spec.guardrailClass`, the dotted Python import path to a `CustomGuardrail` subclass (e.g. `my_pkg.adapters.MyGuardrail`). Previously `provider: custom_guardrail` emitted the literal `guardrail: custom_guardrail` into `proxy_server_config.yaml`, which LiteLLM cannot resolve, so custom guardrails were unusable end-to-end. The operator now writes the class path as `litellm_params.guardrail`, and the controller enforces that `guardrailClass` is set iff the provider is `custom_guardrail`. The class and its dependencies must be present in the proxy image (custom image via `spec.image`).
+
+## [0.11.3] - 2026-05-26
+
+### Security
+
+- **Go toolchain bumped to 1.25.10.** The previous Dockerfile pin (`cd05a378…`) and `go.mod` directive (`go 1.25.0`) both resolved to Go 1.25.9 in practice, which carries five HIGH stdlib CVEs (CVE-2026-33811, -33814, -39820, -39836, -42499) that broke the weekly Trivy scan against `:latest` and the govulncheck CI step. `go.mod` is now `go 1.25.10` and the Dockerfile pins `golang:1.25@sha256:c138bff7…` (= Go 1.25.10). All seven `actions/setup-go` invocations in CI / E2E / release / scheduled now use `check-latest: true` so future Go patch releases flow in via the latest matching `go 1.25.x` without requiring a `go.mod` edit.
+- **`golang.org/x/net` bumped 0.52.0 → 0.55.0** to clear GO-2026-4918 (HTTP/2 server-push DoS) — the only third-party finding from govulncheck. Pulled in by `go mod tidy`; `x/sys`, `x/term`, `x/text`, and `x/tools` came along as transitive bumps.
+
+### Fixed
+
+- **`LiteLLMCredential` is now actually honored at request time.** The credential controller previously rendered credentials into `credential_list` inside `proxy_server_config.yaml`. LiteLLM only merges `credential_list` entries into models defined in the config file's `model_list`; models registered via `POST /model/new` (which is how the operator registers every `LiteLLMModel`) are stored in the DB and *do not* see config-level credentials. Net effect: `LiteLLMModel.spec.litellmParams.credentialRef` was silently a no-op for the entire v0.11.x series, and any provider that requires `api_base`/`api_version` (notably all Azure OpenAI / Azure AI Foundry models) failed with `Must provide one of the base_url or azure_endpoint arguments`. The controller now reconciles credentials against LiteLLM's `/credentials` API (`POST` / `PATCH` / `DELETE` `/credentials/{name}`), which stores them in the DB encrypted with `LITELLM_SALT_KEY` and merges them into request-time `litellm_params`. The credential is now also visible in the Admin UI's Credentials tab.
+
+### Changed
+
+- **Kubernetes Secret rotation now propagates to LiteLLM in seconds.** The credential controller adds a Secret watch: when the referenced `apiKeySecretRef` Secret changes, the controller is enqueued immediately, computes a fresh `(spec + secret-value)` hash, and pushes a `PATCH /credentials/{name}` if the hash differs from the one stored in the `litellm.palena.ai/sync-hash` annotation. No proxy pod restart is required — DB credentials are looked up on each request.
+- **BREAKING (internal):** `BuildConfigMap`, `BuildDeployment`, and `GenerateProxyConfig` in `internal/resources` no longer take a `[]LiteLLMCredential` parameter. The `CREDENTIAL_<name>_API_KEY` env var the operator used to inject on the proxy Deployment (so config-level `os.environ/...` references resolved at startup) is no longer emitted, and the `credential_list` block in `proxy_server_config.yaml` is no longer rendered. This is a no-op for end users — credentials still work the same from the CR side — but anyone reading the rendered ConfigMap directly will notice the section is gone.
+- **`LiteLLMCredential` controller now requires a Ready `LiteLLMInstance`.** Previously the controller could validate a credential against a not-yet-ready instance (because rendering into a config file did not need the proxy reachable). The new flow needs the proxy `/credentials` endpoint, so credentials whose instance is not Ready stay `Configured=false` with `reason=InstanceNotReady` until the instance reports ready. Order of CR creation does not matter — once the instance is ready, the Secret-watch + periodic resync push the credential automatically.
+
+### Notes
+
+- **Migrating an existing v0.11.x cluster:** on upgrade, the new controller will register each `LiteLLMCredential` against `/credentials` on its first reconcile. The old `credential_list` block in the proxy `ConfigMap` is dropped on the next instance reconcile, the proxy rolls once (because the ConfigMap hash changes), and from then on credentials are DB-backed. Any existing `LiteLLMModel` with `credentialRef` continues to send `litellm_credential_name` in its params — that wire format is unchanged; only what's behind the lookup moved from config to DB.
+
 ## [0.11.2] - 2026-05-21
 
 ### Fixed
