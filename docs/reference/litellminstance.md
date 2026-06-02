@@ -310,6 +310,41 @@ spec:
 | `connectionPool` | *ConnectionPoolSpec | Connection pool settings |
 | `migration` | *MigrationSpec | Database migration settings |
 
+#### `database.migration`
+
+The migration Job runs `prisma migrate deploy` (applying LiteLLM's versioned migration files in [`litellm-proxy-extras/migrations`](https://github.com/BerriAI/litellm/tree/main/litellm-proxy-extras/litellm_proxy_extras/migrations)) — the same command LiteLLM's own componentized chart uses. **Required for LiteLLM v1.86+**, which disables schema updates in app pods (see PR [#27557](https://github.com/BerriAI/litellm/pull/27557)).
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enabled` | bool | `true` | Run the migration Job before the proxy starts |
+| `timeout` | string | `"300s"` | Migration Job timeout |
+| `useDatabaseImage` | bool | `false` | Run LiteLLM's dedicated `litellm-migrations` migrations image instead of `prisma migrate deploy` in the gateway image. When `true`, **only** the database image runs — the operator does not also invoke prisma inside the gateway image |
+| `databaseImage` | *DatabaseImageSpec | — | Override repo/tag/pullPolicy for the database image. Only consulted when `useDatabaseImage: true`. Repo defaults to `ghcr.io/berriai/litellm-migrations`; tag defaults to `spec.image.tag` so versions stay aligned |
+
+**When to enable `useDatabaseImage`:**
+
+- You are on LiteLLM v1.86+ and want the maintained recovery logic (P3005 baseline, P3009/P3018 idempotent retries, v2 migration resolver) for free.
+- You are upgrading from a pre-v0.12 operator that ran `prisma db push` against your DB — the database image's recovery flow heals the resulting `_prisma_migrations` / schema drift automatically.
+
+**Tag availability caveat:** as of June 2026, `ghcr.io/berriai/litellm-migrations` only publishes release-candidate tags (e.g. `v1.87.0-rc.1`, `v1.88.0-rc.1`). If your gateway tag isn't published as a migrations tag yet, either override `databaseImage.tag` to one that exists or stay on the gateway-image path. The gateway-image path now invokes the same `ProxyExtrasDBManager.setup_database(use_migrate=True, use_v2_resolver=True)` entry the dedicated image uses and works on every LiteLLM v1.85+ gateway tag (verified end-to-end against v1.85.3, v1.86.1, and v1.87.0).
+
+Example:
+
+```yaml
+spec:
+  database:
+    external:
+      connectionSecretRef:
+        name: litellm-db
+        key: DATABASE_URL
+    migration:
+      enabled: true
+      useDatabaseImage: true        # run only ghcr.io/berriai/litellm-migrations
+      # databaseImage:               # optional override (e.g. internal mirror)
+      #   repository: registry.example.com/mirror/litellm-migrations
+      #   tag: v1.87.0
+```
+
 ### `redis`
 
 | Field | Type | Default | Description |

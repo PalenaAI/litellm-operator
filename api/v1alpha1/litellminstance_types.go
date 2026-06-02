@@ -653,6 +653,12 @@ type ConnectionPoolSpec struct {
 }
 
 // MigrationSpec defines database migration settings.
+//
+// Since v0.12.x the operator runs `prisma migrate deploy` (applying
+// LiteLLM's versioned migration files in `litellm-proxy-extras/migrations`)
+// rather than `prisma db push --accept-data-loss`. This matches the command
+// LiteLLM's own componentized chart uses and is mandatory for LiteLLM
+// v1.86+, which disables schema updates in app pods (PR #27557).
 type MigrationSpec struct {
 	// Run database migration before starting.
 	// +kubebuilder:default=true
@@ -661,6 +667,56 @@ type MigrationSpec struct {
 	// Timeout for migration job.
 	// +kubebuilder:default="300s"
 	Timeout string `json:"timeout,omitempty"`
+
+	// UseDatabaseImage switches the migration Job from running
+	// `prisma migrate deploy` inside the gateway image to running LiteLLM's
+	// dedicated `litellm-migrations` migrations image instead. That image's
+	// entrypoint runs migrations with the componentized recovery logic
+	// (P3005/P3009/P3018 retries, v2 migration resolver) — the operator
+	// only injects DATABASE_URL and lets the image do the rest.
+	//
+	// When true, ONLY the database image runs — the operator does not also
+	// invoke prisma inside the gateway image. Recommended for LiteLLM
+	// v1.86+ and especially for upgrading from operator versions that
+	// previously used `prisma db push` (the database image auto-recovers
+	// from the resulting `_prisma_migrations` / schema drift).
+	//
+	// Tag availability caveat: as of June 2026, ghcr.io/berriai/litellm-
+	// migrations only publishes release-candidate tags (e.g.
+	// v1.87.0-rc.1, v1.88.0-rc.1). If your gateway tag is not yet
+	// published as a migrations tag, override via DatabaseImage.Tag or
+	// stay on the gateway-image path (which works on every LiteLLM v1.85+
+	// gateway tag — the operator runs the same setup_database recovery
+	// logic inside the gateway image).
+	// +optional
+	UseDatabaseImage bool `json:"useDatabaseImage,omitempty"`
+
+	// DatabaseImage overrides the migration image used when
+	// UseDatabaseImage is true. Repository defaults to
+	// "ghcr.io/berriai/litellm-migrations" and Tag defaults to spec.image.tag
+	// so the migrations image stays version-aligned with the gateway. The
+	// gateway image's pullSecrets are reused for this image too. Only
+	// consulted when UseDatabaseImage is true.
+	// +optional
+	DatabaseImage *DatabaseImageSpec `json:"databaseImage,omitempty"`
+}
+
+// DatabaseImageSpec overrides the dedicated LiteLLM migrations image used
+// when MigrationSpec.UseDatabaseImage is true.
+type DatabaseImageSpec struct {
+	// Repository for the database migration image.
+	// Defaults to "ghcr.io/berriai/litellm-migrations".
+	// +optional
+	Repository string `json:"repository,omitempty"`
+
+	// Tag for the database migration image. Defaults to spec.image.tag so
+	// the migrations image stays version-aligned with the gateway image.
+	// +optional
+	Tag string `json:"tag,omitempty"`
+
+	// Image pull policy.
+	// +optional
+	PullPolicy corev1.PullPolicy `json:"pullPolicy,omitempty"`
 }
 
 // RedisSpec defines Redis configuration.
