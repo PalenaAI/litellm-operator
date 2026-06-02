@@ -203,7 +203,7 @@ func (r *LiteLLMCredentialReconciler) fetchAPIKey(ctx context.Context, cred *lit
 	}
 	val, ok := secret.Data[cred.Spec.APIKeySecretRef.Key]
 	if !ok {
-		return "", fmt.Errorf("Secret %q: %w: %s",
+		return "", fmt.Errorf("secret %q: %w: %s",
 			cred.Spec.APIKeySecretRef.Name, errSecretKeyMissing, cred.Spec.APIKeySecretRef.Key)
 	}
 	return string(val), nil

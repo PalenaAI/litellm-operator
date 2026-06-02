@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-06-02
+
 ### Fixed
 
 - **Database migration Job now actually applies LiteLLM's versioned migrations.** The Job command has switched from `prisma db push --schema=/app/schema.prisma --accept-data-loss --skip-generate` to `prisma migrate deploy --schema=/app/schema.prisma`. `db push` syncs the live DB to `schema.prisma` directly and **ignores LiteLLM's 38+ versioned migration files** in `litellm-proxy-extras/migrations` — fine for fresh installs, but on upgrades it left `_prisma_migrations` out of sync with reality and could drop columns under `--accept-data-loss`. The previous behavior was masked pre-LiteLLM v1.86 because the proxy itself ran a schema sync on startup; v1.86's componentization PR ([#27557](https://github.com/BerriAI/litellm/pull/27557)) disabled in-pod schema updates, exposing the issue as failed migrations / missing columns at request time. `migrate deploy` is the same command LiteLLM's own componentized Helm chart uses and works against every gateway image v1.85.x and later (the migrations directory is shipped in the image).

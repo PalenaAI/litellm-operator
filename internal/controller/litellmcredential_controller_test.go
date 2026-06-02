@@ -109,7 +109,7 @@ var _ = Describe("LiteLLMCredential Controller", func() {
 			// First pass adds the finalizer.
 			res, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: credKey})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(res.RequeueAfter > 0).To(BeTrue())
+			Expect(res.RequeueAfter).To(BeNumerically(">", 0))
 
 			// Second pass runs the validation/push path; with the instance
 			// not Ready, resolveInstance fails and we land in the

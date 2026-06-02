@@ -23,9 +23,14 @@ import (
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 )
 
+// Pinning a single tag across tests keeps the test matrix focused on the
+// migration code path (image selection, command, security context) rather
+// than tag plumbing.
+const testGatewayTag = "v1.86.1"
+
 func TestBuildMigrationJob_DefaultUsesMigrateDeployOnGatewayImage(t *testing.T) {
 	instance := newTestInstance()
-	instance.Spec.Image.Tag = "v1.86.1"
+	instance.Spec.Image.Tag = testGatewayTag
 
 	job := BuildMigrationJob(instance, map[string]string{"app": "litellm"})
 	if job == nil {
@@ -36,7 +41,7 @@ func TestBuildMigrationJob_DefaultUsesMigrateDeployOnGatewayImage(t *testing.T) 
 	if !strings.HasPrefix(c.Image, "ghcr.io/berriai/litellm:") {
 		t.Errorf("expected default gateway image, got %q", c.Image)
 	}
-	if !strings.HasSuffix(c.Image, ":v1.86.1") {
+	if !strings.HasSuffix(c.Image, ":"+testGatewayTag) {
 		t.Errorf("expected gateway image tag to match spec.image.tag, got %q", c.Image)
 	}
 	if len(c.Command) != 3 || c.Command[0] != "sh" || c.Command[1] != "-c" {
@@ -69,7 +74,7 @@ func TestBuildMigrationJob_DefaultUsesMigrateDeployOnGatewayImage(t *testing.T) 
 
 func TestBuildMigrationJob_NonRootUsesNonRootImage(t *testing.T) {
 	instance := newTestInstance()
-	instance.Spec.Image.Tag = "v1.86.1"
+	instance.Spec.Image.Tag = testGatewayTag
 	yes := true
 	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{RunAsNonRoot: &yes}
 
@@ -87,7 +92,7 @@ func TestBuildMigrationJob_NonRootUsesNonRootImage(t *testing.T) {
 
 func TestBuildMigrationJob_UseDatabaseImageRunsDedicatedImageOnly(t *testing.T) {
 	instance := newTestInstance()
-	instance.Spec.Image.Tag = "v1.86.1"
+	instance.Spec.Image.Tag = testGatewayTag
 	instance.Spec.Database.Migration = &litellmv1alpha1.MigrationSpec{
 		Enabled:          true,
 		UseDatabaseImage: true,
@@ -96,7 +101,7 @@ func TestBuildMigrationJob_UseDatabaseImageRunsDedicatedImageOnly(t *testing.T) 
 	job := BuildMigrationJob(instance, map[string]string{"app": "litellm"})
 	c := job.Spec.Template.Spec.Containers[0]
 
-	if c.Image != "ghcr.io/berriai/litellm-migrations:v1.86.1" {
+	if c.Image != "ghcr.io/berriai/litellm-migrations:"+testGatewayTag {
 		t.Errorf("expected dedicated migrations image (NOT litellm-database, which is the old full-proxy image) with gateway tag, got %q", c.Image)
 	}
 	// Crucially: no Command override. The image entrypoint
@@ -123,7 +128,7 @@ func TestBuildMigrationJob_UseDatabaseImageRunsDedicatedImageOnly(t *testing.T) 
 
 func TestBuildMigrationJob_UseDatabaseImageRespectsOverride(t *testing.T) {
 	instance := newTestInstance()
-	instance.Spec.Image.Tag = "v1.86.1"
+	instance.Spec.Image.Tag = testGatewayTag
 	instance.Spec.Database.Migration = &litellmv1alpha1.MigrationSpec{
 		Enabled:          true,
 		UseDatabaseImage: true,
@@ -143,7 +148,7 @@ func TestBuildMigrationJob_UseDatabaseImageNonRootStillRunsDatabaseImage(t *test
 	// Toggling runAsNonRoot on the instance must NOT switch the migration
 	// image away from litellm-migrations — that image is always non-root.
 	instance := newTestInstance()
-	instance.Spec.Image.Tag = "v1.86.1"
+	instance.Spec.Image.Tag = testGatewayTag
 	yes := true
 	instance.Spec.Security = &litellmv1alpha1.SecuritySpec{RunAsNonRoot: &yes}
 	instance.Spec.Database.Migration = &litellmv1alpha1.MigrationSpec{
@@ -162,7 +167,7 @@ func TestBuildMigrationJob_ToggleProducesDistinctJobNames(t *testing.T) {
 	// Switching between the two migration modes must produce different Job
 	// names so the new Job doesn't collide with the previous one.
 	instance := newTestInstance()
-	instance.Spec.Image.Tag = "v1.86.1"
+	instance.Spec.Image.Tag = testGatewayTag
 
 	gatewayJob := BuildMigrationJob(instance, nil)
 
