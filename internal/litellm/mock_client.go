@@ -414,6 +414,7 @@ type MockHealthService struct {
 	CheckLivenessFunc  func(ctx context.Context) error
 	CheckReadinessFunc func(ctx context.Context) error
 	ReadinessFunc      func(ctx context.Context) (*ReadinessResponse, error)
+	CachePingFunc      func(ctx context.Context) (*CachePingResponse, error)
 	CheckFunc          func(ctx context.Context) (*HealthCheckResponse, error)
 }
 
@@ -435,7 +436,14 @@ func (m *MockHealthService) Readiness(ctx context.Context) (*ReadinessResponse, 
 	if m.ReadinessFunc != nil {
 		return m.ReadinessFunc(ctx)
 	}
-	return &ReadinessResponse{Status: "connected", RedisConnected: true}, nil
+	return &ReadinessResponse{Status: "healthy", DBHealth: "connected"}, nil
+}
+
+func (m *MockHealthService) CachePing(ctx context.Context) (*CachePingResponse, error) {
+	if m.CachePingFunc != nil {
+		return m.CachePingFunc(ctx)
+	}
+	return &CachePingResponse{Status: "healthy", CacheType: "redis", PingResponse: true, SetCacheResponse: "success"}, nil
 }
 
 func (m *MockHealthService) Check(ctx context.Context) (*HealthCheckResponse, error) {

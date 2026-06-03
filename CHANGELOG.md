@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`RedisReady` condition is no longer permanently `False` ([#10](https://github.com/PalenaAI/litellm-operator/issues/10)).** The instance health probe parsed a `redis` boolean off `GET /health/readiness`, but LiteLLM has never emitted that field — and as of 1.86.x the public readiness payload was reduced to `{"status", "db"}` — so the absent field decoded to Go's zero value (`false`), reporting Redis as disconnected on every reconcile and generating continuous spurious `RedisDisconnected` warning events despite healthy Redis. Redis health is now probed correctly: when response caching is Redis-backed, the operator calls `GET /cache/ping` (which actively pings Redis and performs a test write) for a genuine connectivity verdict; when Redis is wired only for router coordination (no Redis-backed cache), LiteLLM exposes no runtime signal, so the condition reports `Ready=True` with reason `RedisConfigured` instead of falsely claiming disconnection. The phantom `ReadinessResponse.RedisConnected`/`CacheHealth` fields were removed.
+
 ## [0.12.0] - 2026-06-02
 
 ### Fixed
