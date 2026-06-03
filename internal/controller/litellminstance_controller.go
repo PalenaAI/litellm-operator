@@ -1022,8 +1022,7 @@ func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, ins
 		return
 	}
 
-	readiness, err := api.Health().Readiness(probeCtx)
-	if err != nil {
+	if _, err := api.Health().Readiness(probeCtx); err != nil {
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
 			Status:             metav1.ConditionFalse,
@@ -1043,38 +1042,100 @@ func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, ins
 			"LiteLLM instance is healthy again")
 	}
 
-	// Redis status: only set if Redis is configured on the spec; otherwise
-	// an absent RedisStatus is the correct signal ("not applicable").
-	if instance.Spec.Redis != nil {
-		prevConnected := instance.Status.Redis != nil && instance.Status.Redis.Connected
-		instance.Status.Redis = &litellmv1alpha1.RedisStatus{
-			Connected: readiness.RedisConnected,
+	// Redis status is probed separately: LiteLLM's /health/readiness does not
+	// report Redis connectivity (see ReadinessResponse docs).
+	r.probeRedisHealth(probeCtx, instance, api)
+}
+
+// probeRedisHealth sets the RedisReady condition and status.Redis.
+//
+// LiteLLM exposes no Redis-health field on /health/readiness. The only
+// endpoint that genuinely tests Redis is GET /cache/ping, and it only works
+// when response caching is backed by Redis. We therefore:
+//
+//   - skip entirely when Redis is not enabled (absent condition == "not applicable");
+//   - call /cache/ping for a real connectivity verdict when caching is Redis-backed;
+//   - otherwise (Redis wired only for router coordination) report it as
+//     configured rather than emitting spurious "disconnected" warnings, because
+//     LiteLLM surfaces no runtime signal for that usage.
+func (r *LiteLLMInstanceReconciler) probeRedisHealth(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, api litellm.Client) {
+	if instance.Spec.Redis == nil || !instance.Spec.Redis.Enabled {
+		// Not applicable: clear any stale state.
+		instance.Status.Redis = nil
+		meta.RemoveStatusCondition(&instance.Status.Conditions, ConditionRedisReady)
+		return
+	}
+
+	prevConnected := instance.Status.Redis != nil && instance.Status.Redis.Connected
+
+	// When Redis is configured purely for router coordination (no Redis-backed
+	// response cache), LiteLLM provides no endpoint to test the connection.
+	// Report it as configured so the proxy being Ready is the implicit signal,
+	// instead of perpetually claiming disconnection.
+	if !isRedisBackedCaching(instance) {
+		instance.Status.Redis = &litellmv1alpha1.RedisStatus{Connected: true}
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionRedisReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "RedisConfigured",
+			Message:            "Redis is configured; enable Redis response caching to surface runtime connectivity checks",
+			ObservedGeneration: instance.Generation,
+		})
+		return
+	}
+
+	// Redis-backed caching is enabled: /cache/ping actively pings Redis and
+	// performs a test write, giving us a genuine connectivity verdict.
+	ping, err := api.Health().CachePing(ctx)
+	connected := err == nil && (ping.PingResponse || strings.EqualFold(ping.Status, "healthy"))
+
+	instance.Status.Redis = &litellmv1alpha1.RedisStatus{Connected: connected}
+	if connected {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionRedisReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "RedisConnected",
+			Message:            "Redis connection is healthy",
+			ObservedGeneration: instance.Generation,
+		})
+		if !prevConnected {
+			emitEvent(r.Recorder, instance, corev1.EventTypeNormal, EventReasonRedisConnected,
+				"Redis connection restored")
 		}
-		if readiness.RedisConnected {
-			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-				Type:               ConditionRedisReady,
-				Status:             metav1.ConditionTrue,
-				Reason:             "RedisConnected",
-				Message:            "Redis connection is healthy",
-				ObservedGeneration: instance.Generation,
-			})
-			if !prevConnected {
-				emitEvent(r.Recorder, instance, corev1.EventTypeNormal, EventReasonRedisConnected,
-					"Redis connection restored")
-			}
-		} else {
-			meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
-				Type:               ConditionRedisReady,
-				Status:             metav1.ConditionFalse,
-				Reason:             "RedisDisconnected",
-				Message:            "Redis connection is not healthy",
-				ObservedGeneration: instance.Generation,
-			})
-			if prevConnected {
-				emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonRedisDisconnected,
-					"Redis connection lost")
-			}
-		}
+		return
+	}
+
+	msg := "Redis connection is not healthy"
+	if err != nil {
+		msg = fmt.Sprintf("Redis cache ping failed: %v", err)
+	}
+	meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+		Type:               ConditionRedisReady,
+		Status:             metav1.ConditionFalse,
+		Reason:             "RedisDisconnected",
+		Message:            msg,
+		ObservedGeneration: instance.Generation,
+	})
+	if prevConnected {
+		emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonRedisDisconnected,
+			"Redis connection lost")
+	}
+}
+
+// isRedisBackedCaching reports whether response caching is enabled with a
+// Redis backend — the only configuration in which LiteLLM's /cache/ping can
+// verify Redis connectivity.
+func isRedisBackedCaching(instance *litellmv1alpha1.LiteLLMInstance) bool {
+	c := instance.Spec.Caching
+	if c == nil || !c.Enabled {
+		return false
+	}
+	switch c.Type {
+	// Empty defaults to "redis" (see CachingSpec.Type kubebuilder default).
+	case "", "redis", "redis-semantic":
+		return true
+	default:
+		return false
 	}
 }
 
