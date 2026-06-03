@@ -64,6 +64,9 @@ Service account name
 Operator image
 */}}
 {{- define "litellm-operator.image" -}}
-{{- $tag := default .Chart.AppVersion .Values.image.tag }}
+{{- /* Released operator images are tagged v<version> (e.g. v0.12.1); appVersion
+       carries the bare version, so prepend "v" when falling back to it. An
+       explicit image.tag is used verbatim. */ -}}
+{{- $tag := .Values.image.tag | default (printf "v%s" .Chart.AppVersion) }}
 {{- printf "%s:%s" .Values.image.repository $tag }}
 {{- end }}
