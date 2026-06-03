@@ -5,7 +5,7 @@ metadata:
     alm-examples: '[]'
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.12.0
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.12.1
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     repository: https://github.com/PalenaAI/litellm-operator
@@ -98,6 +98,8 @@ spec:
         path: defaultOn
       - displayName: Env Vars
         path: envVars
+      - displayName: Guardrail Class
+        path: guardrailClass
       - displayName: Guardrail Name
         path: guardrailName
       - displayName: Instance Ref
@@ -108,6 +110,8 @@ spec:
         path: params
       - displayName: Provider
         path: provider
+      - displayName: Unreachable Fallback
+        path: unreachableFallback
       version: v1alpha1
     - description: |-
         LiteLLMCustomer is the Schema for the litellmcustomers API.
