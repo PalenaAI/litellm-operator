@@ -107,7 +107,7 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 
 	gatewayTag := instance.Spec.Image.Tag
 	if gatewayTag == "" {
-		gatewayTag = "main-latest"
+		gatewayTag = "latest"
 	}
 
 	var (

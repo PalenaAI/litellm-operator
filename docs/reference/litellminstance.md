@@ -273,7 +273,7 @@ spec:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `repository` | string | `ghcr.io/berriai/litellm` | Container image repository |
-| `tag` | string | `main-latest` | Image tag |
+| `tag` | string | `latest` | Image tag |
 | `pullPolicy` | string | `IfNotPresent` | Image pull policy |
 | `pullSecrets` | []SecretRef | — | Image pull secrets |
 

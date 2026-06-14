@@ -63,7 +63,7 @@ func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string
 			Labels:    labels,
 		},
 		Data: map[string]string{
-			"proxy_server_config.yaml": string(configYAML),
+			configFileName: string(configYAML),
 		},
 	}, nil
 }

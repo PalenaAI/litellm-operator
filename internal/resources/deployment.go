@@ -34,6 +34,17 @@ const (
 	defaultImageRepo = "ghcr.io/berriai/litellm"
 	// nonRootImageRepo is the official non-root LiteLLM image (runs as nobody:65534).
 	nonRootImageRepo = "ghcr.io/berriai/litellm-non_root"
+	// configMountDir is the directory inside the LiteLLM pod where the
+	// generated proxy config ConfigMap is mounted.
+	configMountDir = "/app/config"
+	// configFileName is both the ConfigMap data key and the on-disk filename
+	// of the rendered proxy config. It is the single source of truth shared by
+	// the ConfigMap builder and the Deployment's volumeMount + CONFIG_FILE_PATH.
+	configFileName = "proxy_server_config.yaml"
+	// configFilePath is the absolute path litellm reads its config from. It is
+	// passed via the CONFIG_FILE_PATH env var (litellm does NOT honor
+	// LITELLM_CONFIG_DIR), so it must always match configMountDir/configFileName.
+	configFilePath = configMountDir + "/" + configFileName
 	// volumeNameColorTheme is the volume name for the Admin UI color theme ConfigMap.
 	volumeNameColorTheme = "color-theme"
 	// volumeNameCustomSSO is the volume name for the custom SSO handler ConfigMap.
@@ -81,7 +92,7 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 	}
 	tag := instance.Spec.Image.Tag
 	if tag == "" {
-		tag = "main-latest"
+		tag = "latest"
 	}
 	pullPolicy := instance.Spec.Image.PullPolicy
 	if pullPolicy == "" {
@@ -217,8 +228,14 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 
 func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName string) []corev1.EnvVar {
 	vars := []corev1.EnvVar{
-		{Name: "LITELLM_CONFIG_DIR", Value: "/app/config"},
-		// Required for the /model/new API endpoint used by the LiteLLMModel controller
+		// Point litellm at the mounted config file. litellm only reads its
+		// config from CONFIG_FILE_PATH (or --config); it does NOT honor
+		// LITELLM_CONFIG_DIR, so without this the rendered litellm_settings
+		// (success_callback/failure_callback/etc.) are silently dropped.
+		{Name: "CONFIG_FILE_PATH", Value: configFilePath},
+		// Required for the /model/new API endpoint used by the LiteLLMModel
+		// controller. litellm merges DB-stored models with the file's
+		// litellm_settings, so model_list:[] in the config file is fine.
 		{Name: "STORE_MODEL_IN_DB", Value: "True"},
 	}
 
@@ -547,7 +564,7 @@ func buildVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volum
 	mounts := []corev1.VolumeMount{
 		{
 			Name:      "config",
-			MountPath: "/app/config",
+			MountPath: configMountDir,
 			ReadOnly:  true,
 		},
 		{

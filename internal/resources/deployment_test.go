@@ -109,6 +109,69 @@ func TestBuildDeployment_LicenseSecretChangesTemplate(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_ConfigFilePathLoadsRenderedConfig(t *testing.T) {
+	instance := newTestInstance()
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil)
+	container := dep.Spec.Template.Spec.Containers[0]
+
+	// litellm only reads its config from CONFIG_FILE_PATH (or --config); it does
+	// NOT honor LITELLM_CONFIG_DIR. Without this env var the rendered
+	// litellm_settings (success_callback/failure_callback) are silently dropped.
+	var configFilePathVal string
+	for _, env := range container.Env {
+		if env.Name == "LITELLM_CONFIG_DIR" {
+			t.Error("LITELLM_CONFIG_DIR is dead/misleading — litellm does not honor it; use CONFIG_FILE_PATH")
+		}
+		if env.Name == "CONFIG_FILE_PATH" {
+			configFilePathVal = env.Value
+		}
+	}
+	if configFilePathVal == "" {
+		t.Fatal("CONFIG_FILE_PATH env var not set — litellm will not load the rendered config")
+	}
+	if configFilePathVal != configFilePath {
+		t.Errorf("CONFIG_FILE_PATH=%q, want %q", configFilePathVal, configFilePath)
+	}
+
+	// STORE_MODEL_IN_DB must remain True so DB-stored models still load
+	// alongside the file's litellm_settings (litellm merges the two).
+	storeModelInDB := false
+	for _, env := range container.Env {
+		if env.Name == "STORE_MODEL_IN_DB" && env.Value == "True" {
+			storeModelInDB = true
+		}
+	}
+	if !storeModelInDB {
+		t.Error("STORE_MODEL_IN_DB=True must be set so DB models load alongside file config")
+	}
+
+	// The env path must resolve to the actual mounted file: same mount dir as
+	// the volumeMount and same filename as the ConfigMap data key.
+	var mountDir string
+	for _, m := range container.VolumeMounts {
+		if m.Name == "config" {
+			mountDir = m.MountPath
+		}
+	}
+	if mountDir == "" {
+		t.Fatal("config volumeMount not found")
+	}
+	if want := mountDir + "/" + configFileName; configFilePathVal != want {
+		t.Errorf("CONFIG_FILE_PATH=%q does not match mounted path %q", configFilePathVal, want)
+	}
+
+	// And the ConfigMap actually exposes the file under that key.
+	cm, err := BuildConfigMap(instance, labels, nil)
+	if err != nil {
+		t.Fatalf("BuildConfigMap failed: %v", err)
+	}
+	if _, ok := cm.Data[configFileName]; !ok {
+		t.Errorf("ConfigMap has no %q key; CONFIG_FILE_PATH would point at a missing file", configFileName)
+	}
+}
+
 func TestBuildDeployment_CachingDisabled(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}

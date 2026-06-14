@@ -987,7 +987,7 @@ spec:
                     description: Container image repository.
                     type: string
                   tag:
-                    default: main-latest
+                    default: latest
                     description: Container image tag.
                     type: string
                 type: object

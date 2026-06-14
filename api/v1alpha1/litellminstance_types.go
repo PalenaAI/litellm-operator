@@ -523,7 +523,7 @@ type ImageSpec struct {
 	Repository string `json:"repository,omitempty"`
 
 	// Container image tag.
-	// +kubebuilder:default="main-latest"
+	// +kubebuilder:default="latest"
 	Tag string `json:"tag,omitempty"`
 
 	// Image pull policy.

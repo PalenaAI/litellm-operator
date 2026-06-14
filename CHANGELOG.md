@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Gateway now actually loads its generated config — `litellm_settings` (success/failure callbacks, etc.) are no longer silently dropped.** The operator mounted the rendered `proxy_server_config.yaml` ConfigMap at `/app/config` and set `LITELLM_CONFIG_DIR=/app/config`, but current LiteLLM does **not** honor `LITELLM_CONFIG_DIR` — it only reads its config from the `CONFIG_FILE_PATH` env var (or a `--config` arg). So the file was mounted but never read: completions returned 200 (models still loaded from the DB via `STORE_MODEL_IN_DB=True`, masking the bug) while `success_callback`/`failure_callback` and every other `litellm_settings` entry were ignored — no Langfuse traces (or any callback) were ever emitted. The Deployment now sets `CONFIG_FILE_PATH=/app/config/proxy_server_config.yaml`, derived from the same constants as the volumeMount path and the ConfigMap data key so they cannot drift, and litellm logs `Initialized Success Callbacks - [...]` on startup. The dead `LITELLM_CONFIG_DIR` env var was removed.
+
+### Changed
+
+- **Default gateway image tag is now `latest` instead of `main-latest`.** `main-latest` tracks LiteLLM's `main` branch (unreleased nightly builds, labeled `org.opencontainers.image.version=main`), which is a poor default for a "production-ready" gateway. `ghcr.io/berriai/litellm:latest` tracks the most recent tagged **release** (currently resolves to `v1.87.0`), so new `LiteLLMInstance`s without an explicit `spec.image.tag` get a released LiteLLM that satisfies the operator's v1.86+ migration assumptions. Existing CRs are unaffected (the value is already persisted); pin `spec.image.tag` for reproducible deployments. Applied consistently to the CRD default, the deployment/migration-Job fallbacks, and `status.version`.
+
 ## [0.12.1] - 2026-06-03
 
 ### Fixed

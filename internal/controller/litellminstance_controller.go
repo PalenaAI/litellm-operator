@@ -857,7 +857,7 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 	// Set version
 	instance.Status.Version = instance.Spec.Image.Tag
 	if instance.Status.Version == "" {
-		instance.Status.Version = "main-latest"
+		instance.Status.Version = "latest"
 	}
 
 	// SSO status
