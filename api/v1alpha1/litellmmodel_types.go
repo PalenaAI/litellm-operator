@@ -55,13 +55,20 @@ type LiteLLMModelParams struct {
 	// +optional
 	APIBase string `json:"apiBase,omitempty"`
 
+	// API version (e.g., "2024-10-21" for Azure OpenAI / Azure AI Foundry).
+	// Required by most Azure deployments. When credentialRef is set, the
+	// value from the LiteLLMCredential takes precedence over this field.
+	// +optional
+	APIVersion string `json:"apiVersion,omitempty"`
+
 	// Reference to Secret containing the provider API key.
 	// +optional
 	APIKeySecretRef *SecretKeyRef `json:"apiKeySecretRef,omitempty"`
 
 	// Reference to a LiteLLMCredential CR for provider authentication.
-	// When set, the model is registered with `litellm_credential_name`
-	// pointing at the credential, and apiKeySecretRef / apiBase on this
+	// When set, the credential's resolved api_base / api_version / api_key are
+	// written inline onto the model (and `litellm_credential_name` is also sent
+	// for Admin UI association). apiBase / apiVersion / apiKeySecretRef on this
 	// model are ignored in favor of the credential's values.
 	// +optional
 	CredentialRef *CredentialRef `json:"credentialRef,omitempty"`

@@ -45,6 +45,13 @@ const (
 	// AnnotationSyncHash stores the hash of the last synced spec.
 	AnnotationSyncHash = "litellm.palena.ai/sync-hash"
 
+	// AnnotationAuthMode records how a model's provider auth was last pushed
+	// ("credential" or "inline"). A flip between modes forces a delete+recreate
+	// of the LiteLLM model, because /model/update merges and cannot clear the
+	// provider fields (api_base/api_key/litellm_credential_name) left by the
+	// previous mode.
+	AnnotationAuthMode = "litellm.palena.ai/auth-mode"
+
 	// LabelInstanceName labels resources with the instance name.
 	LabelInstanceName = "litellm.palena.ai/instance"
 

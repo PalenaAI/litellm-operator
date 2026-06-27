@@ -147,18 +147,32 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 		Tags:          model.Spec.Tags,
 	}
 
-	// credentialRef takes precedence over inline apiBase/apiKeySecretRef.
-	// When set, the model is registered against an entry in the proxy's
-	// credential_list via litellm_credential_name — api_base/api_key come
-	// from the LiteLLMCredential, not from this spec.
+	// credentialRef takes precedence over inline apiBase/apiVersion/apiKeySecretRef.
+	//
+	// We resolve the credential's values and write api_base/api_version/api_key
+	// INLINE onto the model payload (in addition to litellm_credential_name)
+	// rather than relying solely on request-time named-credential resolution.
+	// LiteLLM hydrates a DB-stored model's litellm_credential_name at router
+	// load time, and on a cold start that happens before DB-backed credentials
+	// are loaded into the in-memory credential_list — leaving Azure models with
+	// no api_base ("Must provide ... azure_endpoint"). Inline params are stored
+	// on the deployment and always win over the named credential (LiteLLM only
+	// fills fields left None), so this is restart-safe. The credential name is
+	// still sent for Admin UI association and best-effort merge of extra params.
+	authMode := authModeInline
 	if model.Spec.LiteLLMParams.CredentialRef != nil {
-		credName, err := r.resolveCredentialName(ctx, model)
+		authMode = authModeCredential
+		cred, err := r.resolveCredential(ctx, model)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
 		}
-		params.LiteLLMCredentialName = credName
+		params.LiteLLMCredentialName = cred.name
+		params.APIBase = cred.apiBase
+		params.APIVersion = cred.apiVersion
+		params.APIKey = cred.apiKey
 	} else {
 		params.APIBase = model.Spec.LiteLLMParams.APIBase
+		params.APIVersion = model.Spec.LiteLLMParams.APIVersion
 		if model.Spec.LiteLLMParams.APIKeySecretRef != nil {
 			apiKey, err := getSecretValue(ctx, r.Client, model.Namespace, model.Spec.LiteLLMParams.APIKeySecretRef)
 			if err != nil {
@@ -180,50 +194,69 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 		}
 	}
 
-	if model.Status.LiteLLMModelID == "" {
+	// The sync hash covers the resolved provider params (api_base/api_version/
+	// api_key), not just model.Spec — so a Secret rotation or an edit to the
+	// referenced LiteLLMCredential re-pushes even though model.Spec is
+	// unchanged. (The credential watch already re-enqueues dependent models.)
+	currentHash := computeSpecHash(struct {
+		Spec   litellmv1alpha1.LiteLLMModelSpec
+		Params litellm.ModelParams
+	}{model.Spec, params})
+
+	switch {
+	case model.Status.LiteLLMModelID == "":
 		resp, err := apiClient.Models().Create(ctx, req)
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("create model: %w", err)
 		}
-		model.Status.LiteLLMModelID = resp.ModelID
-		model.Status.Synced = true
-		// Persist status first so re-queued reconciliations see the model ID
-		if err := r.Status().Update(ctx, model); err != nil {
-			return ctrl.Result{}, fmt.Errorf("update status after create: %w", err)
-		}
-		if model.Annotations == nil {
-			model.Annotations = map[string]string{}
-		}
-		model.Annotations[AnnotationSyncHash] = computeSpecHash(model.Spec)
-		if err := r.Update(ctx, model); err != nil {
+		if err := r.recordSync(ctx, model, resp.ModelID, currentHash, authMode); err != nil {
 			return ctrl.Result{}, err
 		}
 		log.Info("created model", "modelId", resp.ModelID)
 		emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonCreated,
 			"Model %q registered with LiteLLM (id=%s)", model.Spec.ModelName, resp.ModelID)
-	} else {
-		currentHash := computeSpecHash(model.Spec)
-		if model.Annotations[AnnotationSyncHash] != currentHash {
-			req.ModelID = model.Status.LiteLLMModelID
-			if req.ModelInfo == nil {
-				req.ModelInfo = &litellm.ModelInfoReq{}
-			}
-			req.ModelInfo.ID = model.Status.LiteLLMModelID
-			if err := apiClient.Models().Update(ctx, req); err != nil {
-				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update model: %w", err)
-			}
-			if model.Annotations == nil {
-				model.Annotations = map[string]string{}
-			}
-			model.Annotations[AnnotationSyncHash] = currentHash
-			if err := r.Update(ctx, model); err != nil {
-				return ctrl.Result{}, err
-			}
-			model.Status.Synced = true
-			log.Info("updated model", "modelId", model.Status.LiteLLMModelID)
-			emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonUpdated,
-				"Model %q updated in LiteLLM", model.Spec.ModelName)
+
+	case model.Annotations[AnnotationSyncHash] == currentHash && model.Annotations[AnnotationAuthMode] == authMode:
+		// In sync; nothing to push.
+
+	case model.Annotations[AnnotationAuthMode] != "" && model.Annotations[AnnotationAuthMode] != authMode:
+		// Auth mode flipped (credential <-> inline). /model/update merges and
+		// cannot clear the provider fields left by the previous mode, so delete
+		// and recreate to guarantee a clean record (no stale api_base / api_key
+		// / litellm_credential_name).
+		if err := apiClient.Models().Delete(ctx, model.Status.LiteLLMModelID); err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("delete model for auth-mode switch: %w", err)
 		}
+		resp, err := apiClient.Models().Create(ctx, req)
+		if err != nil {
+			// Clear the stale ID so the next reconcile recreates rather than
+			// trying to update a model that no longer exists.
+			model.Status.LiteLLMModelID = ""
+			_ = r.Status().Update(ctx, model)
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("recreate model for auth-mode switch: %w", err)
+		}
+		if err := r.recordSync(ctx, model, resp.ModelID, currentHash, authMode); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.Info("recreated model after auth-mode switch", "modelId", resp.ModelID, "authMode", authMode)
+		emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonUpdated,
+			"Model %q recreated in LiteLLM after auth-mode switch to %q", model.Spec.ModelName, authMode)
+
+	default:
+		req.ModelID = model.Status.LiteLLMModelID
+		if req.ModelInfo == nil {
+			req.ModelInfo = &litellm.ModelInfoReq{}
+		}
+		req.ModelInfo.ID = model.Status.LiteLLMModelID
+		if err := apiClient.Models().Update(ctx, req); err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update model: %w", err)
+		}
+		if err := r.recordSync(ctx, model, model.Status.LiteLLMModelID, currentHash, authMode); err != nil {
+			return ctrl.Result{}, err
+		}
+		log.Info("updated model", "modelId", model.Status.LiteLLMModelID)
+		emitEvent(r.Recorder, model, corev1.EventTypeNormal, EventReasonUpdated,
+			"Model %q updated in LiteLLM", model.Spec.ModelName)
 	}
 
 	// Poll /health to report operand health into model status. Failure is
@@ -271,20 +304,65 @@ func (r *LiteLLMModelReconciler) updateModelHealth(ctx context.Context, apiClien
 	model.Status.Health = "unknown"
 }
 
-// resolveCredentialName fetches the LiteLLMCredential referenced by the model's
-// credentialRef and returns its spec.credentialName (the key that matches an
-// entry in the proxy's credential_list). The credential must live in the same
-// namespace as the model.
-func (r *LiteLLMModelReconciler) resolveCredentialName(ctx context.Context, model *litellmv1alpha1.LiteLLMModel) (string, error) {
+const (
+	authModeInline     = "inline"
+	authModeCredential = "credential"
+)
+
+// resolvedCredential holds the LiteLLMCredential values the model controller
+// writes inline onto the model payload.
+type resolvedCredential struct {
+	name       string
+	apiBase    string
+	apiVersion string
+	apiKey     string
+}
+
+// resolveCredential fetches the LiteLLMCredential referenced by the model's
+// credentialRef and resolves its name plus its api_base / api_version / api_key
+// (reading the credential's Secret). These are written inline onto the model so
+// LiteLLM does not depend on request-time named-credential resolution, which is
+// unreliable for DB-stored models on a cold start. The credential must live in
+// the same namespace as the model.
+func (r *LiteLLMModelReconciler) resolveCredential(ctx context.Context, model *litellmv1alpha1.LiteLLMModel) (resolvedCredential, error) {
 	var cred litellmv1alpha1.LiteLLMCredential
 	key := client.ObjectKey{Name: model.Spec.LiteLLMParams.CredentialRef.Name, Namespace: model.Namespace}
 	if err := r.Get(ctx, key, &cred); err != nil {
-		return "", fmt.Errorf("resolve credentialRef %q: %w", model.Spec.LiteLLMParams.CredentialRef.Name, err)
+		return resolvedCredential{}, fmt.Errorf("resolve credentialRef %q: %w", model.Spec.LiteLLMParams.CredentialRef.Name, err)
 	}
 	if cred.Spec.CredentialName == "" {
-		return "", fmt.Errorf("credential %q has empty credentialName", cred.Name)
+		return resolvedCredential{}, fmt.Errorf("credential %q has empty credentialName", cred.Name)
 	}
-	return cred.Spec.CredentialName, nil
+	apiKey, err := getSecretValue(ctx, r.Client, cred.Namespace, &cred.Spec.APIKeySecretRef)
+	if err != nil {
+		return resolvedCredential{}, fmt.Errorf("resolve credential %q API key: %w", cred.Name, err)
+	}
+	return resolvedCredential{
+		name:       cred.Spec.CredentialName,
+		apiBase:    cred.Spec.APIBase,
+		apiVersion: cred.Spec.APIVersion,
+		apiKey:     apiKey,
+	}, nil
+}
+
+// recordSync persists the model ID, sync hash, and auth mode after a successful
+// create/update/recreate. Status is written first so a re-queued reconcile sees
+// the model ID before the annotations are committed.
+func (r *LiteLLMModelReconciler) recordSync(ctx context.Context, model *litellmv1alpha1.LiteLLMModel, modelID, hash, authMode string) error {
+	model.Status.LiteLLMModelID = modelID
+	model.Status.Synced = true
+	if err := r.Status().Update(ctx, model); err != nil {
+		return fmt.Errorf("update status after sync: %w", err)
+	}
+	if model.Annotations == nil {
+		model.Annotations = map[string]string{}
+	}
+	model.Annotations[AnnotationSyncHash] = hash
+	model.Annotations[AnnotationAuthMode] = authMode
+	if err := r.Update(ctx, model); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *LiteLLMModelReconciler) handleDeletion(

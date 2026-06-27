@@ -47,8 +47,9 @@ spec:
 | Field | Type | Required | Description |
 | --- | --- | --- | --- |
 | `model` | string | Yes | Provider/model string (e.g., `openai/gpt-4o`, `anthropic/claude-sonnet-4-20250514`) |
-| `credentialRef` | *CredentialRef | No | Reference to a [LiteLLMCredential](./litellmcredential) in the same namespace. Takes precedence over inline `apiBase` / `apiKeySecretRef` |
+| `credentialRef` | *CredentialRef | No | Reference to a [LiteLLMCredential](./litellmcredential) in the same namespace. Takes precedence over inline `apiBase` / `apiVersion` / `apiKeySecretRef` |
 | `apiBase` | string | No | API base URL for the provider. Ignored if `credentialRef` is set |
+| `apiVersion` | string | No | Provider API version (e.g., `2024-10-21` for Azure OpenAI / Azure AI Foundry). Ignored if `credentialRef` is set |
 | `apiKeySecretRef` | *SecretKeyRef | No | Secret containing the provider API key. Ignored if `credentialRef` is set |
 | `rpm` | *int | No | Requests per minute limit |
 | `tpm` | *int | No | Tokens per minute limit |
@@ -75,7 +76,11 @@ spec:
       name: openai-prod   # → LiteLLMCredential in the same namespace
 ```
 
-The operator sends `litellm_credential_name: openai-prod` to LiteLLM, which looks up the credential from the proxy's `credential_list`. See [LiteLLMCredential](./litellmcredential) for how credentials are declared.
+The operator resolves the credential's `api_base` / `api_version` / `api_key` and writes them **inline** on the model registered with LiteLLM (and also sends `litellm_credential_name: openai-prod` for Admin UI association). Resolving inline is deliberate: LiteLLM's request-time resolution of a named credential into a DB-stored model is unreliable on a cold start — a model registered with only `litellm_credential_name` can come up with no `api_base`, which breaks Azure deployments. Inline values are restart-safe and always win. See [LiteLLMCredential](./litellmcredential) for how credentials are declared.
+
+::: tip Azure
+For Azure OpenAI / Azure AI Foundry, set `apiVersion` (e.g. `2024-10-21`) on the credential — or inline on the model when not using `credentialRef`. Without it, the deployment falls back to LiteLLM's default API version, which many Azure models reject.
+:::
 
 ### `modelInfo`
 
