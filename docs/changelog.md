@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Azure models authenticated via `LiteLLMModel.spec.litellmParams.credentialRef` now work at request time.** A model that referenced a `LiteLLMCredential` was registered with only `litellm_credential_name` and no inline `api_base`, on the assumption LiteLLM would resolve the named credential into the DB-stored model at request time. It does not, reliably: LiteLLM hydrates a DB model's `litellm_credential_name` at router-load time, and on a cold start that runs **before** DB-backed credentials (those created via the `/credentials` API) are loaded into the in-memory `credential_list` — so the lookup returns nothing and the Azure deployment boots with no endpoint, failing every request with `AzureException APIError - Must provide one of the base_url or azure_endpoint arguments`. It would self-heal on the 30s router resync and break again on the next pod restart. The model controller now **resolves the credential's `api_base` / `api_version` / `api_key` and writes them inline** on the `/model/new`/`/model/update` payload (LiteLLM only fills fields left unset, so inline always wins and is restart-safe), while still sending `litellm_credential_name` for Admin UI association and best-effort merge of any extra credential params. The DB-backed credential is unchanged, so secret-rotation-without-restart is preserved — and the model's sync hash now covers the resolved auth material, so a rotated Secret or edited credential re-pushes the model even though `model.Spec` is unchanged.
+
+### Added
+
+- **`LiteLLMModel.spec.litellmParams.apiVersion`** — sets the provider `api_version` inline (required by most Azure OpenAI / Azure AI Foundry deployments). Previously the API version was only reachable through `credentialRef`; inline Azure models had no way to set it. When `credentialRef` is set, the credential's `apiVersion` takes precedence.
+
+### Changed
+
+- **Switching a model between `credentialRef` and inline auth now deletes and recreates the LiteLLM model.** `/model/update` is a merge and cannot clear provider fields (`api_base` / `api_key` / `litellm_credential_name`) left by the previous auth mode — so flipping modes used to leave stale values on the DB model. The controller now tracks the last-pushed auth mode (`litellm.palena.ai/auth-mode` annotation) and, on a flip, deletes and re-creates the model for a clean record. In-mode field changes still use `/model/update`.
+
+## [0.12.2] - 2026-06-14
+
+### Fixed
+
 - **Gateway now actually loads its generated config — `litellm_settings` (success/failure callbacks, etc.) are no longer silently dropped.** The operator mounted the rendered `proxy_server_config.yaml` ConfigMap at `/app/config` and set `LITELLM_CONFIG_DIR=/app/config`, but current LiteLLM does **not** honor `LITELLM_CONFIG_DIR` — it only reads its config from the `CONFIG_FILE_PATH` env var (or a `--config` arg). So the file was mounted but never read: completions returned 200 (models still loaded from the DB via `STORE_MODEL_IN_DB=True`, masking the bug) while `success_callback`/`failure_callback` and every other `litellm_settings` entry were ignored — no Langfuse traces (or any callback) were ever emitted. The Deployment now sets `CONFIG_FILE_PATH=/app/config/proxy_server_config.yaml`, derived from the same constants as the volumeMount path and the ConfigMap data key so they cannot drift, and litellm logs `Initialized Success Callbacks - [...]` on startup. The dead `LITELLM_CONFIG_DIR` env var was removed.
 
 ### Changed
