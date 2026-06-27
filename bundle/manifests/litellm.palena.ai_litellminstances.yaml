@@ -546,14 +546,7 @@ spec:
                     - enabled
                     type: object
                   migration:
-                    description: |-
-                      MigrationSpec defines database migration settings.
-
-                      Since v0.12.x the operator runs `prisma migrate deploy` (applying
-                      LiteLLM's versioned migration files in `litellm-proxy-extras/migrations`)
-                      rather than `prisma db push --accept-data-loss`. This matches the command
-                      LiteLLM's own componentized chart uses and is mandatory for LiteLLM
-                      v1.86+, which disables schema updates in app pods (PR #27557).
+                    description: Migration settings.
                     properties:
                       databaseImage:
                         description: |-

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-06-27
+
 ### Fixed
 
 - **Azure models authenticated via `LiteLLMModel.spec.litellmParams.credentialRef` now work at request time.** A model that referenced a `LiteLLMCredential` was registered with only `litellm_credential_name` and no inline `api_base`, on the assumption LiteLLM would resolve the named credential into the DB-stored model at request time. It does not, reliably: LiteLLM hydrates a DB model's `litellm_credential_name` at router-load time, and on a cold start that runs **before** DB-backed credentials (those created via the `/credentials` API) are loaded into the in-memory `credential_list` — so the lookup returns nothing and the Azure deployment boots with no endpoint, failing every request with `AzureException APIError - Must provide one of the base_url or azure_endpoint arguments`. It would self-heal on the 30s router resync and break again on the next pod restart. The model controller now **resolves the credential's `api_base` / `api_version` / `api_key` and writes them inline** on the `/model/new`/`/model/update` payload (LiteLLM only fills fields left unset, so inline always wins and is restart-safe), while still sending `litellm_credential_name` for Admin UI association and best-effort merge of any extra credential params. The DB-backed credential is unchanged, so secret-rotation-without-restart is preserved — and the model's sync hash now covers the resolved auth material, so a rotated Secret or edited credential re-pushes the model even though `model.Spec` is unchanged.
