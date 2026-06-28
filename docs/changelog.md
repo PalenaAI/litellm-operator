@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-06-28
+
 ### Added
 
 - **`LiteLLMInstance.spec.tls` — TLS for the proxy pod.** Three secret-ref-based knobs, all accepting cert-manager's standard `tls.crt`/`tls.key`/`ca.crt` keys:
@@ -16,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`LiteLLMInstance.spec.database.tls` — PostgreSQL TLS.** `caSecretRef` and `clientCertSecretRef` mount the Postgres CA bundle (`/etc/litellm/db-tls/ca/<key>`) and, for mTLS, client cert/key (`/etc/litellm/db-tls/client/`) on **both** the proxy Deployment and the migration Job. Because `DATABASE_URL` is sourced from a Secret the operator does not rebuild — and Prisma's native connector reads SSL params from the connection string (using `sslmode=require&sslaccept=strict`, **not** libpq's `verify-full` or `PG*` env vars) — the operator only mounts the material; the caller adds `?sslmode=require&sslaccept=strict&sslrootcert=…` (and `sslcert`/`sslkey`) to the URL. (No `sslMode` field is exposed because it cannot be enforced on a Secret-sourced URL and would be misleading.)
 - **`LiteLLMInstance.spec.extraVolumes` / `spec.extraVolumeMounts`** — generic escape hatch to attach arbitrary volumes/mounts to the proxy pod (the env escape hatch, `spec.extraEnvVars`/`spec.extraEnvFrom`, already existed).
 - Validation: the instance controller verifies each referenced TLS Secret exists and that cert Secrets carry both `tls.crt` and `tls.key`, emitting `SecretNotFound` / `SecretKeyMissing` warning events (non-fatal).
+
+### Security
+
+- **Bumped Go to 1.25.11** (go.mod and the `golang:1.25` builder image digest) to clear two HIGH standard-library advisories flagged by the image scanner — CVE-2026-27145 and CVE-2026-42504 (both fixed in Go 1.25.11). No code changes; the operator binary is rebuilt against the patched stdlib.
 
 ## [0.13.0] - 2026-06-27
 
