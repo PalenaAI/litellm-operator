@@ -461,15 +461,15 @@ metadata:
       ]
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.13.0
-    createdAt: "2026-06-27T15:58:22Z"
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.14.0
+    createdAt: "2026-06-28T19:51:27Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/PalenaAI/litellm-operator
     support: bitkaio LLC
-  name: litellm-operator.v0.13.0
+  name: litellm-operator.v0.14.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -670,6 +670,17 @@ spec:
       - description: Extra environment variables for the LiteLLM container.
         displayName: Extra Env Vars
         path: extraEnvVars
+      - description: |-
+          ExtraVolumeMounts are additional volume mounts on the LiteLLM container.
+          Escape hatch paired with extraVolumes.
+        displayName: Extra Volume Mounts
+        path: extraVolumeMounts
+      - description: |-
+          ExtraVolumes are additional volumes attached to the proxy pod. Escape
+          hatch for mounting arbitrary Secrets/ConfigMaps the typed fields do not
+          cover. Pair with extraVolumeMounts.
+        displayName: Extra Volumes
+        path: extraVolumes
       - description: Fallback configuration for model routing.
         displayName: Fallbacks
         path: fallbacks
@@ -759,6 +770,12 @@ spec:
       - description: SSO configuration.
         displayName: SSO
         path: sso
+      - description: |-
+          TLS configuration for the LiteLLM proxy pod: serving HTTPS, trusting a
+          custom CA on outbound calls (provider + callback traffic), and presenting
+          a client certificate for outbound mTLS.
+        displayName: TLS
+        path: tls
       - description: Topology spread constraints.
         displayName: Topology Spread Constraints
         path: topologySpreadConstraints
@@ -1266,7 +1283,7 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
-                image: ghcr.io/palenaai/litellm-operator:v0.13.0
+                image: ghcr.io/palenaai/litellm-operator:v0.14.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -1365,4 +1382,4 @@ spec:
   provider:
     name: bitkaio LLC
     url: https://palena.ai
-  version: 0.13.0
+  version: 0.14.0

@@ -5,7 +5,7 @@ metadata:
     alm-examples: '[]'
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.13.0
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.14.0
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     repository: https://github.com/PalenaAI/litellm-operator
@@ -240,6 +240,17 @@ spec:
       - description: Extra environment variables for the LiteLLM container.
         displayName: Extra Env Vars
         path: extraEnvVars
+      - description: |-
+          ExtraVolumeMounts are additional volume mounts on the LiteLLM container.
+          Escape hatch paired with extraVolumes.
+        displayName: Extra Volume Mounts
+        path: extraVolumeMounts
+      - description: |-
+          ExtraVolumes are additional volumes attached to the proxy pod. Escape
+          hatch for mounting arbitrary Secrets/ConfigMaps the typed fields do not
+          cover. Pair with extraVolumeMounts.
+        displayName: Extra Volumes
+        path: extraVolumes
       - description: Fallback configuration for model routing.
         displayName: Fallbacks
         path: fallbacks
@@ -329,6 +340,12 @@ spec:
       - description: SSO configuration.
         displayName: SSO
         path: sso
+      - description: |-
+          TLS configuration for the LiteLLM proxy pod: serving HTTPS, trusting a
+          custom CA on outbound calls (provider + callback traffic), and presenting
+          a client certificate for outbound mTLS.
+        displayName: TLS
+        path: tls
       - description: Topology spread constraints.
         displayName: Topology Spread Constraints
         path: topologySpreadConstraints
