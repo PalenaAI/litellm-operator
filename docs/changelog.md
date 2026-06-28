@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`LiteLLMInstance.spec.tls` — TLS for the proxy pod.** Three secret-ref-based knobs, all accepting cert-manager's standard `tls.crt`/`tls.key`/`ca.crt` keys:
+  - `serverCertSecretRef` — mounts a `kubernetes.io/tls` Secret and sets `SSL_KEYFILE_PATH` + `SSL_CERTFILE_PATH` (together), so uvicorn **serves HTTPS** on port 4000. When set, the container health probes switch to the `HTTPS` scheme and the internal `PROXY_BASE_URL` becomes `https://` — clients (and any Ingress/Route/HTTPRoute in front) must use `https://`.
+  - `trustedCASecretRef` (`{ name, key (default ca.crt) }`) — mounts a CA bundle and sets `SSL_CERT_FILE` so **outbound** provider calls and logging callbacks (e.g. Langfuse) trust a custom CA. This is the documented LiteLLM/httpx knob (`SSL_CERT_FILE`, not `REQUESTS_CA_BUNDLE`); being process-level, it also covers the callback HTTP clients (historic Langfuse gap [BerriAI/litellm#7046](https://github.com/BerriAI/litellm/issues/7046)).
+  - `clientCertSecretRef` — mounts a TLS Secret and sets `SSL_CERTIFICATE` for **outbound mTLS**.
+- **`LiteLLMInstance.spec.database.tls` — PostgreSQL TLS.** `caSecretRef` and `clientCertSecretRef` mount the Postgres CA bundle (`/etc/litellm/db-tls/ca/<key>`) and, for mTLS, client cert/key (`/etc/litellm/db-tls/client/`) on **both** the proxy Deployment and the migration Job. Because `DATABASE_URL` is sourced from a Secret the operator does not rebuild — and Prisma's native connector reads SSL params from the connection string (using `sslmode=require&sslaccept=strict`, **not** libpq's `verify-full` or `PG*` env vars) — the operator only mounts the material; the caller adds `?sslmode=require&sslaccept=strict&sslrootcert=…` (and `sslcert`/`sslkey`) to the URL. (No `sslMode` field is exposed because it cannot be enforced on a Secret-sourced URL and would be misleading.)
+- **`LiteLLMInstance.spec.extraVolumes` / `spec.extraVolumeMounts`** — generic escape hatch to attach arbitrary volumes/mounts to the proxy pod (the env escape hatch, `spec.extraEnvVars`/`spec.extraEnvFrom`, already existed).
+- Validation: the instance controller verifies each referenced TLS Secret exists and that cert Secrets carry both `tls.crt` and `tls.key`, emitting `SecretNotFound` / `SecretKeyMissing` warning events (non-fatal).
+
 ## [0.13.0] - 2026-06-27
 
 ### Fixed
