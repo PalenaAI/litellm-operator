@@ -208,6 +208,68 @@ type LiteLLMInstanceSpec struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Admin UI"
 	AdminUI *AdminUISpec `json:"adminUI,omitempty"`
+
+	// TLS configuration for the LiteLLM proxy pod: serving HTTPS, trusting a
+	// custom CA on outbound calls (provider + callback traffic), and presenting
+	// a client certificate for outbound mTLS.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="TLS"
+	TLS *TLSSpec `json:"tls,omitempty"`
+
+	// ExtraVolumes are additional volumes attached to the proxy pod. Escape
+	// hatch for mounting arbitrary Secrets/ConfigMaps the typed fields do not
+	// cover. Pair with extraVolumeMounts.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Volumes"
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+
+	// ExtraVolumeMounts are additional volume mounts on the LiteLLM container.
+	// Escape hatch paired with extraVolumes.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Volume Mounts"
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+}
+
+// TLSSpec configures TLS for the LiteLLM proxy pod.
+//
+// All references are Kubernetes Secrets, designed to accept cert-manager's
+// standard keys (tls.crt/tls.key for certificate Secrets, ca.crt for CA
+// bundles). The operator mounts each referenced Secret read-only and wires the
+// corresponding LiteLLM environment variable to the mounted path.
+type TLSSpec struct {
+	// ServerCertSecretRef references a TLS Secret (kubernetes.io/tls, with
+	// tls.crt and tls.key) the proxy serves HTTPS with. When set the operator
+	// mounts the Secret and sets both SSL_KEYFILE_PATH and SSL_CERTFILE_PATH,
+	// so uvicorn serves HTTPS on the proxy port. Clients must then use https://
+	// (including the Service/Ingress in front of the proxy).
+	// +optional
+	ServerCertSecretRef *SecretRef `json:"serverCertSecretRef,omitempty"`
+
+	// TrustedCASecretRef references a Secret containing a CA bundle the proxy
+	// trusts on outbound HTTPS calls (model providers and logging callbacks
+	// such as Langfuse). The operator mounts it and sets SSL_CERT_FILE to the
+	// mounted path — the documented LiteLLM knob for a custom outbound CA
+	// (LiteLLM is Python/httpx; SSL_CERT_FILE, not REQUESTS_CA_BUNDLE).
+	// +optional
+	TrustedCASecretRef *CASecretRef `json:"trustedCASecretRef,omitempty"`
+
+	// ClientCertSecretRef references a TLS Secret (tls.crt/tls.key) the proxy
+	// presents as a client certificate for outbound mTLS. When set the operator
+	// mounts it and sets SSL_CERTIFICATE to the mounted certificate path.
+	// +optional
+	ClientCertSecretRef *SecretRef `json:"clientCertSecretRef,omitempty"`
+}
+
+// CASecretRef references a CA bundle within a Kubernetes Secret. The key
+// defaults to cert-manager's standard "ca.crt".
+type CASecretRef struct {
+	// Name of the Secret.
+	Name string `json:"name"`
+
+	// Key within the Secret holding the PEM CA bundle.
+	// +kubebuilder:default="ca.crt"
+	// +optional
+	Key string `json:"key,omitempty"`
 }
 
 // DefaultCustomerBudgetSpec sets platform-wide defaults for new end-users.
@@ -588,6 +650,40 @@ type DatabaseSpec struct {
 	// Migration settings.
 	// +optional
 	Migration *MigrationSpec `json:"migration,omitempty"`
+
+	// TLS settings for the PostgreSQL connection.
+	// +optional
+	TLS *DatabaseTLSSpec `json:"tls,omitempty"`
+}
+
+// DatabaseTLSSpec configures TLS material for the PostgreSQL connection.
+//
+// Important: LiteLLM talks to Postgres through Prisma, whose native connector
+// reads SSL parameters from the connection string, NOT from libpq PG* env vars,
+// and does NOT accept libpq's verify-full / sslrootcert=system spellings — it
+// uses sslmode=require together with sslaccept=strict plus sslrootcert/sslcert/
+// sslkey paths. Because DATABASE_URL is supplied via a Secret the operator does
+// not rebuild, the operator cannot inject those parameters for you. This spec
+// therefore only MOUNTS the certificate material at deterministic paths; the
+// caller must add the SSL parameters to the DATABASE_URL Secret value, e.g.:
+//
+//	postgresql://user:pass@host:5432/db?sslmode=require&sslaccept=strict&sslrootcert=/etc/litellm/db-tls/ca/ca.crt
+//
+// The mounted paths are stable: the CA bundle at /etc/litellm/db-tls/ca/<key>
+// and (for mTLS) tls.crt/tls.key at /etc/litellm/db-tls/client/. The same
+// material is mounted on both the proxy Deployment and the migration Job.
+type DatabaseTLSSpec struct {
+	// CASecretRef references a Secret containing the PostgreSQL server CA
+	// bundle. Mounted at /etc/litellm/db-tls/ca/<key>; reference it in
+	// DATABASE_URL via sslrootcert=<that path>.
+	// +optional
+	CASecretRef *CASecretRef `json:"caSecretRef,omitempty"`
+
+	// ClientCertSecretRef references a TLS Secret (tls.crt/tls.key) for
+	// PostgreSQL mutual TLS. Mounted at /etc/litellm/db-tls/client/; reference
+	// the files in DATABASE_URL via sslcert= and sslkey=.
+	// +optional
+	ClientCertSecretRef *SecretRef `json:"clientCertSecretRef,omitempty"`
 }
 
 // CloudNativePGSpec defines CloudNativePG configuration.

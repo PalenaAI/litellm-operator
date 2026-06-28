@@ -54,7 +54,46 @@ const (
 	// is the last path segment, so LiteLLM imports handlers as
 	// "custom_sso_handlers.<stem>.<function>".
 	customSSOMountDir = "/app/custom_sso_handlers"
+
+	// TLS mount points on the proxy pod. Each referenced Secret is mounted
+	// read-only and the matching LiteLLM env var points at a file beneath it.
+	volumeNameTLSServer = "tls-server"
+	tlsServerMountDir   = "/etc/litellm/tls/server"
+	volumeNameTLSCA     = "tls-ca"
+	tlsCAMountDir       = "/etc/litellm/tls/ca"
+	volumeNameTLSClient = "tls-client"
+	tlsClientMountDir   = "/etc/litellm/tls/client"
+
+	// tlsCertKey and tlsKeyKey are cert-manager's standard keys in a
+	// kubernetes.io/tls Secret.
+	tlsCertKey = "tls.crt"
+	tlsKeyKey  = "tls.key"
+
+	// Database TLS mount points. Mounted on both the proxy Deployment and the
+	// migration Job so both connect to Postgres over TLS. The caller wires the
+	// paths into DATABASE_URL via sslrootcert=/sslcert=/sslkey=.
+	volumeNameDBTLSCA     = "db-tls-ca"
+	dbTLSCAMountDir       = "/etc/litellm/db-tls/ca"
+	volumeNameDBTLSClient = "db-tls-client"
+	dbTLSClientMountDir   = "/etc/litellm/db-tls/client"
 )
+
+// caSecretKey returns the configured CA key, defaulting to cert-manager's
+// standard "ca.crt" when unset.
+func caSecretKey(ref *litellmv1alpha1.CASecretRef) string {
+	if ref.Key != "" {
+		return ref.Key
+	}
+	return tlsCertKeyCA
+}
+
+// tlsCertKeyCA is the default key for a CA bundle Secret.
+const tlsCertKeyCA = "ca.crt"
+
+// serveTLS reports whether the proxy is configured to serve HTTPS.
+func serveTLS(instance *litellmv1alpha1.LiteLLMInstance) bool {
+	return instance.Spec.TLS != nil && instance.Spec.TLS.ServerCertSecretRef != nil
+}
 
 func podSecurityContext(nonRoot bool) *corev1.PodSecurityContext {
 	if nonRoot {
@@ -105,6 +144,13 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 
 	envFrom := append(secretManagerEnvFrom(instance), instance.Spec.ExtraEnvFrom...)
 
+	// When the proxy serves HTTPS (spec.tls.serverCertSecretRef), the health
+	// probes must speak TLS on the same port or they fail the handshake.
+	probeScheme := corev1.URISchemeHTTP
+	if serveTLS(instance) {
+		probeScheme = corev1.URISchemeHTTPS
+	}
+
 	container := corev1.Container{
 		Name:            "litellm",
 		Image:           fmt.Sprintf("%s:%s", repo, tag),
@@ -118,8 +164,9 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/health/liveliness",
-					Port: intstr.FromInt(4000),
+					Path:   "/health/liveliness",
+					Port:   intstr.FromInt(4000),
+					Scheme: probeScheme,
 				},
 			},
 			InitialDelaySeconds: healthCheckInitialDelay(instance, "liveness"),
@@ -129,8 +176,9 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/health/readiness",
-					Port: intstr.FromInt(4000),
+					Path:   "/health/readiness",
+					Port:   intstr.FromInt(4000),
+					Scheme: probeScheme,
 				},
 			},
 			InitialDelaySeconds: healthCheckInitialDelay(instance, "readiness"),
@@ -140,8 +188,9 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 		StartupProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
-					Path: "/health/liveliness",
-					Port: intstr.FromInt(4000),
+					Path:   "/health/liveliness",
+					Port:   intstr.FromInt(4000),
+					Scheme: probeScheme,
 				},
 			},
 			PeriodSeconds:    5,
@@ -405,6 +454,9 @@ func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName s
 	// Admin UI env vars
 	vars = append(vars, adminUIEnvVars(instance)...)
 
+	// TLS env vars (serve HTTPS, outbound CA trust, client cert)
+	vars = append(vars, tlsEnvVars(instance)...)
+
 	// Enterprise license
 	if licenseSecretName != "" {
 		vars = append(vars, corev1.EnvVar{
@@ -557,7 +609,11 @@ func proxyBaseURL(instance *litellmv1alpha1.LiteLLMInstance) string {
 	if port == 0 {
 		port = 4000
 	}
-	return fmt.Sprintf("http://%s.%s.svc:%d", instance.Name, instance.Namespace, port)
+	scheme := "http"
+	if serveTLS(instance) {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s.%s.svc:%d", scheme, instance.Name, instance.Namespace, port)
 }
 
 func buildVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.VolumeMount {
@@ -587,6 +643,9 @@ func buildVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volum
 			ReadOnly:  true,
 		})
 	}
+	mounts = append(mounts, tlsVolumeMounts(instance)...)
+	mounts = append(mounts, dbTLSVolumeMounts(instance)...)
+	mounts = append(mounts, instance.Spec.ExtraVolumeMounts...)
 	return mounts
 }
 
@@ -641,6 +700,9 @@ func buildVolumes(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volume {
 			},
 		})
 	}
+	volumes = append(volumes, tlsVolumes(instance)...)
+	volumes = append(volumes, dbTLSVolumes(instance)...)
+	volumes = append(volumes, instance.Spec.ExtraVolumes...)
 	return volumes
 }
 
@@ -907,6 +969,120 @@ func adminUIEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
 		vars = append(vars, corev1.EnvVar{Name: "EMAIL_SUPPORT_CONTACT", Value: ui.EmailSupportContact})
 	}
 	return vars
+}
+
+// tlsEnvVars wires the LiteLLM TLS knobs to the mounted Secret paths:
+//   - serve HTTPS:      SSL_KEYFILE_PATH + SSL_CERTFILE_PATH (set together)
+//   - outbound CA trust: SSL_CERT_FILE (model + callback traffic, e.g. Langfuse)
+//   - outbound mTLS:     SSL_CERTIFICATE (client certificate)
+func tlsEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
+	tls := instance.Spec.TLS
+	if tls == nil {
+		return nil
+	}
+	var vars []corev1.EnvVar
+	if tls.ServerCertSecretRef != nil {
+		// Both must be set together for uvicorn to serve HTTPS.
+		vars = append(vars,
+			corev1.EnvVar{Name: "SSL_CERTFILE_PATH", Value: tlsServerMountDir + "/" + tlsCertKey},
+			corev1.EnvVar{Name: "SSL_KEYFILE_PATH", Value: tlsServerMountDir + "/" + tlsKeyKey},
+		)
+	}
+	if tls.TrustedCASecretRef != nil {
+		vars = append(vars, corev1.EnvVar{
+			Name:  "SSL_CERT_FILE",
+			Value: tlsCAMountDir + "/" + caSecretKey(tls.TrustedCASecretRef),
+		})
+	}
+	if tls.ClientCertSecretRef != nil {
+		vars = append(vars, corev1.EnvVar{
+			Name:  "SSL_CERTIFICATE",
+			Value: tlsClientMountDir + "/" + tlsCertKey,
+		})
+	}
+	return vars
+}
+
+// tlsVolumeMounts returns the read-only mounts for the proxy TLS Secrets.
+func tlsVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.VolumeMount {
+	tls := instance.Spec.TLS
+	if tls == nil {
+		return nil
+	}
+	var mounts []corev1.VolumeMount
+	if tls.ServerCertSecretRef != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: volumeNameTLSServer, MountPath: tlsServerMountDir, ReadOnly: true})
+	}
+	if tls.TrustedCASecretRef != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: volumeNameTLSCA, MountPath: tlsCAMountDir, ReadOnly: true})
+	}
+	if tls.ClientCertSecretRef != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: volumeNameTLSClient, MountPath: tlsClientMountDir, ReadOnly: true})
+	}
+	return mounts
+}
+
+// tlsVolumes returns the Secret-backed volumes for the proxy TLS Secrets.
+func tlsVolumes(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volume {
+	tls := instance.Spec.TLS
+	if tls == nil {
+		return nil
+	}
+	var volumes []corev1.Volume
+	if tls.ServerCertSecretRef != nil {
+		volumes = append(volumes, secretVolume(volumeNameTLSServer, tls.ServerCertSecretRef.Name))
+	}
+	if tls.TrustedCASecretRef != nil {
+		volumes = append(volumes, secretVolume(volumeNameTLSCA, tls.TrustedCASecretRef.Name))
+	}
+	if tls.ClientCertSecretRef != nil {
+		volumes = append(volumes, secretVolume(volumeNameTLSClient, tls.ClientCertSecretRef.Name))
+	}
+	return volumes
+}
+
+// dbTLSVolumeMounts returns the read-only mounts for the Postgres TLS material.
+// Shared by the proxy Deployment and the migration Job.
+func dbTLSVolumeMounts(instance *litellmv1alpha1.LiteLLMInstance) []corev1.VolumeMount {
+	tls := instance.Spec.Database.TLS
+	if tls == nil {
+		return nil
+	}
+	var mounts []corev1.VolumeMount
+	if tls.CASecretRef != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: volumeNameDBTLSCA, MountPath: dbTLSCAMountDir, ReadOnly: true})
+	}
+	if tls.ClientCertSecretRef != nil {
+		mounts = append(mounts, corev1.VolumeMount{Name: volumeNameDBTLSClient, MountPath: dbTLSClientMountDir, ReadOnly: true})
+	}
+	return mounts
+}
+
+// dbTLSVolumes returns the Secret-backed volumes for the Postgres TLS material.
+// Shared by the proxy Deployment and the migration Job.
+func dbTLSVolumes(instance *litellmv1alpha1.LiteLLMInstance) []corev1.Volume {
+	tls := instance.Spec.Database.TLS
+	if tls == nil {
+		return nil
+	}
+	var volumes []corev1.Volume
+	if tls.CASecretRef != nil {
+		volumes = append(volumes, secretVolume(volumeNameDBTLSCA, tls.CASecretRef.Name))
+	}
+	if tls.ClientCertSecretRef != nil {
+		volumes = append(volumes, secretVolume(volumeNameDBTLSClient, tls.ClientCertSecretRef.Name))
+	}
+	return volumes
+}
+
+// secretVolume builds a read-only Secret-backed volume.
+func secretVolume(name, secretName string) corev1.Volume {
+	return corev1.Volume{
+		Name: name,
+		VolumeSource: corev1.VolumeSource{
+			Secret: &corev1.SecretVolumeSource{SecretName: secretName},
+		},
+	}
 }
 
 func boolPtr(b bool) *bool    { return &b }

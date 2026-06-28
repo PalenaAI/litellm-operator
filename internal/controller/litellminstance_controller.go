@@ -874,6 +874,9 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 	// Secret manager status
 	r.reconcileSecretManagerStatus(ctx, instance)
 
+	// Validate TLS Secrets (serve cert, outbound CA, client cert, DB TLS)
+	r.validateTLSSecrets(ctx, instance)
+
 	// Ready condition
 	if reconcileErr != nil {
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
@@ -939,6 +942,63 @@ func (r *LiteLLMInstanceReconciler) reconcileSecretManagerStatus(ctx context.Con
 			instance.Status.SecretManager.Configured = false
 			emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonSecretNotFound,
 				"Secret manager credentials Secret %q not found", sm.CredentialsSecretRef.Name)
+		}
+	}
+}
+
+// validateTLSSecrets checks that the Secrets referenced by spec.tls and
+// spec.database.tls exist and carry the expected keys. Problems are surfaced as
+// warning events (mounting a missing/incomplete Secret would otherwise leave
+// the pod stuck in ContainerCreating with no clear signal). Validation is
+// non-fatal — it does not block the rest of the reconcile.
+func (r *LiteLLMInstanceReconciler) validateTLSSecrets(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) {
+	if instance.Spec.TLS != nil {
+		tls := instance.Spec.TLS
+		// Server cert and client cert are kubernetes.io/tls Secrets and must
+		// carry BOTH tls.crt and tls.key.
+		if tls.ServerCertSecretRef != nil {
+			r.requireSecretKeys(ctx, instance, tls.ServerCertSecretRef.Name, "spec.tls.serverCertSecretRef", "tls.crt", "tls.key")
+		}
+		if tls.ClientCertSecretRef != nil {
+			r.requireSecretKeys(ctx, instance, tls.ClientCertSecretRef.Name, "spec.tls.clientCertSecretRef", "tls.crt", "tls.key")
+		}
+		if tls.TrustedCASecretRef != nil {
+			key := tls.TrustedCASecretRef.Key
+			if key == "" {
+				key = "ca.crt"
+			}
+			r.requireSecretKeys(ctx, instance, tls.TrustedCASecretRef.Name, "spec.tls.trustedCASecretRef", key)
+		}
+	}
+
+	if instance.Spec.Database.TLS != nil {
+		dbTLS := instance.Spec.Database.TLS
+		if dbTLS.CASecretRef != nil {
+			key := dbTLS.CASecretRef.Key
+			if key == "" {
+				key = "ca.crt"
+			}
+			r.requireSecretKeys(ctx, instance, dbTLS.CASecretRef.Name, "spec.database.tls.caSecretRef", key)
+		}
+		if dbTLS.ClientCertSecretRef != nil {
+			r.requireSecretKeys(ctx, instance, dbTLS.ClientCertSecretRef.Name, "spec.database.tls.clientCertSecretRef", "tls.crt", "tls.key")
+		}
+	}
+}
+
+// requireSecretKeys emits a warning event if the named Secret is missing or is
+// missing any of the required keys.
+func (r *LiteLLMInstanceReconciler) requireSecretKeys(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, name, field string, keys ...string) {
+	var secret corev1.Secret
+	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: instance.Namespace}, &secret); err != nil {
+		emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonSecretNotFound,
+			"%s: Secret %q not found", field, name)
+		return
+	}
+	for _, k := range keys {
+		if _, ok := secret.Data[k]; !ok {
+			emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonSecretKeyMissing,
+				"%s: Secret %q is missing key %q", field, name, k)
 		}
 	}
 }

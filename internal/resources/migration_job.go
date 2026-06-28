@@ -232,11 +232,13 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 							ImagePullPolicy: pullPolicy,
 							Command:         command,
 							Env:             dbEnv,
+							VolumeMounts:    dbTLSVolumeMounts(instance),
 							SecurityContext: &corev1.SecurityContext{
 								AllowPrivilegeEscalation: boolPtr(false),
 							},
 						},
 					},
+					Volumes:         dbTLSVolumes(instance),
 					SecurityContext: migrationPodSecurityContext(useDBImage, runAsNonRoot),
 				},
 			},

@@ -67,6 +67,7 @@ export default defineConfig({
           { text: 'SCIM Provisioning', link: '/guide/scim' },
           { text: 'Secret Managers', link: '/guide/secret-managers' },
           { text: 'Database', link: '/guide/database' },
+          { text: 'TLS', link: '/guide/tls' },
           { text: 'Observability', link: '/guide/observability' },
         ],
       },

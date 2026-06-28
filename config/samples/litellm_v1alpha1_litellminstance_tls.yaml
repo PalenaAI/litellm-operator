@@ -1,0 +1,60 @@
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: litellminstance-tls-sample
+spec:
+  image:
+    repository: ghcr.io/berriai/litellm
+    tag: latest
+
+  masterKey:
+    autoGenerate: true
+
+  database:
+    external:
+      # The DATABASE_URL value must itself carry the Prisma SSL params, e.g.:
+      #   postgresql://user:pass@host:5432/litellm?sslmode=require&sslaccept=strict&sslrootcert=/etc/litellm/db-tls/ca/ca.crt
+      connectionSecretRef:
+        name: litellm-db-credentials
+        key: DATABASE_URL
+    # Mounts the Postgres CA bundle at /etc/litellm/db-tls/ca/ca.crt (and, if
+    # set, client cert/key at /etc/litellm/db-tls/client/) on both the proxy
+    # and the migration Job. The operator does NOT rewrite DATABASE_URL.
+    tls:
+      caSecretRef:
+        name: pg-ca               # cert-manager secret with ca.crt
+      # clientCertSecretRef:      # optional, for Postgres mutual TLS
+      #   name: pg-client
+
+  # Proxy pod TLS.
+  tls:
+    # Serve HTTPS on port 4000 with this cert-manager TLS secret.
+    # Probes switch to HTTPS automatically; clients must use https://.
+    serverCertSecretRef:
+      name: gateway-server-tls    # tls.crt + tls.key
+
+    # Trust a custom CA on outbound calls (providers + Langfuse callback).
+    trustedCASecretRef:
+      name: navique-internal-ca-bundle
+      key: ca.crt
+
+    # Present a client certificate for outbound mTLS (optional).
+    # clientCertSecretRef:
+    #   name: outbound-client-tls
+
+  # Generic escape hatch for anything not covered by typed fields.
+  extraVolumes:
+    - name: extra-ca
+      secret:
+        secretName: another-ca
+  extraVolumeMounts:
+    - name: extra-ca
+      mountPath: /etc/extra-ca
+      readOnly: true
+
+  service:
+    type: ClusterIP
+    port: 4000

@@ -80,6 +80,7 @@ const (
 	EventReasonReconcileFailed    = "ReconcileFailed"
 	EventReasonInstanceNotReady   = "InstanceNotReady"
 	EventReasonSecretNotFound     = "SecretNotFound"
+	EventReasonSecretKeyMissing   = "SecretKeyMissing"
 	EventReasonValidationFailed   = "ValidationFailed"
 	EventReasonEnterpriseRequired = "EnterpriseLicenseRequired"
 	EventReasonHealthDegraded     = "HealthDegraded"
