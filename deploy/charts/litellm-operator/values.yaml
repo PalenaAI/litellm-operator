@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/palenaai/litellm-operator
-  tag: ""  # Defaults to "v<chart appVersion>" (e.g. v0.14.0)
+  tag: ""  # Defaults to "v<chart appVersion>" (e.g. v0.15.0)
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
