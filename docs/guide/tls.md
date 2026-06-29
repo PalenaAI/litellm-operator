@@ -25,7 +25,17 @@ When serving HTTPS:
 
 - The container's liveness/readiness/startup probes automatically switch to the `HTTPS` scheme so the handshake succeeds.
 - The internal `PROXY_BASE_URL` (used by the SSO flow) becomes `https://`.
+- **The operator's own admin-API calls switch to `https://` too.** `status.endpoint` becomes `https://<instance>.<namespace>.svc:<port>` — the single URL every controller (model/team/user/key/org/customer/credential sync, config sync) and the health probes use — so all operator→proxy traffic is TLS automatically.
 - **Clients must use `https://`.** Anything in front of the proxy (Service consumers, an Ingress, an OpenShift Route, or an HTTPRoute) must speak HTTPS to the pod. If you terminate TLS at an Ingress instead, you usually do **not** need this field — leave the proxy on plain HTTP behind the Ingress.
+
+### How the operator trusts the serving certificate
+
+When the proxy serves HTTPS with a certificate signed by a **private** CA, the operator must trust that CA or every admin-API call (and health probe) fails verification. The operator resolves the CA in this order:
+
+1. **`ca.crt` inside the `serverCertSecretRef` Secret** — cert-manager writes the issuing CA here for CA/intermediate issuers, so for a platform-CA setup you usually need nothing more.
+2. **`trustedCASecretRef`** (the same field used for outbound trust) as a fallback.
+
+If the serving cert is signed by a **publicly-trusted** CA, neither is needed — the system trust store is used. The operator **never disables verification**. The cert's SANs must cover the in-cluster Service name (`<instance>.<namespace>.svc`). If HTTPS is served but no CA can be resolved (and the cert isn't publicly trusted), the operator emits a `ValidationFailed` warning event, since operator→proxy calls would break.
 
 ## Outbound CA trust
 

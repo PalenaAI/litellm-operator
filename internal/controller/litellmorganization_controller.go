@@ -120,7 +120,7 @@ func (r *LiteLLMOrganizationReconciler) reconcileOrganization(
 	resolved *ResolvedInstance,
 ) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 
 	if org.Status.LiteLLMOrganizationID == "" {
 		req := litellm.OrganizationCreateRequest{
@@ -267,7 +267,7 @@ func (r *LiteLLMOrganizationReconciler) handleDeletion(ctx context.Context, org 
 	if org.Status.LiteLLMOrganizationID != "" {
 		resolved, err := resolveInstance(ctx, r.Client, org.Namespace, org.Spec.InstanceRef)
 		if err == nil {
-			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Organizations().Delete(ctx, org.Status.LiteLLMOrganizationID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete organization from LiteLLM")
 				emitEvent(r.Recorder, org, corev1.EventTypeWarning, EventReasonReconcileFailed,

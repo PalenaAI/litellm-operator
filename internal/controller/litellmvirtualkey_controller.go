@@ -120,7 +120,7 @@ func (r *LiteLLMVirtualKeyReconciler) reconcileKey(
 	resolved *ResolvedInstance,
 ) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 
 	// Resolve team and user refs
 	teamID, err := r.resolveTeamRef(ctx, vk)
@@ -291,7 +291,7 @@ func (r *LiteLLMVirtualKeyReconciler) handleDeletion(ctx context.Context, vk *li
 	if vk.Status.LiteLLMKeyToken != "" {
 		resolved, err := resolveInstance(ctx, r.Client, vk.Namespace, vk.Spec.InstanceRef)
 		if err == nil {
-			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Keys().Delete(ctx, vk.Status.LiteLLMKeyToken); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete key from LiteLLM")
 				emitEvent(r.Recorder, vk, corev1.EventTypeWarning, EventReasonReconcileFailed,

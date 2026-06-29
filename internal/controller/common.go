@@ -113,7 +113,11 @@ func emitEvent(r record.EventRecorder, obj runtime.Object, eventType, reason, me
 type ResolvedInstance struct {
 	Endpoint  string
 	MasterKey string
-	Instance  *litellmv1alpha1.LiteLLMInstance
+	// CACert is the PEM CA bundle the operator must trust when Endpoint is
+	// https (the proxy serves TLS with a private-CA certificate). Empty when
+	// the instance is not serving TLS or no CA could be resolved.
+	CACert   []byte
+	Instance *litellmv1alpha1.LiteLLMInstance
 }
 
 // resolveInstance fetches a LiteLLMInstance and resolves its endpoint and master key.
@@ -149,8 +153,55 @@ func resolveInstance(
 	return &ResolvedInstance{
 		Endpoint:  instance.Status.Endpoint,
 		MasterKey: masterKey,
+		CACert:    operatorProxyCACert(ctx, c, &instance),
 		Instance:  &instance,
 	}, nil
+}
+
+// instanceServesTLS reports whether the proxy is configured to serve HTTPS.
+func instanceServesTLS(instance *litellmv1alpha1.LiteLLMInstance) bool {
+	return instance.Spec.TLS != nil && instance.Spec.TLS.ServerCertSecretRef != nil
+}
+
+// operatorProxyCACert resolves the CA bundle the operator must trust when
+// calling the proxy over HTTPS. It prefers the cert-manager "ca.crt" embedded
+// in the server-certificate Secret (populated for CA/intermediate issuers),
+// then falls back to spec.tls.trustedCASecretRef. Returns nil when the instance
+// does not serve TLS or no CA is available (the caller then relies on the
+// system trust store, which works for publicly-trusted certs). Best-effort:
+// secret-read failures yield nil rather than an error.
+func operatorProxyCACert(ctx context.Context, c client.Client, instance *litellmv1alpha1.LiteLLMInstance) []byte {
+	if !instanceServesTLS(instance) {
+		return nil
+	}
+	ns := instance.Namespace
+	// 1. ca.crt inside the server-cert Secret.
+	if ref := instance.Spec.TLS.ServerCertSecretRef; ref != nil {
+		if pem := readSecretKey(ctx, c, ns, ref.Name, "ca.crt"); len(pem) > 0 {
+			return pem
+		}
+	}
+	// 2. Dedicated trusted-CA Secret.
+	if ref := instance.Spec.TLS.TrustedCASecretRef; ref != nil {
+		key := ref.Key
+		if key == "" {
+			key = "ca.crt"
+		}
+		if pem := readSecretKey(ctx, c, ns, ref.Name, key); len(pem) > 0 {
+			return pem
+		}
+	}
+	return nil
+}
+
+// readSecretKey returns the raw bytes of a Secret key, or nil if the Secret or
+// key is absent.
+func readSecretKey(ctx context.Context, c client.Client, namespace, name, key string) []byte {
+	var secret corev1.Secret
+	if err := c.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, &secret); err != nil {
+		return nil
+	}
+	return secret.Data[key]
 }
 
 // getSecretValue reads a value from a Kubernetes Secret.

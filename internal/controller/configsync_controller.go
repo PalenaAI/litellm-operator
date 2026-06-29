@@ -113,7 +113,8 @@ func (r *ConfigSyncReconciler) Reconcile(ctx context.Context, req ctrl.Request) 
 		return ctrl.Result{RequeueAfter: syncInterval}, nil
 	}
 
-	apiClient := r.LiteLLMClientFactory(instance.Status.Endpoint, masterKey)
+	apiClient := r.LiteLLMClientFactory(instance.Status.Endpoint, masterKey,
+		litellm.WithCACert(operatorProxyCACert(ctx, r.Client, &instance)))
 
 	// Run the sync cycle.
 	syncer := &configSyncer{

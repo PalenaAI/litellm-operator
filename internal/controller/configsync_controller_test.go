@@ -120,9 +120,11 @@ var _ = Describe("ConfigSync Controller", func() {
 			Expect(k8sClient.Update(ctx, instance)).To(Succeed())
 
 			r := &ConfigSyncReconciler{
-				Client:               k8sClient,
-				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return litellm.NewMockClient() },
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client {
+					return litellm.NewMockClient()
+				},
 			}
 			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: instanceNN})
 			Expect(err).NotTo(HaveOccurred())
@@ -133,9 +135,11 @@ var _ = Describe("ConfigSync Controller", func() {
 	Context("When config sync is enabled", func() {
 		It("should reconcile with no errors and empty API", func() {
 			r := &ConfigSyncReconciler{
-				Client:               k8sClient,
-				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return litellm.NewMockClient() },
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client {
+					return litellm.NewMockClient()
+				},
 			}
 			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: instanceNN})
 			Expect(err).NotTo(HaveOccurred())
@@ -179,7 +183,7 @@ var _ = Describe("ConfigSync Controller", func() {
 			r := &ConfigSyncReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return mockClient },
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client { return mockClient },
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: instanceNN})
 			Expect(err).NotTo(HaveOccurred())
@@ -203,7 +207,7 @@ var _ = Describe("ConfigSync Controller", func() {
 			r := &ConfigSyncReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return mockClient },
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client { return mockClient },
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: instanceNN})
 			Expect(err).NotTo(HaveOccurred())
@@ -246,7 +250,7 @@ var _ = Describe("ConfigSync Controller", func() {
 			r := &ConfigSyncReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return mockClient },
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client { return mockClient },
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: instanceNN})
 			Expect(err).NotTo(HaveOccurred())
@@ -281,7 +285,7 @@ var _ = Describe("ConfigSync Controller", func() {
 			r := &ConfigSyncReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return mockClient },
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client { return mockClient },
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: instanceNN})
 			Expect(err).NotTo(HaveOccurred())
@@ -318,7 +322,7 @@ var _ = Describe("ConfigSync Controller", func() {
 			r := &ConfigSyncReconciler{
 				Client:               k8sClient,
 				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return mockClient },
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client { return mockClient },
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: instanceNN})
 			Expect(err).NotTo(HaveOccurred())

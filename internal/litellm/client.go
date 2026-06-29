@@ -19,6 +19,8 @@ package litellm
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -40,16 +42,45 @@ type Client interface {
 	Health() HealthService
 }
 
+// ClientOption customizes a LiteLLM API client (e.g. TLS trust).
+type ClientOption func(*httpClient)
+
+// WithCACert configures the client to trust the given PEM CA bundle when the
+// endpoint is https. Used when the proxy serves HTTPS with a certificate signed
+// by a private CA (e.g. a cert-manager platform CA). A nil/empty bundle is a
+// no-op, so callers can pass it unconditionally for non-TLS instances.
+func WithCACert(pem []byte) ClientOption {
+	return func(c *httpClient) {
+		if len(pem) == 0 {
+			return
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(pem) {
+			return
+		}
+		c.http.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:    pool,
+				MinVersion: tls.VersionTLS12,
+			},
+		}
+	}
+}
+
 // ClientFactory creates a new LiteLLM API client given an endpoint and master key.
-type ClientFactory func(endpoint, masterKey string) Client
+type ClientFactory func(endpoint, masterKey string, opts ...ClientOption) Client
 
 // NewClient creates a new LiteLLM API client.
-func NewClient(endpoint, masterKey string) Client {
-	return &httpClient{
+func NewClient(endpoint, masterKey string, opts ...ClientOption) Client {
+	c := &httpClient{
 		baseURL:   strings.TrimRight(endpoint, "/"),
 		masterKey: masterKey,
 		http:      &http.Client{Timeout: 30 * time.Second},
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 type httpClient struct {

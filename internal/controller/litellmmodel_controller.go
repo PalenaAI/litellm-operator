@@ -135,7 +135,7 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 	resolved *ResolvedInstance,
 ) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 
 	params := litellm.ModelParams{
 		Model:         model.Spec.LiteLLMParams.Model,
@@ -376,7 +376,7 @@ func (r *LiteLLMModelReconciler) handleDeletion(
 	if model.Status.LiteLLMModelID != "" {
 		resolved, err := resolveInstance(ctx, r.Client, model.Namespace, model.Spec.InstanceRef)
 		if err == nil {
-			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Models().Delete(ctx, model.Status.LiteLLMModelID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete model from LiteLLM", "modelId", model.Status.LiteLLMModelID)
 				emitEvent(r.Recorder, model, corev1.EventTypeWarning, EventReasonReconcileFailed,

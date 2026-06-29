@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,6 +35,7 @@ func tlsTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
+	_ = appsv1.AddToScheme(scheme)
 	_ = litellmv1alpha1.AddToScheme(scheme)
 	return scheme
 }
@@ -116,6 +118,104 @@ func TestValidateTLSSecrets_ServerCertMissingKey(t *testing.T) {
 	events := drainEvents(rec)
 	if !containsEvent(events, EventReasonSecretKeyMissing) || !containsEvent(events, "tls.key") {
 		t.Errorf("expected SecretKeyMissing event for tls.key, got %v", events)
+	}
+}
+
+func tlsInstance(name string) *litellmv1alpha1.LiteLLMInstance {
+	return &litellmv1alpha1.LiteLLMInstance{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		Spec: litellmv1alpha1.LiteLLMInstanceSpec{
+			TLS: &litellmv1alpha1.TLSSpec{
+				ServerCertSecretRef: &litellmv1alpha1.SecretRef{Name: "server-tls"},
+			},
+		},
+	}
+}
+
+func TestOperatorProxyCACert_PrefersServerSecretCACert(t *testing.T) {
+	scheme := tlsTestScheme(t)
+	serverTLS := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "server-tls", Namespace: "default"},
+		Data:       map[string][]byte{"tls.crt": []byte("c"), "tls.key": []byte("k"), "ca.crt": []byte("SERVER-CA")},
+	}
+	trusted := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "trusted", Namespace: "default"},
+		Data:       map[string][]byte{"ca.crt": []byte("TRUSTED-CA")},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(serverTLS, trusted).Build()
+
+	inst := tlsInstance("gw")
+	inst.Spec.TLS.TrustedCASecretRef = &litellmv1alpha1.CASecretRef{Name: "trusted"}
+
+	got := operatorProxyCACert(context.Background(), cl, inst)
+	if string(got) != "SERVER-CA" {
+		t.Errorf("expected server Secret ca.crt to win, got %q", got)
+	}
+}
+
+func TestOperatorProxyCACert_FallsBackToTrustedCA(t *testing.T) {
+	scheme := tlsTestScheme(t)
+	// server-tls has no ca.crt → fall back to trustedCASecretRef.
+	serverTLS := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "server-tls", Namespace: "default"},
+		Data:       map[string][]byte{"tls.crt": []byte("c"), "tls.key": []byte("k")},
+	}
+	trusted := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "trusted", Namespace: "default"},
+		Data:       map[string][]byte{"root.pem": []byte("TRUSTED-CA")},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(serverTLS, trusted).Build()
+
+	inst := tlsInstance("gw")
+	inst.Spec.TLS.TrustedCASecretRef = &litellmv1alpha1.CASecretRef{Name: "trusted", Key: "root.pem"}
+
+	got := operatorProxyCACert(context.Background(), cl, inst)
+	if string(got) != "TRUSTED-CA" {
+		t.Errorf("expected fallback to trusted CA, got %q", got)
+	}
+}
+
+func TestOperatorProxyCACert_NilWhenNotServingTLS(t *testing.T) {
+	scheme := tlsTestScheme(t)
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	inst2 := &litellmv1alpha1.LiteLLMInstance{ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"}}
+	if got := operatorProxyCACert(context.Background(), cl, inst2); got != nil {
+		t.Errorf("expected nil CA when not serving TLS, got %q", got)
+	}
+}
+
+func TestValidateTLSSecrets_ServingTLSNoCAWarns(t *testing.T) {
+	scheme := tlsTestScheme(t)
+	// server cert present (crt+key) but NO ca.crt and no trustedCASecretRef.
+	serverTLS := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "server-tls", Namespace: "default"},
+		Data:       map[string][]byte{"tls.crt": []byte("c"), "tls.key": []byte("k")},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(serverTLS).Build()
+	rec := record.NewFakeRecorder(10)
+	r := &LiteLLMInstanceReconciler{Client: cl, Scheme: scheme, Recorder: rec}
+
+	r.validateTLSSecrets(context.Background(), tlsInstance("gw"))
+
+	events := drainEvents(rec)
+	if !containsEvent(events, EventReasonValidationFailed) || !containsEvent(events, "no CA is resolvable") {
+		t.Errorf("expected a no-CA warning event, got %v", events)
+	}
+}
+
+func TestUpdateInstanceStatus_HTTPSEndpointWhenServingTLS(t *testing.T) {
+	scheme := tlsTestScheme(t)
+	inst := tlsInstance("gw")
+	inst.Spec.Service.Port = 4000
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(inst).WithStatusSubresource(inst).Build()
+	rec := record.NewFakeRecorder(10)
+	r := &LiteLLMInstanceReconciler{Client: cl, Scheme: scheme, Recorder: rec}
+
+	r.updateInstanceStatus(context.Background(), inst, nil)
+
+	want := "https://gw.default.svc:4000"
+	if inst.Status.Endpoint != want {
+		t.Errorf("status.Endpoint = %q, want %q", inst.Status.Endpoint, want)
 	}
 }
 

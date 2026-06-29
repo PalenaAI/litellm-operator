@@ -119,7 +119,7 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 	resolved *ResolvedInstance,
 ) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 
 	// Resolve organization reference if set
 	orgID, err := r.resolveOrganizationRef(ctx, team)
@@ -433,7 +433,7 @@ func (r *LiteLLMTeamReconciler) handleDeletion(ctx context.Context, team *litell
 	if team.Status.LiteLLMTeamID != "" {
 		resolved, err := resolveInstance(ctx, r.Client, team.Namespace, team.Spec.InstanceRef)
 		if err == nil {
-			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Teams().Delete(ctx, team.Status.LiteLLMTeamID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete team from LiteLLM")
 				emitEvent(r.Recorder, team, corev1.EventTypeWarning, EventReasonReconcileFailed,

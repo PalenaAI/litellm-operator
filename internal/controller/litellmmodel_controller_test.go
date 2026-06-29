@@ -65,9 +65,11 @@ var _ = Describe("LiteLLMModel Controller", func() {
 
 		It("should successfully reconcile the resource", func() {
 			controllerReconciler := &LiteLLMModelReconciler{
-				Client:               k8sClient,
-				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return litellm.NewMockClient() },
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client {
+					return litellm.NewMockClient()
+				},
 			}
 			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{NamespacedName: typeNamespacedName})
 			// Expected to requeue since the instance doesn't exist

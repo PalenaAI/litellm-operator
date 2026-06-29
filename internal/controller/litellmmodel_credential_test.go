@@ -136,7 +136,7 @@ var _ = Describe("LiteLLMModel Controller — provider auth payload", func() {
 			return &litellm.ModelCreateResponse{ModelID: "m-inline"}, nil
 		}
 		r := &LiteLLMModelReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(),
-			LiteLLMClientFactory: func(string, string) litellm.Client { return mock }}
+			LiteLLMClientFactory: func(string, string, ...litellm.ClientOption) litellm.Client { return mock }}
 
 		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: modelKey})
 		Expect(err).NotTo(HaveOccurred())
@@ -182,7 +182,7 @@ var _ = Describe("LiteLLMModel Controller — provider auth payload", func() {
 			return &litellm.ModelCreateResponse{ModelID: "m-cred"}, nil
 		}
 		r := &LiteLLMModelReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(),
-			LiteLLMClientFactory: func(string, string) litellm.Client { return mock }}
+			LiteLLMClientFactory: func(string, string, ...litellm.ClientOption) litellm.Client { return mock }}
 
 		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: modelKey})
 		Expect(err).NotTo(HaveOccurred())
@@ -234,7 +234,7 @@ var _ = Describe("LiteLLMModel Controller — provider auth payload", func() {
 		mock.MockModels.UpdateFunc = func(_ context.Context, _ litellm.ModelCreateRequest) error { updates++; return nil }
 		mock.MockModels.DeleteFunc = func(_ context.Context, _ string) error { deletes++; return nil }
 		r := &LiteLLMModelReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(),
-			LiteLLMClientFactory: func(string, string) litellm.Client { return mock }}
+			LiteLLMClientFactory: func(string, string, ...litellm.ClientOption) litellm.Client { return mock }}
 
 		// Initial create in credential mode.
 		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: modelKey})

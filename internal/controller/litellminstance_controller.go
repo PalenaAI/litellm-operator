@@ -847,12 +847,19 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 		instance.Status.Ready = dep.Status.ReadyReplicas > 0
 	}
 
-	// Set endpoint
+	// Set endpoint. When the proxy serves TLS the scheme is https — this is
+	// the single source of the URL every controller (and the health probes)
+	// uses to reach the admin API, so flipping it here makes all operator
+	// calls speak TLS.
 	port := instance.Spec.Service.Port
 	if port == 0 {
 		port = 4000
 	}
-	instance.Status.Endpoint = fmt.Sprintf("http://%s.%s.svc:%d", instance.Name, instance.Namespace, port)
+	scheme := "http"
+	if instanceServesTLS(instance) {
+		scheme = "https"
+	}
+	instance.Status.Endpoint = fmt.Sprintf("%s://%s.%s.svc:%d", scheme, instance.Name, instance.Namespace, port)
 
 	// Set version
 	instance.Status.Version = instance.Spec.Image.Tag
@@ -958,6 +965,16 @@ func (r *LiteLLMInstanceReconciler) validateTLSSecrets(ctx context.Context, inst
 		// carry BOTH tls.crt and tls.key.
 		if tls.ServerCertSecretRef != nil {
 			r.requireSecretKeys(ctx, instance, tls.ServerCertSecretRef.Name, "spec.tls.serverCertSecretRef", "tls.crt", "tls.key")
+			// When the proxy serves HTTPS, the operator must trust the serving
+			// cert to keep reaching the admin API. Warn if no CA can be resolved
+			// (no ca.crt in the server Secret and no trustedCASecretRef) — the
+			// operator then falls back to the system trust store, which fails
+			// for private-CA certs (health probes + per-resource sync break).
+			if len(operatorProxyCACert(ctx, r.Client, instance)) == 0 {
+				emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonValidationFailed,
+					"spec.tls.serverCertSecretRef: serving HTTPS but no CA is resolvable for operator->proxy calls; "+
+						"add ca.crt to the server cert Secret or set spec.tls.trustedCASecretRef (a publicly-trusted cert needs neither)")
+			}
 		}
 		if tls.ClientCertSecretRef != nil {
 			r.requireSecretKeys(ctx, instance, tls.ClientCertSecretRef.Name, "spec.tls.clientCertSecretRef", "tls.crt", "tls.key")
@@ -1063,7 +1080,8 @@ func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, ins
 
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	api := r.LiteLLMClientFactory(instance.Status.Endpoint, masterKey)
+	api := r.LiteLLMClientFactory(instance.Status.Endpoint, masterKey,
+		litellm.WithCACert(operatorProxyCACert(ctx, r.Client, instance)))
 
 	previouslyHealthy := meta.IsStatusConditionTrue(instance.Status.Conditions, ConditionReady)
 

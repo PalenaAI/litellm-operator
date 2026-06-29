@@ -118,7 +118,7 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 	resolved *ResolvedInstance,
 ) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 
 	teamIDs, err := r.resolveTeamRefs(ctx, user)
 	if err != nil {
@@ -223,7 +223,7 @@ func (r *LiteLLMUserReconciler) handleDeletion(ctx context.Context, user *litell
 	if user.Status.LiteLLMUserID != "" {
 		resolved, err := resolveInstance(ctx, r.Client, user.Namespace, user.Spec.InstanceRef)
 		if err == nil {
-			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Users().Delete(ctx, user.Status.LiteLLMUserID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete user from LiteLLM")
 				emitEvent(r.Recorder, user, corev1.EventTypeWarning, EventReasonReconcileFailed,

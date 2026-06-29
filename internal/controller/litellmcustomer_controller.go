@@ -129,7 +129,7 @@ func (r *LiteLLMCustomerReconciler) reconcileCustomer(
 	resolved *ResolvedInstance,
 ) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
-	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 
 	objectPerm := mapCustomerObjectPermission(customer.Spec.ObjectPermission)
 
@@ -224,7 +224,7 @@ func (r *LiteLLMCustomerReconciler) handleDeletion(
 	if customer.Status.Synced {
 		resolved, err := resolveInstance(ctx, r.Client, customer.Namespace, customer.Spec.InstanceRef)
 		if err == nil {
-			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Customers().Delete(ctx, customer.Spec.CustomerID); err != nil {
 				logf.FromContext(ctx).Error(err, "failed to delete customer from LiteLLM")
 				emitEvent(r.Recorder, customer, corev1.EventTypeWarning, EventReasonReconcileFailed,

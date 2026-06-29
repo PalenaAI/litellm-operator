@@ -102,9 +102,11 @@ var _ = Describe("LiteLLMCredential Controller", func() {
 
 		It("adds the finalizer and reports InstanceNotReady without crashing", func() {
 			r := &LiteLLMCredentialReconciler{
-				Client:               k8sClient,
-				Scheme:               k8sClient.Scheme(),
-				LiteLLMClientFactory: func(endpoint, masterKey string) litellm.Client { return litellm.NewMockClient() },
+				Client: k8sClient,
+				Scheme: k8sClient.Scheme(),
+				LiteLLMClientFactory: func(endpoint, masterKey string, _ ...litellm.ClientOption) litellm.Client {
+					return litellm.NewMockClient()
+				},
 			}
 			// First pass adds the finalizer.
 			res, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: credKey})

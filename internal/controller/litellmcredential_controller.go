@@ -112,7 +112,7 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		Payload litellm.CredentialPayload
 	}{cred.Spec, apiKey, payload})
 
-	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 	desiredAction := r.planAction(&cred, currentHash)
 
 	switch desiredAction {
@@ -296,7 +296,7 @@ func (r *LiteLLMCredentialReconciler) handleDeletion(ctx context.Context, cred *
 	if cred.Status.Configured {
 		resolved, err := resolveInstance(ctx, r.Client, cred.Namespace, cred.Spec.InstanceRef)
 		if err == nil {
-			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey)
+			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if derr := apiClient.Credentials().Delete(ctx, cred.Spec.CredentialName); derr != nil {
 				if apiErr, ok := litellm.IsAPIError(derr); !ok || !apiErr.IsNotFound() {
 					log.Error(derr, "failed to delete credential from LiteLLM (proceeding with finalizer removal)",
