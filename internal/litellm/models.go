@@ -40,25 +40,59 @@ type ModelCreateRequest struct {
 
 // ModelParams defines provider-specific model parameters.
 type ModelParams struct {
-	Model                 string   `json:"model"`
-	LiteLLMCredentialName string   `json:"litellm_credential_name,omitempty"`
-	APIBase               string   `json:"api_base,omitempty"`
-	APIKey                string   `json:"api_key,omitempty"`
-	APIVersion            string   `json:"api_version,omitempty"`
-	RPM                   *int     `json:"rpm,omitempty"`
-	TPM                   *int     `json:"tpm,omitempty"`
-	Timeout               *int     `json:"timeout,omitempty"`
-	StreamTimeout         *int     `json:"stream_timeout,omitempty"`
-	MaxRetries            *int     `json:"max_retries,omitempty"`
-	Tags                  []string `json:"tags,omitempty"`
+	Model                 string            `json:"model"`
+	LiteLLMCredentialName string            `json:"litellm_credential_name,omitempty"`
+	APIBase               string            `json:"api_base,omitempty"`
+	APIKey                string            `json:"api_key,omitempty"`
+	APIVersion            string            `json:"api_version,omitempty"`
+	RPM                   *int              `json:"rpm,omitempty"`
+	TPM                   *int              `json:"tpm,omitempty"`
+	Timeout               *int              `json:"timeout,omitempty"`
+	StreamTimeout         *int              `json:"stream_timeout,omitempty"`
+	MaxRetries            *int              `json:"max_retries,omitempty"`
+	Tags                  []string          `json:"tags,omitempty"`
+	Weight                *int              `json:"weight,omitempty"`
+	Order                 *int              `json:"order,omitempty"`
+	MaxInputTokens        *int              `json:"max_input_tokens,omitempty"`
+	Temperature           *float64          `json:"temperature,omitempty"`
+	TopP                  *float64          `json:"top_p,omitempty"`
+	MaxTokens             *int              `json:"max_tokens,omitempty"`
+	Seed                  *int              `json:"seed,omitempty"`
+	Organization          string            `json:"organization,omitempty"`
+	AWSRegionName         string            `json:"aws_region_name,omitempty"`
+	ExtraHeaders          map[string]string `json:"extra_headers,omitempty"`
 }
 
-// ModelInfoReq defines optional model info in requests.
+// ModelInfoReq defines optional model info in requests. Health-check fields are
+// flattened here to match LiteLLM's wire format, where they live directly under
+// model_info rather than in a nested object.
 type ModelInfoReq struct {
 	ID                 string   `json:"id,omitempty"`
 	MaxTokens          *int     `json:"max_tokens,omitempty"`
 	InputCostPerToken  *float64 `json:"input_cost_per_token,omitempty"`
 	OutputCostPerToken *float64 `json:"output_cost_per_token,omitempty"`
+
+	Mode                  string   `json:"mode,omitempty"`
+	BaseModel             string   `json:"base_model,omitempty"`
+	Tier                  string   `json:"tier,omitempty"`
+	RegionName            string   `json:"region_name,omitempty"`
+	AccessGroups          []string `json:"access_groups,omitempty"`
+	SupportedEnvironments []string `json:"supported_environments,omitempty"`
+	UseInPassThrough      *bool    `json:"use_in_pass_through,omitempty"`
+
+	InputCostPerPixel           *float64 `json:"input_cost_per_pixel,omitempty"`
+	InputCostPerSecond          *float64 `json:"input_cost_per_second,omitempty"`
+	CacheReadInputTokenCost     *float64 `json:"cache_read_input_token_cost,omitempty"`
+	CacheCreationInputTokenCost *float64 `json:"cache_creation_input_token_cost,omitempty"`
+
+	DisableBackgroundHealthCheck     *bool  `json:"disable_background_health_check,omitempty"`
+	HealthCheckTimeout               *int   `json:"health_check_timeout,omitempty"`
+	HealthCheckMaxTokens             *int   `json:"health_check_max_tokens,omitempty"`
+	HealthCheckMaxTokensReasoning    *int   `json:"health_check_max_tokens_reasoning,omitempty"`
+	HealthCheckMaxTokensNonReasoning *int   `json:"health_check_max_tokens_non_reasoning,omitempty"`
+	HealthCheckReasoningEffort       string `json:"health_check_reasoning_effort,omitempty"`
+	HealthCheckVoice                 string `json:"health_check_voice,omitempty"`
+	HealthCheckModel                 string `json:"health_check_model,omitempty"`
 }
 
 // ModelCreateResponse is the response from creating a model.

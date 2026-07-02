@@ -92,6 +92,60 @@ type LiteLLMModelParams struct {
 	// Max retries for failed requests.
 	// +optional
 	MaxRetries *int `json:"maxRetries,omitempty"`
+
+	// Weight for weighted load balancing across the deployments in this
+	// model group. A deployment with weight 2 receives roughly twice the
+	// traffic of a deployment with weight 1.
+	// +optional
+	Weight *int `json:"weight,omitempty"`
+
+	// Order sets the deployment's routing priority within its model group.
+	// Lower numbers are preferred; higher-order deployments are only used
+	// when lower-order ones are unavailable (fallback-style ordering).
+	// +optional
+	Order *int `json:"order,omitempty"`
+
+	// MaxInputTokens is the context-window size the router uses for
+	// context-window-aware routing and fallbacks (context_window_fallbacks).
+	// +optional
+	MaxInputTokens *int `json:"maxInputTokens,omitempty"`
+
+	// Temperature is a default temperature applied to every request routed to
+	// this deployment unless the caller overrides it.
+	// +optional
+	Temperature *float64 `json:"temperature,omitempty"`
+
+	// TopP is a default top_p applied to every request routed to this
+	// deployment unless the caller overrides it.
+	// +optional
+	TopP *float64 `json:"topP,omitempty"`
+
+	// MaxTokens is a default max_tokens (max completion tokens) applied to
+	// requests to this deployment. This is a request-time default sent to the
+	// provider and is distinct from modelInfo.maxTokens, which describes the
+	// model's total token capacity for routing decisions.
+	// +optional
+	MaxTokens *int `json:"maxTokens,omitempty"`
+
+	// Seed is a default seed applied to requests for reproducible outputs
+	// (providers that support it).
+	// +optional
+	Seed *int `json:"seed,omitempty"`
+
+	// Organization is the provider organization identifier (e.g. an OpenAI
+	// organization ID) sent with requests to this deployment.
+	// +optional
+	Organization string `json:"organization,omitempty"`
+
+	// AWSRegionName is the AWS region for AWS-backed providers such as Bedrock
+	// and SageMaker (e.g. "us-east-1").
+	// +optional
+	AWSRegionName string `json:"awsRegionName,omitempty"`
+
+	// ExtraHeaders are additional HTTP headers sent on every upstream request
+	// to this deployment (e.g. provider-specific routing or beta headers).
+	// +optional
+	ExtraHeaders map[string]string `json:"extraHeaders,omitempty"`
 }
 
 // ModelInfo defines optional model metadata.
@@ -107,6 +161,116 @@ type ModelInfo struct {
 	// Output cost per token in USD.
 	// +optional
 	OutputCostPerToken *float64 `json:"outputCostPerToken,omitempty"`
+
+	// Mode declares the model type so LiteLLM runs the correct health check
+	// and routing logic. Common values: "chat", "completion", "embedding",
+	// "image_generation", "audio_transcription", "audio_speech", "moderation",
+	// "rerank", "responses", "batch", "realtime". Leave empty to let LiteLLM
+	// infer from the provider/model string.
+	// +optional
+	Mode string `json:"mode,omitempty"`
+
+	// BaseModel maps this deployment to a known base model for accurate cost
+	// tracking and token accounting. Required for Azure deployments where the
+	// deployment name differs from the underlying model (e.g. "azure/gpt-4o").
+	// +optional
+	BaseModel string `json:"baseModel,omitempty"`
+
+	// Tier classifies the deployment for tier-based routing. Common values are
+	// "free" and "paid".
+	// +optional
+	Tier string `json:"tier,omitempty"`
+
+	// RegionName is the geographic region used for region-based routing
+	// (e.g. "us-east-1", "eu").
+	// +optional
+	RegionName string `json:"regionName,omitempty"`
+
+	// AccessGroups restrict which virtual keys / teams may use this model.
+	// A key must be granted one of the listed access groups to route here.
+	// +optional
+	AccessGroups []string `json:"accessGroups,omitempty"`
+
+	// SupportedEnvironments limits which environments expose this deployment
+	// (e.g. "production", "staging", "development").
+	// +optional
+	SupportedEnvironments []string `json:"supportedEnvironments,omitempty"`
+
+	// UseInPassThrough allows this deployment to be selected by pass-through
+	// endpoints in addition to regular routing.
+	// +optional
+	UseInPassThrough *bool `json:"useInPassThrough,omitempty"`
+
+	// InputCostPerPixel is the cost per pixel in USD for image models.
+	// +optional
+	InputCostPerPixel *float64 `json:"inputCostPerPixel,omitempty"`
+
+	// InputCostPerSecond is the cost per second in USD for audio / realtime
+	// models billed by duration.
+	// +optional
+	InputCostPerSecond *float64 `json:"inputCostPerSecond,omitempty"`
+
+	// CacheReadInputTokenCost is the cost per token in USD for reads that hit
+	// the provider's prompt cache (e.g. Anthropic / OpenAI prompt caching).
+	// +optional
+	CacheReadInputTokenCost *float64 `json:"cacheReadInputTokenCost,omitempty"`
+
+	// CacheCreationInputTokenCost is the cost per token in USD for writing to
+	// the provider's prompt cache.
+	// +optional
+	CacheCreationInputTokenCost *float64 `json:"cacheCreationInputTokenCost,omitempty"`
+
+	// HealthCheck tunes or disables LiteLLM's per-model health checks.
+	// +optional
+	HealthCheck *ModelHealthCheck `json:"healthCheck,omitempty"`
+}
+
+// ModelHealthCheck controls LiteLLM's health checking for a single model
+// deployment. All fields are optional; unset fields fall back to LiteLLM's
+// defaults. These map to the health-check keys under model_info in
+// proxy_server_config.yaml.
+type ModelHealthCheck struct {
+	// DisableBackgroundHealthCheck skips background health checks for this
+	// model when the proxy runs with background_health_checks enabled. Useful
+	// for providers that bill or rate-limit health probes, or models that do
+	// not support the probe request shape.
+	// +optional
+	DisableBackgroundHealthCheck *bool `json:"disableBackgroundHealthCheck,omitempty"`
+
+	// TimeoutSeconds overrides the health-check request timeout for this model
+	// (LiteLLM default is 60 seconds).
+	// +optional
+	TimeoutSeconds *int `json:"timeoutSeconds,omitempty"`
+
+	// MaxTokens overrides the max_tokens used for the health-check request.
+	// +optional
+	MaxTokens *int `json:"maxTokens,omitempty"`
+
+	// MaxTokensReasoning overrides the health-check max_tokens for reasoning
+	// models (which require a larger budget to return a valid response).
+	// +optional
+	MaxTokensReasoning *int `json:"maxTokensReasoning,omitempty"`
+
+	// MaxTokensNonReasoning overrides the health-check max_tokens for
+	// non-reasoning models.
+	// +optional
+	MaxTokensNonReasoning *int `json:"maxTokensNonReasoning,omitempty"`
+
+	// ReasoningEffort sets the reasoning effort used for health-check requests
+	// against reasoning models (e.g. "none", "low", "medium", "high").
+	// +optional
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+
+	// Voice sets the voice used for health-check requests against
+	// text-to-speech models (e.g. "alloy").
+	// +optional
+	Voice string `json:"voice,omitempty"`
+
+	// Model overrides the model used for the health-check request. Primarily
+	// used for wildcard routes where the deployment does not map to a single
+	// concrete model (e.g. "openai/gpt-4o-mini").
+	// +optional
+	Model string `json:"model,omitempty"`
 }
 
 // LiteLLMModelStatus defines the observed state of LiteLLMModel.

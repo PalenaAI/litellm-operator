@@ -88,6 +88,11 @@ spec:
                       Required by most Azure deployments. When credentialRef is set, the
                       value from the LiteLLMCredential takes precedence over this field.
                     type: string
+                  awsRegionName:
+                    description: |-
+                      AWSRegionName is the AWS region for AWS-backed providers such as Bedrock
+                      and SageMaker (e.g. "us-east-1").
+                    type: string
                   credentialRef:
                     description: |-
                       Reference to a LiteLLMCredential CR for provider authentication.
@@ -102,23 +107,74 @@ spec:
                     required:
                     - name
                     type: object
+                  extraHeaders:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      ExtraHeaders are additional HTTP headers sent on every upstream request
+                      to this deployment (e.g. provider-specific routing or beta headers).
+                    type: object
+                  maxInputTokens:
+                    description: |-
+                      MaxInputTokens is the context-window size the router uses for
+                      context-window-aware routing and fallbacks (context_window_fallbacks).
+                    type: integer
                   maxRetries:
                     description: Max retries for failed requests.
+                    type: integer
+                  maxTokens:
+                    description: |-
+                      MaxTokens is a default max_tokens (max completion tokens) applied to
+                      requests to this deployment. This is a request-time default sent to the
+                      provider and is distinct from modelInfo.maxTokens, which describes the
+                      model's total token capacity for routing decisions.
                     type: integer
                   model:
                     description: Provider/model string (e.g., "openai/gpt-4", "anthropic/claude-3-opus").
                     type: string
+                  order:
+                    description: |-
+                      Order sets the deployment's routing priority within its model group.
+                      Lower numbers are preferred; higher-order deployments are only used
+                      when lower-order ones are unavailable (fallback-style ordering).
+                    type: integer
+                  organization:
+                    description: |-
+                      Organization is the provider organization identifier (e.g. an OpenAI
+                      organization ID) sent with requests to this deployment.
+                    type: string
                   rpm:
                     description: 'Rate limit: requests per minute.'
+                    type: integer
+                  seed:
+                    description: |-
+                      Seed is a default seed applied to requests for reproducible outputs
+                      (providers that support it).
                     type: integer
                   streamTimeout:
                     description: Stream timeout in seconds.
                     type: integer
+                  temperature:
+                    description: |-
+                      Temperature is a default temperature applied to every request routed to
+                      this deployment unless the caller overrides it.
+                    type: number
                   timeout:
                     description: Request timeout in seconds.
                     type: integer
+                  topP:
+                    description: |-
+                      TopP is a default top_p applied to every request routed to this
+                      deployment unless the caller overrides it.
+                    type: number
                   tpm:
                     description: 'Rate limit: tokens per minute.'
+                    type: integer
+                  weight:
+                    description: |-
+                      Weight for weighted load balancing across the deployments in this
+                      model group. A deployment with weight 2 receives roughly twice the
+                      traffic of a deployment with weight 1.
                     type: integer
                 required:
                 - model
@@ -126,15 +182,124 @@ spec:
               modelInfo:
                 description: Optional model metadata.
                 properties:
+                  accessGroups:
+                    description: |-
+                      AccessGroups restrict which virtual keys / teams may use this model.
+                      A key must be granted one of the listed access groups to route here.
+                    items:
+                      type: string
+                    type: array
+                  baseModel:
+                    description: |-
+                      BaseModel maps this deployment to a known base model for accurate cost
+                      tracking and token accounting. Required for Azure deployments where the
+                      deployment name differs from the underlying model (e.g. "azure/gpt-4o").
+                    type: string
+                  cacheCreationInputTokenCost:
+                    description: |-
+                      CacheCreationInputTokenCost is the cost per token in USD for writing to
+                      the provider's prompt cache.
+                    type: number
+                  cacheReadInputTokenCost:
+                    description: |-
+                      CacheReadInputTokenCost is the cost per token in USD for reads that hit
+                      the provider's prompt cache (e.g. Anthropic / OpenAI prompt caching).
+                    type: number
+                  healthCheck:
+                    description: HealthCheck tunes or disables LiteLLM's per-model
+                      health checks.
+                    properties:
+                      disableBackgroundHealthCheck:
+                        description: |-
+                          DisableBackgroundHealthCheck skips background health checks for this
+                          model when the proxy runs with background_health_checks enabled. Useful
+                          for providers that bill or rate-limit health probes, or models that do
+                          not support the probe request shape.
+                        type: boolean
+                      maxTokens:
+                        description: MaxTokens overrides the max_tokens used for the
+                          health-check request.
+                        type: integer
+                      maxTokensNonReasoning:
+                        description: |-
+                          MaxTokensNonReasoning overrides the health-check max_tokens for
+                          non-reasoning models.
+                        type: integer
+                      maxTokensReasoning:
+                        description: |-
+                          MaxTokensReasoning overrides the health-check max_tokens for reasoning
+                          models (which require a larger budget to return a valid response).
+                        type: integer
+                      model:
+                        description: |-
+                          Model overrides the model used for the health-check request. Primarily
+                          used for wildcard routes where the deployment does not map to a single
+                          concrete model (e.g. "openai/gpt-4o-mini").
+                        type: string
+                      reasoningEffort:
+                        description: |-
+                          ReasoningEffort sets the reasoning effort used for health-check requests
+                          against reasoning models (e.g. "none", "low", "medium", "high").
+                        type: string
+                      timeoutSeconds:
+                        description: |-
+                          TimeoutSeconds overrides the health-check request timeout for this model
+                          (LiteLLM default is 60 seconds).
+                        type: integer
+                      voice:
+                        description: |-
+                          Voice sets the voice used for health-check requests against
+                          text-to-speech models (e.g. "alloy").
+                        type: string
+                    type: object
+                  inputCostPerPixel:
+                    description: InputCostPerPixel is the cost per pixel in USD for
+                      image models.
+                    type: number
+                  inputCostPerSecond:
+                    description: |-
+                      InputCostPerSecond is the cost per second in USD for audio / realtime
+                      models billed by duration.
+                    type: number
                   inputCostPerToken:
                     description: Input cost per token in USD.
                     type: number
                   maxTokens:
                     description: Maximum tokens supported.
                     type: integer
+                  mode:
+                    description: |-
+                      Mode declares the model type so LiteLLM runs the correct health check
+                      and routing logic. Common values: "chat", "completion", "embedding",
+                      "image_generation", "audio_transcription", "audio_speech", "moderation",
+                      "rerank", "responses", "batch", "realtime". Leave empty to let LiteLLM
+                      infer from the provider/model string.
+                    type: string
                   outputCostPerToken:
                     description: Output cost per token in USD.
                     type: number
+                  regionName:
+                    description: |-
+                      RegionName is the geographic region used for region-based routing
+                      (e.g. "us-east-1", "eu").
+                    type: string
+                  supportedEnvironments:
+                    description: |-
+                      SupportedEnvironments limits which environments expose this deployment
+                      (e.g. "production", "staging", "development").
+                    items:
+                      type: string
+                    type: array
+                  tier:
+                    description: |-
+                      Tier classifies the deployment for tier-based routing. Common values are
+                      "free" and "paid".
+                    type: string
+                  useInPassThrough:
+                    description: |-
+                      UseInPassThrough allows this deployment to be selected by pass-through
+                      endpoints in addition to regular routing.
+                    type: boolean
                 type: object
               modelName:
                 description: Model name exposed to clients.

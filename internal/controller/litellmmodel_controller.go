@@ -138,13 +138,23 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 
 	params := litellm.ModelParams{
-		Model:         model.Spec.LiteLLMParams.Model,
-		RPM:           model.Spec.LiteLLMParams.RPM,
-		TPM:           model.Spec.LiteLLMParams.TPM,
-		Timeout:       model.Spec.LiteLLMParams.Timeout,
-		StreamTimeout: model.Spec.LiteLLMParams.StreamTimeout,
-		MaxRetries:    model.Spec.LiteLLMParams.MaxRetries,
-		Tags:          model.Spec.Tags,
+		Model:          model.Spec.LiteLLMParams.Model,
+		RPM:            model.Spec.LiteLLMParams.RPM,
+		TPM:            model.Spec.LiteLLMParams.TPM,
+		Timeout:        model.Spec.LiteLLMParams.Timeout,
+		StreamTimeout:  model.Spec.LiteLLMParams.StreamTimeout,
+		MaxRetries:     model.Spec.LiteLLMParams.MaxRetries,
+		Tags:           model.Spec.Tags,
+		Weight:         model.Spec.LiteLLMParams.Weight,
+		Order:          model.Spec.LiteLLMParams.Order,
+		MaxInputTokens: model.Spec.LiteLLMParams.MaxInputTokens,
+		Temperature:    model.Spec.LiteLLMParams.Temperature,
+		TopP:           model.Spec.LiteLLMParams.TopP,
+		MaxTokens:      model.Spec.LiteLLMParams.MaxTokens,
+		Seed:           model.Spec.LiteLLMParams.Seed,
+		Organization:   model.Spec.LiteLLMParams.Organization,
+		AWSRegionName:  model.Spec.LiteLLMParams.AWSRegionName,
+		ExtraHeaders:   model.Spec.LiteLLMParams.ExtraHeaders,
 	}
 
 	// credentialRef takes precedence over inline apiBase/apiVersion/apiKeySecretRef.
@@ -187,10 +197,32 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 		LiteLLMParams: params,
 	}
 	if model.Spec.ModelInfo != nil {
+		info := model.Spec.ModelInfo
 		req.ModelInfo = &litellm.ModelInfoReq{
-			MaxTokens:          model.Spec.ModelInfo.MaxTokens,
-			InputCostPerToken:  model.Spec.ModelInfo.InputCostPerToken,
-			OutputCostPerToken: model.Spec.ModelInfo.OutputCostPerToken,
+			MaxTokens:                   info.MaxTokens,
+			InputCostPerToken:           info.InputCostPerToken,
+			OutputCostPerToken:          info.OutputCostPerToken,
+			Mode:                        info.Mode,
+			BaseModel:                   info.BaseModel,
+			Tier:                        info.Tier,
+			RegionName:                  info.RegionName,
+			AccessGroups:                info.AccessGroups,
+			SupportedEnvironments:       info.SupportedEnvironments,
+			UseInPassThrough:            info.UseInPassThrough,
+			InputCostPerPixel:           info.InputCostPerPixel,
+			InputCostPerSecond:          info.InputCostPerSecond,
+			CacheReadInputTokenCost:     info.CacheReadInputTokenCost,
+			CacheCreationInputTokenCost: info.CacheCreationInputTokenCost,
+		}
+		if hc := info.HealthCheck; hc != nil {
+			req.ModelInfo.DisableBackgroundHealthCheck = hc.DisableBackgroundHealthCheck
+			req.ModelInfo.HealthCheckTimeout = hc.TimeoutSeconds
+			req.ModelInfo.HealthCheckMaxTokens = hc.MaxTokens
+			req.ModelInfo.HealthCheckMaxTokensReasoning = hc.MaxTokensReasoning
+			req.ModelInfo.HealthCheckMaxTokensNonReasoning = hc.MaxTokensNonReasoning
+			req.ModelInfo.HealthCheckReasoningEffort = hc.ReasoningEffort
+			req.ModelInfo.HealthCheckVoice = hc.Voice
+			req.ModelInfo.HealthCheckModel = hc.Model
 		}
 	}
 

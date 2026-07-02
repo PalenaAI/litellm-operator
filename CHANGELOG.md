@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`LiteLLMModel` now exposes LiteLLM's full per-model config surface.** Previously only `model`, auth, `rpm`/`tpm`/`timeout`/`streamTimeout`/`maxRetries` and three `modelInfo` fields (`maxTokens`, cost per token) were configurable — LiteLLM accepts far more.
+  - **`spec.modelInfo.healthCheck`** — per-model health-check controls, including `disableBackgroundHealthCheck` to turn off background liveness probing for a single deployment (e.g. providers that bill/rate-limit probes, or models that reject the probe request shape). Also `timeoutSeconds`, `maxTokens` / `maxTokensReasoning` / `maxTokensNonReasoning`, `reasoningEffort`, `voice`, and `model` (probe target for wildcard routes). These are flattened onto `model_info` in the `/model/new` payload to match LiteLLM's wire format.
+  - **`spec.litellmParams`** additions: `weight` and `order` (weighted / priority load-balancing across deployments in a model group), `maxInputTokens` (context-window-aware routing/fallbacks), default request params `temperature` / `topP` / `maxTokens` / `seed`, and provider knobs `organization`, `awsRegionName`, `extraHeaders`.
+  - **`spec.modelInfo`** additions: `mode` (declare model type so the correct health check / routing runs), `baseModel` (required for accurate Azure cost tracking), `tier` and `regionName` (tier-/region-based routing), `accessGroups` and `supportedEnvironments` (access control / visibility), `useInPassThrough`, and cost fields `inputCostPerPixel`, `inputCostPerSecond`, `cacheReadInputTokenCost`, `cacheCreationInputTokenCost`.
+
 ## [0.15.0] - 2026-06-29
 
 ### Added

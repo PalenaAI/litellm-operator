@@ -41,3 +41,36 @@ spec:
     timeout: 120
   modelInfo:
     maxTokens: 200000
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMModel
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: gpt4o-azure
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  # Same modelName as gpt4o above → the router load-balances between them.
+  modelName: gpt-4o
+  litellmParams:
+    model: azure/gpt-4o
+    apiBase: https://my-deployment.openai.azure.com/
+    apiVersion: "2024-10-21"
+    apiKeySecretRef:
+      name: azure-credentials
+      key: AZURE_API_KEY
+    # Weighted routing: this Azure deployment takes ~2x the traffic of a
+    # weight-1 sibling, and is preferred (lower order) over higher-order ones.
+    weight: 2
+    order: 1
+  modelInfo:
+    # base_model is required so cost tracking maps the Azure deployment name
+    # back to the real model's pricing.
+    baseModel: azure/gpt-4o
+    mode: chat
+    healthCheck:
+      # This Azure deployment is rate-limited; skip background health probes.
+      disableBackgroundHealthCheck: true
+      timeoutSeconds: 15
