@@ -83,6 +83,18 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 		config["router_settings"] = rs
 	}
 
+	// Database connection pool limit → general_settings.database_connection_pool_limit.
+	// LiteLLM (Prisma) reads this to cap the proxy's DB connection pool.
+	if pool := instance.Spec.Database.ConnectionPool; pool != nil && pool.MaxConnections > 0 {
+		ensureGeneralSettings(config)["database_connection_pool_limit"] = pool.MaxConnections
+	}
+
+	if ll := instance.Spec.LiteLLMSettings; ll != nil {
+		if ll.JSONLogs != nil {
+			ensureLiteLLMSettings(config)["json_logs"] = *ll.JSONLogs
+		}
+	}
+
 	if instance.Spec.Fallbacks != nil {
 		buildFallbackConfig(instance.Spec.Fallbacks, config)
 	}
@@ -180,6 +192,27 @@ func buildGeneralSettings(spec *litellmv1alpha1.GeneralSettingsSpec) map[string]
 	if len(spec.AlertTypes) > 0 {
 		gs["alert_types"] = spec.AlertTypes
 	}
+	if len(spec.Alerting) > 0 {
+		gs["alerting"] = spec.Alerting
+	}
+	if spec.AlertingThreshold != nil {
+		gs["alerting_threshold"] = *spec.AlertingThreshold
+	}
+	if len(spec.AlertToWebhookURL) > 0 {
+		gs["alert_to_webhook_url"] = spec.AlertToWebhookURL
+	}
+	if spec.BackgroundHealthChecks != nil {
+		gs["background_health_checks"] = *spec.BackgroundHealthChecks
+	}
+	if spec.HealthCheckInterval != nil {
+		gs["health_check_interval"] = *spec.HealthCheckInterval
+	}
+	if spec.HealthCheckDetails != nil {
+		gs["health_check_details"] = *spec.HealthCheckDetails
+	}
+	if spec.CustomKeyGenerate != "" {
+		gs["custom_key_generate"] = spec.CustomKeyGenerate
+	}
 	if spec.AllowUserAuth != nil {
 		gs["allow_user_auth"] = *spec.AllowUserAuth
 	}
@@ -216,6 +249,18 @@ func buildRouterSettings(spec *litellmv1alpha1.RouterSettingsSpec) map[string]in
 	}
 	if spec.Timeout != nil {
 		rs["timeout"] = *spec.Timeout
+	}
+	if spec.RetryAfter != nil {
+		rs["retry_after"] = *spec.RetryAfter
+	}
+	if spec.StreamTimeout != nil {
+		rs["stream_timeout"] = *spec.StreamTimeout
+	}
+	if spec.EnablePreCallChecks != nil {
+		rs["enable_pre_call_checks"] = *spec.EnablePreCallChecks
+	}
+	if len(spec.ModelGroupAlias) > 0 {
+		rs["model_group_alias"] = spec.ModelGroupAlias
 	}
 	if spec.AllowedFails != nil {
 		rs["allowed_fails"] = *spec.AllowedFails

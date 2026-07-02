@@ -274,6 +274,9 @@ spec:
           Enables API-level authentication via JWT tokens from identity providers.
         displayName: JWT Auth
         path: jwtAuth
+      - description: LiteLLM library settings written to litellm_settings.
+        displayName: LiteLLM Settings
+        path: litellmSettings
       - description: |-
           Logging configuration for the instance.
           Controls audit logs, global message logging, and spend log retention.
@@ -392,6 +395,11 @@ spec:
         name: ""
         version: v1alpha1
       specDescriptors:
+      - description: |-
+          Blocked disables all requests from this team when true. Useful for
+          incident response without deleting the team.
+        displayName: Blocked
+        path: blocked
       - description: Budget reset duration (e.g., "30d", "7d").
         displayName: Budget Duration
         path: budgetDuration
@@ -430,15 +438,33 @@ spec:
       - description: Custom metadata for the team.
         displayName: Metadata
         path: metadata
+      - description: ModelRPMLimit sets a per-model requests-per-minute cap (model
+          name -> RPM).
+        displayName: Model RPM Limit
+        path: modelRpmLimit
+      - description: ModelTPMLimit sets a per-model tokens-per-minute cap (model name
+          -> TPM).
+        displayName: Model TPM Limit
+        path: modelTpmLimit
       - description: Models this team can access.
         displayName: Models
         path: models
+      - description: |-
+          ObjectPermission grants access to MCP servers, vector stores, agents,
+          and access groups.
+        displayName: Object Permission
+        path: objectPermission
       - description: Reference to the organization this team belongs to.
         displayName: Organization Ref
         path: organizationRef
       - description: RPM limit for the team.
         displayName: RPM Limit
         path: rpmLimit
+      - description: |-
+          SoftBudget is an alert threshold in USD below maxBudgetMonthly; crossing
+          it triggers a budget alert without blocking requests.
+        displayName: Soft Budget
+        path: softBudget
       - description: |-
           Tags associated with this team. Keys generated for team members
           will inherit these tags for tag-based routing.
@@ -447,6 +473,12 @@ spec:
       - description: Human-readable team alias.
         displayName: Team Alias
         path: teamAlias
+      - description: |-
+          Max budget in USD applied to each individual team member (distinct from
+          the team-wide maxBudgetMonthly). The reset cadence follows the team's
+          budgetDuration.
+        displayName: Team Member Budget
+        path: teamMemberBudget
       - description: RPM limit per team member.
         displayName: Team Member RPM Limit
         path: teamMemberRpmLimit
@@ -469,6 +501,11 @@ spec:
         name: ""
         version: v1alpha1
       specDescriptors:
+      - description: |-
+          Blocked disables all requests from this user when true. Useful for
+          incident response without deleting the user.
+        displayName: Blocked
+        path: blocked
       - description: Budget reset duration (e.g., "30d").
         displayName: Budget Duration
         path: budgetDuration
@@ -481,12 +518,30 @@ spec:
       - description: Custom metadata.
         displayName: Metadata
         path: metadata
+      - description: ModelRPMLimit sets a per-model requests-per-minute cap (model
+          name -> RPM).
+        displayName: Model RPM Limit
+        path: modelRpmLimit
+      - description: ModelTPMLimit sets a per-model tokens-per-minute cap (model name
+          -> TPM).
+        displayName: Model TPM Limit
+        path: modelTpmLimit
       - description: Models this user can access.
         displayName: Models
         path: models
+      - description: |-
+          ObjectPermission grants access to MCP servers, vector stores, agents,
+          and access groups.
+        displayName: Object Permission
+        path: objectPermission
       - description: RPM limit for this user.
         displayName: RPM Limit
         path: rpmLimit
+      - description: |-
+          SoftBudget is an alert threshold in USD below the hard maxBudget; crossing
+          it triggers a budget alert without blocking requests.
+        displayName: Soft Budget
+        path: softBudget
       - description: Teams this user belongs to.
         displayName: Teams
         path: teams
@@ -515,6 +570,11 @@ spec:
         name: ""
         version: v1
       specDescriptors:
+      - description: |-
+          Blocked disables this key when true, rejecting all requests that use it.
+          Useful for incident response without deleting the key.
+        displayName: Blocked
+        path: blocked
       - description: Budget reset duration (e.g., "30d").
         displayName: Budget Duration
         path: budgetDuration
@@ -552,12 +612,30 @@ spec:
           Key: model name, Value: max budget in USD.
         displayName: Model Max Budget
         path: modelMaxBudget
+      - description: ModelRPMLimit sets a per-model requests-per-minute cap (model
+          name -> RPM).
+        displayName: Model RPM Limit
+        path: modelRpmLimit
+      - description: ModelTPMLimit sets a per-model tokens-per-minute cap (model name
+          -> TPM).
+        displayName: Model TPM Limit
+        path: modelTpmLimit
       - description: Models this key can access.
         displayName: Models
         path: models
+      - description: |-
+          ObjectPermission grants access to MCP servers, vector stores, agents,
+          and access groups.
+        displayName: Object Permission
+        path: objectPermission
       - description: RPM limit for this key.
         displayName: RPM Limit
         path: rpmLimit
+      - description: |-
+          SoftBudget is an alert threshold in USD below the hard maxBudget; crossing
+          it triggers a budget alert without blocking requests.
+        displayName: Soft Budget
+        path: softBudget
       - description: Reference to a LiteLLMTeam CR that this key belongs to.
         displayName: Team Ref
         path: teamRef

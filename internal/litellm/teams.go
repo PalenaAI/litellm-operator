@@ -46,11 +46,17 @@ type TeamCreateRequest struct {
 	RPMLimit            *int              `json:"rpm_limit,omitempty"`
 	TeamMemberRPMLimit  *int              `json:"team_member_rpm_limit,omitempty"`
 	TeamMemberTPMLimit  *int              `json:"team_member_tpm_limit,omitempty"`
+	TeamMemberBudget    *float64          `json:"team_member_budget,omitempty"`
 	MaxParallelRequests *int              `json:"max_parallel_requests,omitempty"`
+	SoftBudget          *float64          `json:"soft_budget,omitempty"`
+	ModelRPMLimit       map[string]int    `json:"model_rpm_limit,omitempty"`
+	ModelTPMLimit       map[string]int    `json:"model_tpm_limit,omitempty"`
+	ObjectPermission    *ObjectPermission `json:"object_permission,omitempty"`
 	Metadata            map[string]string `json:"metadata,omitempty"`
 	Members             []MemberRequest   `json:"members_with_roles,omitempty"`
 	Tags                []string          `json:"tags,omitempty"`
 	Guardrails          []string          `json:"guardrails,omitempty"`
+	Blocked             *bool             `json:"blocked,omitempty"`
 }
 
 // MemberRequest defines a member to add to a team.
@@ -75,10 +81,16 @@ type TeamUpdateRequest struct {
 	BudgetDuration      string            `json:"budget_duration,omitempty"`
 	TPMLimit            *int              `json:"tpm_limit,omitempty"`
 	RPMLimit            *int              `json:"rpm_limit,omitempty"`
+	TeamMemberBudget    *float64          `json:"team_member_budget,omitempty"`
 	MaxParallelRequests *int              `json:"max_parallel_requests,omitempty"`
+	SoftBudget          *float64          `json:"soft_budget,omitempty"`
+	ModelRPMLimit       map[string]int    `json:"model_rpm_limit,omitempty"`
+	ModelTPMLimit       map[string]int    `json:"model_tpm_limit,omitempty"`
+	ObjectPermission    *ObjectPermission `json:"object_permission,omitempty"`
 	Metadata            map[string]string `json:"metadata,omitempty"`
 	Tags                []string          `json:"tags,omitempty"`
 	Guardrails          []string          `json:"guardrails,omitempty"`
+	Blocked             *bool             `json:"blocked,omitempty"`
 }
 
 // TeamInfo is the response from getting team info.

@@ -16,6 +16,28 @@ limitations under the License.
 
 package v1alpha1
 
+// ObjectPermission restricts which objects (MCP servers, vector stores, agents,
+// access groups) a team, user, key, organization, or customer may access. The
+// referenced objects are named by ID/name; this grants access, it does not
+// define them.
+type ObjectPermission struct {
+	// Allowed MCP servers (by name/ID).
+	// +optional
+	MCPServers []string `json:"mcpServers,omitempty"`
+
+	// Allowed MCP access groups.
+	// +optional
+	AccessGroups []string `json:"accessGroups,omitempty"`
+
+	// Allowed vector stores (by name/ID).
+	// +optional
+	VectorStores []string `json:"vectorStores,omitempty"`
+
+	// Allowed agents (by name/ID).
+	// +optional
+	Agents []string `json:"agents,omitempty"`
+}
+
 // SecretKeyRef references a key within a Kubernetes Secret.
 type SecretKeyRef struct {
 	// Name of the Secret.

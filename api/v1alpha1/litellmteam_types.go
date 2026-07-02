@@ -60,6 +60,22 @@ type LiteLLMTeamSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="RPM Limit"
 	RPMLimit *int `json:"rpmLimit,omitempty"`
 
+	// SoftBudget is an alert threshold in USD below maxBudgetMonthly; crossing
+	// it triggers a budget alert without blocking requests.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Soft Budget"
+	SoftBudget *float64 `json:"softBudget,omitempty"`
+
+	// ModelRPMLimit sets a per-model requests-per-minute cap (model name -> RPM).
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Model RPM Limit"
+	ModelRPMLimit map[string]int `json:"modelRpmLimit,omitempty"`
+
+	// ModelTPMLimit sets a per-model tokens-per-minute cap (model name -> TPM).
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Model TPM Limit"
+	ModelTPMLimit map[string]int `json:"modelTpmLimit,omitempty"`
+
 	// RPM limit per team member.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Team Member RPM Limit"
@@ -70,10 +86,29 @@ type LiteLLMTeamSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Team Member TPM Limit"
 	TeamMemberTPMLimit *int `json:"teamMemberTpmLimit,omitempty"`
 
+	// Max budget in USD applied to each individual team member (distinct from
+	// the team-wide maxBudgetMonthly). The reset cadence follows the team's
+	// budgetDuration.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Team Member Budget"
+	TeamMemberBudget *float64 `json:"teamMemberBudget,omitempty"`
+
 	// Custom metadata for the team.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Metadata"
 	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// Blocked disables all requests from this team when true. Useful for
+	// incident response without deleting the team.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Blocked"
+	Blocked *bool `json:"blocked,omitempty"`
+
+	// ObjectPermission grants access to MCP servers, vector stores, agents,
+	// and access groups.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Object Permission"
+	ObjectPermission *ObjectPermission `json:"objectPermission,omitempty"`
 
 	// Tags associated with this team. Keys generated for team members
 	// will inherit these tags for tag-based routing.

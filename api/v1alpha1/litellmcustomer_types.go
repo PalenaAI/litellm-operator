@@ -98,24 +98,9 @@ type LiteLLMCustomerSpec struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
-// CustomerObjectPermission restricts which objects a customer may access.
-type CustomerObjectPermission struct {
-	// Allowed MCP servers.
-	// +optional
-	MCPServers []string `json:"mcpServers,omitempty"`
-
-	// Allowed access groups.
-	// +optional
-	AccessGroups []string `json:"accessGroups,omitempty"`
-
-	// Allowed vector stores.
-	// +optional
-	VectorStores []string `json:"vectorStores,omitempty"`
-
-	// Allowed agents.
-	// +optional
-	Agents []string `json:"agents,omitempty"`
-}
+// CustomerObjectPermission is retained for backward compatibility; it is an
+// alias for the shared [ObjectPermission] type now used across all identity CRDs.
+type CustomerObjectPermission = ObjectPermission
 
 // LiteLLMCustomerStatus defines the observed state of LiteLLMCustomer.
 type LiteLLMCustomerStatus struct {

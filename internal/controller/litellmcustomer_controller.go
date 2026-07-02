@@ -131,7 +131,7 @@ func (r *LiteLLMCustomerReconciler) reconcileCustomer(
 	log := logf.FromContext(ctx)
 	apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 
-	objectPerm := mapCustomerObjectPermission(customer.Spec.ObjectPermission)
+	objectPerm := mapObjectPermission(customer.Spec.ObjectPermission)
 
 	if !customer.Status.Synced {
 		req := litellm.CustomerCreateRequest{
@@ -239,12 +239,13 @@ func (r *LiteLLMCustomerReconciler) handleDeletion(
 	return ctrl.Result{}, r.Update(ctx, customer)
 }
 
-// mapCustomerObjectPermission converts a CRD ObjectPermission into the API shape.
-func mapCustomerObjectPermission(p *litellmv1alpha1.CustomerObjectPermission) *litellm.CustomerObjectPermission {
+// mapObjectPermission converts a CRD ObjectPermission into the API shape. Shared
+// by the customer, organization, team, user, and key controllers.
+func mapObjectPermission(p *litellmv1alpha1.ObjectPermission) *litellm.ObjectPermission {
 	if p == nil {
 		return nil
 	}
-	return &litellm.CustomerObjectPermission{
+	return &litellm.ObjectPermission{
 		MCPServers:   p.MCPServers,
 		AccessGroups: p.AccessGroups,
 		VectorStores: p.VectorStores,

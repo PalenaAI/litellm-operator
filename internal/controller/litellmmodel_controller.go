@@ -155,6 +155,9 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 		Organization:   model.Spec.LiteLLMParams.Organization,
 		AWSRegionName:  model.Spec.LiteLLMParams.AWSRegionName,
 		ExtraHeaders:   model.Spec.LiteLLMParams.ExtraHeaders,
+		DropParams:     model.Spec.LiteLLMParams.DropParams,
+		VertexProject:  model.Spec.LiteLLMParams.VertexProject,
+		VertexLocation: model.Spec.LiteLLMParams.VertexLocation,
 	}
 
 	// credentialRef takes precedence over inline apiBase/apiVersion/apiKeySecretRef.
@@ -189,6 +192,13 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 				return ctrl.Result{}, fmt.Errorf("resolve API key: %w", err)
 			}
 			params.APIKey = apiKey
+		}
+		if model.Spec.LiteLLMParams.VertexCredentialsSecretRef != nil {
+			vc, err := getSecretValue(ctx, r.Client, model.Namespace, model.Spec.LiteLLMParams.VertexCredentialsSecretRef)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("resolve vertex credentials: %w", err)
+			}
+			params.VertexCredentials = vc
 		}
 	}
 

@@ -47,6 +47,11 @@ type KeyGenerateRequest struct {
 	ModelMaxBudget      map[string]float64 `json:"model_max_budget,omitempty"`
 	MaxParallelRequests *int               `json:"max_parallel_requests,omitempty"`
 	Guardrails          []string           `json:"guardrails,omitempty"`
+	Blocked             *bool              `json:"blocked,omitempty"`
+	SoftBudget          *float64           `json:"soft_budget,omitempty"`
+	ModelRPMLimit       map[string]int     `json:"model_rpm_limit,omitempty"`
+	ModelTPMLimit       map[string]int     `json:"model_tpm_limit,omitempty"`
+	ObjectPermission    *ObjectPermission  `json:"object_permission,omitempty"`
 }
 
 // KeyGenerateResponse is the response from generating a key.
@@ -67,6 +72,11 @@ type KeyUpdateRequest struct {
 	ModelMaxBudget      map[string]float64 `json:"model_max_budget,omitempty"`
 	MaxParallelRequests *int               `json:"max_parallel_requests,omitempty"`
 	Guardrails          []string           `json:"guardrails,omitempty"`
+	Blocked             *bool              `json:"blocked,omitempty"`
+	SoftBudget          *float64           `json:"soft_budget,omitempty"`
+	ModelRPMLimit       map[string]int     `json:"model_rpm_limit,omitempty"`
+	ModelTPMLimit       map[string]int     `json:"model_tpm_limit,omitempty"`
+	ObjectPermission    *ObjectPermission  `json:"object_permission,omitempty"`
 }
 
 // KeyInfo is the response from getting key info.

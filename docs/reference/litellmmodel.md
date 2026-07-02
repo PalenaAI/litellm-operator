@@ -66,6 +66,10 @@ spec:
 | `organization` | string | No | Provider organization ID (e.g. an OpenAI organization) |
 | `awsRegionName` | string | No | AWS region for Bedrock / SageMaker (e.g. `us-east-1`) |
 | `extraHeaders` | map[string]string | No | Extra HTTP headers sent on every upstream request to this deployment |
+| `dropParams` | *bool | No | Silently drop request params the provider rejects (e.g. `temperature` on reasoning models) instead of erroring |
+| `vertexProject` | string | No | GCP project ID for Vertex AI models |
+| `vertexLocation` | string | No | GCP region for Vertex AI models (e.g. `us-central1`) |
+| `vertexCredentialsSecretRef` | *SecretKeyRef | No | Secret key holding the GCP service-account JSON. The operator reads it and sends `vertex_credentials`, never logging the value. Ignored when `credentialRef` is set |
 
 #### Using a shared credential
 

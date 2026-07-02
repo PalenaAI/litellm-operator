@@ -93,7 +93,13 @@ spec:
 | `rpmLimit` | *int | No | — | Requests per minute limit |
 | `teamMemberRpmLimit` | *int | No | — | Per-member RPM limit |
 | `teamMemberTpmLimit` | *int | No | — | Per-member TPM limit |
+| `teamMemberBudget` | *float64 | No | — | Per-member max budget in USD (distinct from the team-wide `maxBudgetMonthly`); resets on `budgetDuration` |
 | `metadata` | map[string]string | No | — | Custom metadata |
+| `blocked` | *bool | No | — | Disable all requests from this team without deleting it |
+| `softBudget` | *float64 | No | — | Alert threshold in USD below `maxBudgetMonthly` (does not block) |
+| `modelRpmLimit` | map[string]int | No | — | Per-model requests-per-minute caps (model name → RPM) |
+| `modelTpmLimit` | map[string]int | No | — | Per-model tokens-per-minute caps (model name → TPM) |
+| `objectPermission` | *ObjectPermission | No | — | Grant access to MCP servers, vector stores, agents, access groups |
 | `tags` | []string | No | — | Tags for tag-based routing (keys inherit these tags) |
 | `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this team |
 | `guardrails` | []string | No | — | Names of [LiteLLMGuardrail](/reference/litellmguardrail) CRs this team opts into. Each entry must match `spec.guardrailName` on a guardrail bound to the same instance (enterprise) |

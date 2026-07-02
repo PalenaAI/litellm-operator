@@ -71,10 +71,38 @@ type LiteLLMUserSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="RPM Limit"
 	RPMLimit *int `json:"rpmLimit,omitempty"`
 
+	// SoftBudget is an alert threshold in USD below the hard maxBudget; crossing
+	// it triggers a budget alert without blocking requests.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Soft Budget"
+	SoftBudget *float64 `json:"softBudget,omitempty"`
+
+	// ModelRPMLimit sets a per-model requests-per-minute cap (model name -> RPM).
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Model RPM Limit"
+	ModelRPMLimit map[string]int `json:"modelRpmLimit,omitempty"`
+
+	// ModelTPMLimit sets a per-model tokens-per-minute cap (model name -> TPM).
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Model TPM Limit"
+	ModelTPMLimit map[string]int `json:"modelTpmLimit,omitempty"`
+
 	// Custom metadata.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Metadata"
 	Metadata map[string]string `json:"metadata,omitempty"`
+
+	// Blocked disables all requests from this user when true. Useful for
+	// incident response without deleting the user.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Blocked"
+	Blocked *bool `json:"blocked,omitempty"`
+
+	// ObjectPermission grants access to MCP servers, vector stores, agents,
+	// and access groups.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Object Permission"
+	ObjectPermission *ObjectPermission `json:"objectPermission,omitempty"`
 }
 
 // UserTeamMembership defines a user's team membership.

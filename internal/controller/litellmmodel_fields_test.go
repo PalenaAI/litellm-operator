@@ -191,4 +191,48 @@ var _ = Describe("LiteLLMModel Controller — extended field passthrough", func(
 		Expect(mi.HealthCheckVoice).To(Equal("alloy"))
 		Expect(mi.HealthCheckModel).To(Equal("openai/gpt-4o-mini"))
 	})
+
+	It("forwards drop_params and resolves Vertex service-account JSON from a Secret", func() {
+		const vertexSecret = "vertex-sa"
+		Expect(k8sClient.Create(ctx, &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: vertexSecret, Namespace: ns},
+			Data:       map[string][]byte{"sa.json": []byte(`{"type":"service_account","project_id":"p"}`)},
+		})).To(Succeed())
+		defer func() {
+			_ = k8sClient.Delete(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: vertexSecret, Namespace: ns}})
+		}()
+
+		Expect(k8sClient.Create(ctx, &litellmv1alpha1.LiteLLMModel{
+			ObjectMeta: metav1.ObjectMeta{Name: modelName, Namespace: ns},
+			Spec: litellmv1alpha1.LiteLLMModelSpec{
+				InstanceRef: litellmv1alpha1.InstanceRef{Name: instanceName},
+				ModelName:   "gemini-pro",
+				LiteLLMParams: litellmv1alpha1.LiteLLMModelParams{
+					Model:                      "vertex_ai/gemini-1.5-pro",
+					DropParams:                 boolptr(true),
+					VertexProject:              "my-project",
+					VertexLocation:             "us-central1",
+					VertexCredentialsSecretRef: &litellmv1alpha1.SecretKeyRef{Name: vertexSecret, Key: "sa.json"},
+				},
+			},
+		})).To(Succeed())
+
+		var captured litellm.ModelCreateRequest
+		mock := litellm.NewMockClient()
+		mock.MockModels.CreateFunc = func(_ context.Context, req litellm.ModelCreateRequest) (*litellm.ModelCreateResponse, error) {
+			captured = req
+			return &litellm.ModelCreateResponse{ModelID: "m-vertex"}, nil
+		}
+		r := &LiteLLMModelReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(),
+			LiteLLMClientFactory: func(string, string, ...litellm.ClientOption) litellm.Client { return mock }}
+
+		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: modelKey})
+		Expect(err).NotTo(HaveOccurred())
+
+		p := captured.LiteLLMParams
+		Expect(p.DropParams).To(Equal(boolptr(true)))
+		Expect(p.VertexProject).To(Equal("my-project"))
+		Expect(p.VertexLocation).To(Equal("us-central1"))
+		Expect(p.VertexCredentials).To(Equal(`{"type":"service_account","project_id":"p"}`))
+	})
 })

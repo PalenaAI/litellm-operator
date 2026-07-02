@@ -61,6 +61,10 @@ type ModelParams struct {
 	Organization          string            `json:"organization,omitempty"`
 	AWSRegionName         string            `json:"aws_region_name,omitempty"`
 	ExtraHeaders          map[string]string `json:"extra_headers,omitempty"`
+	DropParams            *bool             `json:"drop_params,omitempty"`
+	VertexProject         string            `json:"vertex_project,omitempty"`
+	VertexLocation        string            `json:"vertex_location,omitempty"`
+	VertexCredentials     string            `json:"vertex_credentials,omitempty"`
 }
 
 // ModelInfoReq defines optional model info in requests. Health-check fields are

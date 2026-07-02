@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Cross-CRD access & budget controls** on `LiteLLMOrganization`, `LiteLLMTeam`, `LiteLLMUser`, and `LiteLLMVirtualKey` (shared, consistent field names):
+  - `objectPermission` — grant access to MCP servers, vector stores, agents, and access groups (`object_permission`; the `LiteLLMCustomer` type was generalized into a shared `ObjectPermission`).
+  - `softBudget` — alert threshold below the hard budget (`soft_budget`).
+  - `modelRpmLimit` / `modelTpmLimit` — per-model rate-limit maps (`model_rpm_limit` / `model_tpm_limit`).
+- **Incident-response `blocked` flag on `LiteLLMTeam`, `LiteLLMUser`, and `LiteLLMVirtualKey`** (`spec.blocked: true`) — disables all requests from a team/user/key without deleting it. Forwarded to `/team/{new,update}`, `/user/{new,update}`, and `/key/{generate,update}`. (`LiteLLMCustomer` already had this.)
+- **`LiteLLMTeam.spec.teamMemberBudget`** — per-member max budget (`team_member_budget`), distinct from the team-wide `maxBudgetMonthly`; reset cadence follows the team's `budgetDuration`.
+- **`LiteLLMModel` provider/routing additions**: `litellmParams.dropParams` (silently drop params a provider rejects, e.g. `temperature` on reasoning models) and first-class Vertex AI auth — `vertexProject`, `vertexLocation`, and `vertexCredentialsSecretRef` (reads the GCP service-account JSON from a Secret and sends it as `vertex_credentials`, never logged).
+- **`LiteLLMInstance` router settings**: `routerSettings.streamTimeout`, `routerSettings.enablePreCallChecks` (context-window/region pre-filtering), `routerSettings.modelGroupAlias`; and the `routingStrategy` enum now includes `usage-based-routing-v2` and `cost-based-routing`.
+- **`LiteLLMInstance` general settings**: alerting **delivery** — `generalSettings.alerting`, `alertingThreshold`, `alertToWebhookUrl` (previously only `alertTypes` was exposed, so alerts never fired); plus `backgroundHealthChecks`, `healthCheckInterval`, `healthCheckDetails`.
+- **`LiteLLMInstance.spec.litellmSettings`** (new block) with `jsonLogs` for structured JSON logging — the home for future `litellm_settings` knobs.
+
+### Fixed
+
+- **Three CRD fields that were silently ignored are now rendered.** They existed in the API (and passed schema validation) but no controller/resource code ever emitted them, so setting them did nothing:
+  - `spec.generalSettings.customKeyGenerate` → `general_settings.custom_key_generate`
+  - `spec.routerSettings.retryAfter` → `router_settings.retry_after`
+  - `spec.database.connectionPool.maxConnections` → `general_settings.database_connection_pool_limit`
+
+### Added
+
 - **`LiteLLMModel` now exposes LiteLLM's full per-model config surface.** Previously only `model`, auth, `rpm`/`tpm`/`timeout`/`streamTimeout`/`maxRetries` and three `modelInfo` fields (`maxTokens`, cost per token) were configurable — LiteLLM accepts far more.
   - **`spec.modelInfo.healthCheck`** — per-model health-check controls, including `disableBackgroundHealthCheck` to turn off background liveness probing for a single deployment (e.g. providers that bill/rate-limit probes, or models that reject the probe request shape). Also `timeoutSeconds`, `maxTokens` / `maxTokensReasoning` / `maxTokensNonReasoning`, `reasoningEffort`, `voice`, and `model` (probe target for wildcard routes). These are flattened onto `model_info` in the `/model/new` payload to match LiteLLM's wire format.
   - **`spec.litellmParams`** additions: `weight` and `order` (weighted / priority load-balancing across deployments in a model group), `maxInputTokens` (context-window-aware routing/fallbacks), default request params `temperature` / `topP` / `maxTokens` / `seed`, and provider knobs `organization`, `awsRegionName`, `extraHeaders`.

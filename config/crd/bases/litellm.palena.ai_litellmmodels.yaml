@@ -107,6 +107,12 @@ spec:
                     required:
                     - name
                     type: object
+                  dropParams:
+                    description: |-
+                      DropParams silently drops request parameters the provider does not
+                      support instead of returning an error (e.g. `temperature` on reasoning
+                      models like the o-series / gpt-5). Applies to this deployment only.
+                    type: boolean
                   extraHeaders:
                     additionalProperties:
                       type: string
@@ -170,6 +176,31 @@ spec:
                   tpm:
                     description: 'Rate limit: tokens per minute.'
                     type: integer
+                  vertexCredentialsSecretRef:
+                    description: |-
+                      VertexCredentialsSecretRef references a Secret key holding the GCP
+                      service-account JSON used to authenticate Vertex AI calls. The operator
+                      reads the JSON and sends it as `vertex_credentials`; the value is never
+                      logged. Ignored when credentialRef is set.
+                    properties:
+                      key:
+                        description: Key within the Secret.
+                        type: string
+                      name:
+                        description: Name of the Secret.
+                        type: string
+                    required:
+                    - key
+                    - name
+                    type: object
+                  vertexLocation:
+                    description: VertexLocation is the GCP region for Vertex AI models
+                      (e.g. "us-central1").
+                    type: string
+                  vertexProject:
+                    description: VertexProject is the GCP project ID for Vertex AI
+                      models.
+                    type: string
                   weight:
                     description: |-
                       Weight for weighted load balancing across the deployments in this

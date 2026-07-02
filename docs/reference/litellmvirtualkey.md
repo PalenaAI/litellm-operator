@@ -42,6 +42,11 @@ spec:
 | `tpmLimit` | *int | No | — | Tokens per minute limit |
 | `rpmLimit` | *int | No | — | Requests per minute limit |
 | `metadata` | map[string]string | No | — | Custom metadata |
+| `blocked` | *bool | No | — | Disable this key without deleting it (rejects all requests using it) |
+| `softBudget` | *float64 | No | — | Alert threshold in USD below `maxBudget` (does not block) |
+| `modelRpmLimit` | map[string]int | No | — | Per-model requests-per-minute caps (model name → RPM) |
+| `modelTpmLimit` | map[string]int | No | — | Per-model tokens-per-minute caps (model name → TPM) |
+| `objectPermission` | *ObjectPermission | No | — | Grant access to MCP servers, vector stores, agents, access groups |
 | `modelMaxBudget` | map[string]string | No | — | Per-model spending limits in USD (enterprise) |
 | `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this key |
 | `guardrails` | []string | No | — | Names of [LiteLLMGuardrail](/reference/litellmguardrail) CRs this key opts into. Each entry must match `spec.guardrailName` on a guardrail bound to the same instance (enterprise) |

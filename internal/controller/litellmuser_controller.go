@@ -126,16 +126,21 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 	}
 
 	req := litellm.UserCreateRequest{
-		UserID:         user.Spec.UserID,
-		UserEmail:      user.Spec.UserEmail,
-		UserRole:       user.Spec.UserRole,
-		MaxBudget:      user.Spec.MaxBudget,
-		BudgetDuration: user.Spec.BudgetDuration,
-		Models:         user.Spec.Models,
-		Teams:          teamIDs,
-		TPMLimit:       user.Spec.TPMLimit,
-		RPMLimit:       user.Spec.RPMLimit,
-		Metadata:       user.Spec.Metadata,
+		UserID:           user.Spec.UserID,
+		UserEmail:        user.Spec.UserEmail,
+		UserRole:         user.Spec.UserRole,
+		MaxBudget:        user.Spec.MaxBudget,
+		BudgetDuration:   user.Spec.BudgetDuration,
+		Models:           user.Spec.Models,
+		Teams:            teamIDs,
+		TPMLimit:         user.Spec.TPMLimit,
+		RPMLimit:         user.Spec.RPMLimit,
+		SoftBudget:       user.Spec.SoftBudget,
+		ModelRPMLimit:    user.Spec.ModelRPMLimit,
+		ModelTPMLimit:    user.Spec.ModelTPMLimit,
+		ObjectPermission: mapObjectPermission(user.Spec.ObjectPermission),
+		Metadata:         user.Spec.Metadata,
+		Blocked:          user.Spec.Blocked,
 	}
 
 	if user.Status.LiteLLMUserID == "" {

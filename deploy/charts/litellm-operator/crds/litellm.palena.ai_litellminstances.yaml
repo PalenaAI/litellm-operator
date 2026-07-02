@@ -2788,13 +2788,38 @@ spec:
               generalSettings:
                 description: General settings for the LiteLLM proxy.
                 properties:
+                  alertToWebhookUrl:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      AlertToWebhookURL maps an alert type to a specific webhook URL, overriding
+                      the default channel for that alert type.
+                    type: object
                   alertTypes:
                     description: Alert types for notifications.
                     items:
                       type: string
                     type: array
+                  alerting:
+                    description: |-
+                      Alerting enables the alert delivery channels (e.g. ["slack"]). Without
+                      this, configuring alertTypes alone does not deliver any alerts. For
+                      Slack, also set the SLACK_WEBHOOK_URL env var (via extraEnvVars).
+                    items:
+                      type: string
+                    type: array
+                  alertingThreshold:
+                    description: |-
+                      AlertingThreshold is the number of seconds a request may hang before a
+                      hanging-request alert fires.
+                    type: integer
                   allowUserAuth:
                     description: Allow requests with no key.
+                    type: boolean
+                  backgroundHealthChecks:
+                    description: |-
+                      BackgroundHealthChecks enables periodic background health checks so
+                      GET /health returns cached results instead of probing on each call.
                     type: boolean
                   budgetDuration:
                     description: Global budget reset duration (e.g., "1d", "7d", "30d").
@@ -2812,6 +2837,16 @@ spec:
                     type: string
                   globalMaxParallelRequests:
                     description: Maximum parallel requests across the entire proxy.
+                    type: integer
+                  healthCheckDetails:
+                    description: |-
+                      HealthCheckDetails toggles whether GET /health exposes endpoint URLs and
+                      error details. Set false to hide them.
+                    type: boolean
+                  healthCheckInterval:
+                    description: |-
+                      HealthCheckInterval is the seconds between background health checks
+                      (default 300). Only applies when backgroundHealthChecks is true.
                     type: integer
                   masterKeyRequired:
                     description: Enable/disable master key requirement.
@@ -2953,6 +2988,15 @@ spec:
                     type: string
                 required:
                 - enabled
+                type: object
+              litellmSettings:
+                description: LiteLLM library settings written to litellm_settings.
+                properties:
+                  jsonLogs:
+                    description: |-
+                      JSONLogs emits structured JSON logs instead of plaintext — recommended
+                      for log aggregation in Kubernetes.
+                    type: boolean
                 type: object
               logging:
                 description: |-
@@ -3419,11 +3463,24 @@ spec:
                   defaultMaxParallelRequests:
                     description: Default max parallel requests per model deployment.
                     type: integer
+                  enablePreCallChecks:
+                    description: |-
+                      EnablePreCallChecks filters deployments by context-window size and
+                      region before making a call, so a request that would exceed a
+                      deployment's context window is routed to one that fits.
+                    type: boolean
                   enableTagFiltering:
                     description: |-
                       Enable tag-based routing. When enabled, requests with matching tags
                       are routed to model deployments that share those tags.
                     type: boolean
+                  modelGroupAlias:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      ModelGroupAlias maps an alias model-group name to a real one, so clients
+                      can request the alias and be routed to the underlying model group.
+                    type: object
                   modelGroupRetryPolicy:
                     additionalProperties:
                       additionalProperties:
@@ -3470,7 +3527,14 @@ spec:
                     - least-busy
                     - latency-based-routing
                     - usage-based-routing
+                    - usage-based-routing-v2
+                    - cost-based-routing
                     type: string
+                  streamTimeout:
+                    description: |-
+                      Stream timeout in seconds for streaming responses. Distinct from
+                      `timeout`, which applies to the full (non-streaming) request.
+                    type: integer
                   tagFilteringMatchAny:
                     description: |-
                       If true, match requests having ANY of the specified tags (OR logic).

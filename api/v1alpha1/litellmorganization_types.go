@@ -48,9 +48,27 @@ type LiteLLMOrganizationSpec struct {
 	// +optional
 	RpmLimit *int64 `json:"rpmLimit,omitempty"`
 
+	// SoftBudget is an alert threshold in USD below the hard maxBudget; crossing
+	// it triggers a budget alert without blocking requests.
+	// +optional
+	SoftBudget *float64 `json:"softBudget,omitempty"`
+
+	// ModelRPMLimit sets a per-model requests-per-minute cap (model name -> RPM).
+	// +optional
+	ModelRPMLimit map[string]int `json:"modelRpmLimit,omitempty"`
+
+	// ModelTPMLimit sets a per-model tokens-per-minute cap (model name -> TPM).
+	// +optional
+	ModelTPMLimit map[string]int `json:"modelTpmLimit,omitempty"`
+
 	// Organization members.
 	// +optional
 	Members []OrganizationMember `json:"members,omitempty"`
+
+	// ObjectPermission grants access to MCP servers, vector stores, agents,
+	// and access groups.
+	// +optional
+	ObjectPermission *ObjectPermission `json:"objectPermission,omitempty"`
 
 	// Metadata key-value pairs.
 	// +optional

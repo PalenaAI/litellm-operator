@@ -40,6 +40,10 @@ type OrganizationCreateRequest struct {
 	BudgetDuration    string            `json:"budget_duration,omitempty"`
 	TpmLimit          *int64            `json:"tpm_limit,omitempty"`
 	RpmLimit          *int64            `json:"rpm_limit,omitempty"`
+	SoftBudget        *float64          `json:"soft_budget,omitempty"`
+	ModelRPMLimit     map[string]int    `json:"model_rpm_limit,omitempty"`
+	ModelTPMLimit     map[string]int    `json:"model_tpm_limit,omitempty"`
+	ObjectPermission  *ObjectPermission `json:"object_permission,omitempty"`
 	Metadata          map[string]string `json:"metadata,omitempty"`
 }
 
@@ -58,6 +62,10 @@ type OrganizationUpdateRequest struct {
 	BudgetDuration    string            `json:"budget_duration,omitempty"`
 	TpmLimit          *int64            `json:"tpm_limit,omitempty"`
 	RpmLimit          *int64            `json:"rpm_limit,omitempty"`
+	SoftBudget        *float64          `json:"soft_budget,omitempty"`
+	ModelRPMLimit     map[string]int    `json:"model_rpm_limit,omitempty"`
+	ModelTPMLimit     map[string]int    `json:"model_tpm_limit,omitempty"`
+	ObjectPermission  *ObjectPermission `json:"object_permission,omitempty"`
 	Metadata          map[string]string `json:"metadata,omitempty"`
 }
 

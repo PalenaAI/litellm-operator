@@ -130,6 +130,10 @@ func (r *LiteLLMOrganizationReconciler) reconcileOrganization(
 			BudgetDuration:    org.Spec.BudgetDuration,
 			TpmLimit:          org.Spec.TpmLimit,
 			RpmLimit:          org.Spec.RpmLimit,
+			SoftBudget:        org.Spec.SoftBudget,
+			ModelRPMLimit:     org.Spec.ModelRPMLimit,
+			ModelTPMLimit:     org.Spec.ModelTPMLimit,
+			ObjectPermission:  mapObjectPermission(org.Spec.ObjectPermission),
 			Metadata:          org.Spec.Metadata,
 		}
 		resp, err := apiClient.Organizations().Create(ctx, req)
@@ -162,6 +166,10 @@ func (r *LiteLLMOrganizationReconciler) reconcileOrganization(
 				BudgetDuration:    org.Spec.BudgetDuration,
 				TpmLimit:          org.Spec.TpmLimit,
 				RpmLimit:          org.Spec.RpmLimit,
+				SoftBudget:        org.Spec.SoftBudget,
+				ModelRPMLimit:     org.Spec.ModelRPMLimit,
+				ModelTPMLimit:     org.Spec.ModelTPMLimit,
+				ObjectPermission:  mapObjectPermission(org.Spec.ObjectPermission),
 				Metadata:          org.Spec.Metadata,
 			}
 			if err := apiClient.Organizations().Update(ctx, req); err != nil {

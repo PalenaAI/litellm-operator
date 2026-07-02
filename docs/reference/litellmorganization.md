@@ -44,6 +44,10 @@ spec:
 | `budgetDuration` | string | No | — | Budget reset period (e.g., `30d`, `7d`, `1d`) |
 | `tpmLimit` | *int64 | No | — | Tokens per minute limit |
 | `rpmLimit` | *int64 | No | — | Requests per minute limit |
+| `softBudget` | *float64 | No | — | Alert threshold in USD below `maxBudget` (does not block) |
+| `modelRpmLimit` | map[string]int | No | — | Per-model requests-per-minute caps (model name → RPM) |
+| `modelTpmLimit` | map[string]int | No | — | Per-model tokens-per-minute caps (model name → TPM) |
+| `objectPermission` | *ObjectPermission | No | — | Grant access to MCP servers, vector stores, agents, access groups |
 | `members` | []OrganizationMember | No | — | Organization members |
 | `metadata` | map[string]string | No | — | Custom metadata |
 

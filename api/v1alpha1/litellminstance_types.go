@@ -65,6 +65,11 @@ type LiteLLMInstanceSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Router Settings"
 	RouterSettings *RouterSettingsSpec `json:"routerSettings,omitempty"`
 
+	// LiteLLM library settings written to litellm_settings.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="LiteLLM Settings"
+	LiteLLMSettings *LiteLLMSettingsSpec `json:"litellmSettings,omitempty"`
+
 	// Fallback configuration for model routing.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Fallbacks"
@@ -862,6 +867,37 @@ type GeneralSettingsSpec struct {
 	// +optional
 	AlertTypes []string `json:"alertTypes,omitempty"`
 
+	// Alerting enables the alert delivery channels (e.g. ["slack"]). Without
+	// this, configuring alertTypes alone does not deliver any alerts. For
+	// Slack, also set the SLACK_WEBHOOK_URL env var (via extraEnvVars).
+	// +optional
+	Alerting []string `json:"alerting,omitempty"`
+
+	// AlertingThreshold is the number of seconds a request may hang before a
+	// hanging-request alert fires.
+	// +optional
+	AlertingThreshold *int `json:"alertingThreshold,omitempty"`
+
+	// AlertToWebhookURL maps an alert type to a specific webhook URL, overriding
+	// the default channel for that alert type.
+	// +optional
+	AlertToWebhookURL map[string]string `json:"alertToWebhookUrl,omitempty"`
+
+	// BackgroundHealthChecks enables periodic background health checks so
+	// GET /health returns cached results instead of probing on each call.
+	// +optional
+	BackgroundHealthChecks *bool `json:"backgroundHealthChecks,omitempty"`
+
+	// HealthCheckInterval is the seconds between background health checks
+	// (default 300). Only applies when backgroundHealthChecks is true.
+	// +optional
+	HealthCheckInterval *int `json:"healthCheckInterval,omitempty"`
+
+	// HealthCheckDetails toggles whether GET /health exposes endpoint URLs and
+	// error details. Set false to hide them.
+	// +optional
+	HealthCheckDetails *bool `json:"healthCheckDetails,omitempty"`
+
 	// Custom key generation function.
 	// +optional
 	CustomKeyGenerate string `json:"customKeyGenerate,omitempty"`
@@ -928,7 +964,7 @@ type ModelFallbackEntry struct {
 // RouterSettingsSpec defines LiteLLM router settings.
 type RouterSettingsSpec struct {
 	// Routing strategy.
-	// +kubebuilder:validation:Enum=simple-shuffle;least-busy;latency-based-routing;usage-based-routing
+	// +kubebuilder:validation:Enum=simple-shuffle;least-busy;latency-based-routing;usage-based-routing;usage-based-routing-v2;cost-based-routing
 	// +optional
 	RoutingStrategy string `json:"routingStrategy,omitempty"`
 
@@ -979,6 +1015,31 @@ type RouterSettingsSpec struct {
 	// Per-provider budget limits.
 	// +optional
 	ProviderBudgetConfig map[string]ProviderBudget `json:"providerBudgetConfig,omitempty"`
+
+	// Stream timeout in seconds for streaming responses. Distinct from
+	// `timeout`, which applies to the full (non-streaming) request.
+	// +optional
+	StreamTimeout *int `json:"streamTimeout,omitempty"`
+
+	// EnablePreCallChecks filters deployments by context-window size and
+	// region before making a call, so a request that would exceed a
+	// deployment's context window is routed to one that fits.
+	// +optional
+	EnablePreCallChecks *bool `json:"enablePreCallChecks,omitempty"`
+
+	// ModelGroupAlias maps an alias model-group name to a real one, so clients
+	// can request the alias and be routed to the underlying model group.
+	// +optional
+	ModelGroupAlias map[string]string `json:"modelGroupAlias,omitempty"`
+}
+
+// LiteLLMSettingsSpec configures the LiteLLM library settings rendered under
+// `litellm_settings` in proxy_server_config.yaml.
+type LiteLLMSettingsSpec struct {
+	// JSONLogs emits structured JSON logs instead of plaintext — recommended
+	// for log aggregation in Kubernetes.
+	// +optional
+	JSONLogs *bool `json:"jsonLogs,omitempty"`
 }
 
 // ProviderBudget defines a spending limit for a single LLM provider.

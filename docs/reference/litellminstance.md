@@ -378,7 +378,14 @@ spec:
 | --- | --- | --- |
 | `masterKeyRequired` | *bool | Require master key for all requests |
 | `proxyBatchWriteAt` | int | Batch write interval in seconds |
-| `alertTypes` | []string | Alert types for notifications |
+| `alertTypes` | []string | Alert types to generate notifications for |
+| `alerting` | []string | Alert **delivery** channels (e.g. `["slack"]`). Required for alerts to actually fire; for Slack also set `SLACK_WEBHOOK_URL` via `extraEnvVars` |
+| `alertingThreshold` | *int | Seconds a request may hang before a hanging-request alert fires |
+| `alertToWebhookUrl` | map[string]string | Override the delivery webhook per alert type |
+| `backgroundHealthChecks` | *bool | Enable periodic background health checks so `GET /health` returns cached results |
+| `healthCheckInterval` | *int | Seconds between background health checks (default 300) |
+| `healthCheckDetails` | *bool | Whether `GET /health` exposes endpoint URLs and error details |
+| `customKeyGenerate` | string | Dotted path to a custom key-generation handler |
 | `allowUserAuth` | *bool | Allow requests without a key |
 | `maxBudget` | *string | Global proxy budget in USD |
 | `budgetDuration` | string | Global budget reset duration (e.g., `1d`, `7d`, `30d`) |
@@ -390,10 +397,14 @@ spec:
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `routingStrategy` | string | — | `simple-shuffle`, `least-busy`, `latency-based-routing`, `usage-based-routing` |
+| `routingStrategy` | string | — | `simple-shuffle`, `least-busy`, `latency-based-routing`, `usage-based-routing`, `usage-based-routing-v2`, `cost-based-routing` |
 | `numRetries` | *int | — | Number of retries |
 | `timeout` | *int | — | Timeout in seconds |
+| `streamTimeout` | *int | — | Timeout in seconds for streaming responses (distinct from `timeout`) |
+| `retryAfter` | *int | — | Seconds to wait before a retry |
 | `cooldownTime` | *int | — | Cooldown time in seconds |
+| `enablePreCallChecks` | *bool | — | Filter deployments by context-window size and region before calling |
+| `modelGroupAlias` | map[string]string | — | Map an alias model-group name to a real one |
 | `retryPolicy` | map[string]int | — | Per-error-type retry counts (e.g., `TimeoutError: 2`, `RateLimitError: 3`) |
 | `modelGroupRetryPolicy` | map[string]map[string]int | — | Per-model-group retry overrides (e.g., `gpt-4: {TimeoutError: 1}`) |
 | `enableTagFiltering` | *bool | — | Enable tag-based routing. Requests with matching tags route to tagged model deployments |
@@ -407,6 +418,14 @@ spec:
 | --- | --- | --- |
 | `budgetLimit` | string | Budget limit in USD |
 | `timePeriod` | string | Time period for the budget (e.g., `1d`, `7d`, `30d`) |
+
+### `litellmSettings`
+
+Settings rendered under `litellm_settings` in `proxy_server_config.yaml`.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `jsonLogs` | *bool | Emit structured JSON logs instead of plaintext (recommended for log aggregation) |
 
 ### `fallbacks`
 

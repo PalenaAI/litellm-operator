@@ -32,16 +32,21 @@ type UserService interface {
 
 // UserCreateRequest is the request to create or update a user.
 type UserCreateRequest struct {
-	UserID         string            `json:"user_id"`
-	UserEmail      string            `json:"user_email,omitempty"`
-	UserRole       string            `json:"user_role,omitempty"`
-	MaxBudget      *float64          `json:"max_budget,omitempty"`
-	BudgetDuration string            `json:"budget_duration,omitempty"`
-	Models         []string          `json:"models,omitempty"`
-	Teams          []UserTeam        `json:"teams,omitempty"`
-	TPMLimit       *int              `json:"tpm_limit,omitempty"`
-	RPMLimit       *int              `json:"rpm_limit,omitempty"`
-	Metadata       map[string]string `json:"metadata,omitempty"`
+	UserID           string            `json:"user_id"`
+	UserEmail        string            `json:"user_email,omitempty"`
+	UserRole         string            `json:"user_role,omitempty"`
+	MaxBudget        *float64          `json:"max_budget,omitempty"`
+	BudgetDuration   string            `json:"budget_duration,omitempty"`
+	Models           []string          `json:"models,omitempty"`
+	Teams            []UserTeam        `json:"teams,omitempty"`
+	TPMLimit         *int              `json:"tpm_limit,omitempty"`
+	RPMLimit         *int              `json:"rpm_limit,omitempty"`
+	SoftBudget       *float64          `json:"soft_budget,omitempty"`
+	ModelRPMLimit    map[string]int    `json:"model_rpm_limit,omitempty"`
+	ModelTPMLimit    map[string]int    `json:"model_tpm_limit,omitempty"`
+	ObjectPermission *ObjectPermission `json:"object_permission,omitempty"`
+	Metadata         map[string]string `json:"metadata,omitempty"`
+	Blocked          *bool             `json:"blocked,omitempty"`
 }
 
 // UserTeam defines team membership for a user.

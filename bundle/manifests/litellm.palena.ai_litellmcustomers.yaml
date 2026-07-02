@@ -119,22 +119,22 @@ spec:
                   access groups).
                 properties:
                   accessGroups:
-                    description: Allowed access groups.
+                    description: Allowed MCP access groups.
                     items:
                       type: string
                     type: array
                   agents:
-                    description: Allowed agents.
+                    description: Allowed agents (by name/ID).
                     items:
                       type: string
                     type: array
                   mcpServers:
-                    description: Allowed MCP servers.
+                    description: Allowed MCP servers (by name/ID).
                     items:
                       type: string
                     type: array
                   vectorStores:
-                    description: Allowed vector stores.
+                    description: Allowed vector stores (by name/ID).
                     items:
                       type: string
                     type: array

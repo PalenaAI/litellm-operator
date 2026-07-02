@@ -32,13 +32,19 @@ type CustomerService interface {
 	List(ctx context.Context) ([]CustomerInfo, error)
 }
 
-// CustomerObjectPermission restricts which objects a customer may access.
-type CustomerObjectPermission struct {
+// ObjectPermission restricts which objects (MCP servers, vector stores, agents,
+// access groups) an identity may access. Shared across the customer/team/user/
+// key/organization request payloads.
+type ObjectPermission struct {
 	MCPServers   []string `json:"mcp_servers,omitempty"`
 	AccessGroups []string `json:"mcp_access_groups,omitempty"`
 	VectorStores []string `json:"vector_stores,omitempty"`
 	Agents       []string `json:"agents,omitempty"`
 }
+
+// CustomerObjectPermission is retained for backward compatibility as an alias
+// for the shared [ObjectPermission] wire type.
+type CustomerObjectPermission = ObjectPermission
 
 // CustomerCreateRequest is the request body for POST /customer/new.
 type CustomerCreateRequest struct {

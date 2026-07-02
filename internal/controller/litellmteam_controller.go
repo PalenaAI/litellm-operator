@@ -138,10 +138,16 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 			RPMLimit:            team.Spec.RPMLimit,
 			TeamMemberRPMLimit:  team.Spec.TeamMemberRPMLimit,
 			TeamMemberTPMLimit:  team.Spec.TeamMemberTPMLimit,
+			TeamMemberBudget:    team.Spec.TeamMemberBudget,
 			MaxParallelRequests: team.Spec.MaxParallelRequests,
+			SoftBudget:          team.Spec.SoftBudget,
+			ModelRPMLimit:       team.Spec.ModelRPMLimit,
+			ModelTPMLimit:       team.Spec.ModelTPMLimit,
+			ObjectPermission:    mapObjectPermission(team.Spec.ObjectPermission),
 			Metadata:            team.Spec.Metadata,
 			Tags:                team.Spec.Tags,
 			Guardrails:          team.Spec.Guardrails,
+			Blocked:             team.Spec.Blocked,
 		}
 		resp, err := apiClient.Teams().Create(ctx, req)
 		if err != nil {
@@ -174,10 +180,16 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 				BudgetDuration:      team.Spec.BudgetDuration,
 				TPMLimit:            team.Spec.TPMLimit,
 				RPMLimit:            team.Spec.RPMLimit,
+				TeamMemberBudget:    team.Spec.TeamMemberBudget,
 				MaxParallelRequests: team.Spec.MaxParallelRequests,
+				SoftBudget:          team.Spec.SoftBudget,
+				ModelRPMLimit:       team.Spec.ModelRPMLimit,
+				ModelTPMLimit:       team.Spec.ModelTPMLimit,
+				ObjectPermission:    mapObjectPermission(team.Spec.ObjectPermission),
 				Metadata:            team.Spec.Metadata,
 				Tags:                team.Spec.Tags,
 				Guardrails:          team.Spec.Guardrails,
+				Blocked:             team.Spec.Blocked,
 			}
 			if err := apiClient.Teams().Update(ctx, req); err != nil {
 				return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("update team: %w", err)

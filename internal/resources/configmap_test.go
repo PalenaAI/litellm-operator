@@ -179,6 +179,97 @@ func TestGenerateProxyConfig_RetryPolicy(t *testing.T) {
 	}
 }
 
+// TestGenerateProxyConfig_PreviouslyDeadFields guards against regression of
+// three fields that were defined in the CRD but never rendered: they now must
+// reach general_settings / router_settings.
+func TestGenerateProxyConfig_PreviouslyDeadFields(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		CustomKeyGenerate: "custom_auth.custom_generate_key_fn",
+	}
+	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{
+		RetryAfter: intPtr(15),
+	}
+	instance.Spec.Database.ConnectionPool = &litellmv1alpha1.ConnectionPoolSpec{
+		MaxConnections: 20,
+	}
+
+	config := GenerateProxyConfig(instance, nil)
+
+	gs, ok := config["general_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected general_settings to be present")
+	}
+	if gs["custom_key_generate"] != "custom_auth.custom_generate_key_fn" {
+		t.Errorf("expected custom_key_generate rendered, got %v", gs["custom_key_generate"])
+	}
+	if gs["database_connection_pool_limit"] != 20 {
+		t.Errorf("expected database_connection_pool_limit=20, got %v", gs["database_connection_pool_limit"])
+	}
+
+	rs, ok := config["router_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected router_settings to be present")
+	}
+	if rs["retry_after"] != 15 {
+		t.Errorf("expected retry_after=15, got %v", rs["retry_after"])
+	}
+}
+
+// TestGenerateProxyConfig_Tier1InstanceKnobs covers the router/general/litellm
+// settings added in the Tier 1 audit follow-up.
+func TestGenerateProxyConfig_Tier1InstanceKnobs(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{
+		StreamTimeout:       intPtr(45),
+		EnablePreCallChecks: boolPtr(true),
+		ModelGroupAlias:     map[string]string{"gpt-4": "gpt-4o"},
+	}
+	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
+		Alerting:               []string{"slack"},
+		AlertingThreshold:      intPtr(300),
+		AlertToWebhookURL:      map[string]string{"budget_alerts": "https://hooks.example/x"},
+		BackgroundHealthChecks: boolPtr(true),
+		HealthCheckInterval:    intPtr(120),
+		HealthCheckDetails:     boolPtr(false),
+	}
+	instance.Spec.LiteLLMSettings = &litellmv1alpha1.LiteLLMSettingsSpec{
+		JSONLogs: boolPtr(true),
+	}
+
+	config := GenerateProxyConfig(instance, nil)
+
+	rs := config["router_settings"].(map[string]interface{})
+	if rs["stream_timeout"] != 45 {
+		t.Errorf("expected stream_timeout=45, got %v", rs["stream_timeout"])
+	}
+	if rs["enable_pre_call_checks"] != true {
+		t.Errorf("expected enable_pre_call_checks=true, got %v", rs["enable_pre_call_checks"])
+	}
+	if alias, _ := rs["model_group_alias"].(map[string]string); alias["gpt-4"] != "gpt-4o" {
+		t.Errorf("expected model_group_alias[gpt-4]=gpt-4o, got %v", rs["model_group_alias"])
+	}
+
+	gs := config["general_settings"].(map[string]interface{})
+	if alerting, _ := gs["alerting"].([]string); len(alerting) != 1 || alerting[0] != "slack" {
+		t.Errorf("expected alerting=[slack], got %v", gs["alerting"])
+	}
+	if gs["alerting_threshold"] != 300 {
+		t.Errorf("expected alerting_threshold=300, got %v", gs["alerting_threshold"])
+	}
+	if gs["background_health_checks"] != true {
+		t.Errorf("expected background_health_checks=true, got %v", gs["background_health_checks"])
+	}
+	if gs["health_check_details"] != false {
+		t.Errorf("expected health_check_details=false, got %v", gs["health_check_details"])
+	}
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["json_logs"] != true {
+		t.Errorf("expected json_logs=true, got %v", ls["json_logs"])
+	}
+}
+
 func TestGenerateProxyConfig_ModelGroupRetryPolicy(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.RouterSettings = &litellmv1alpha1.RouterSettingsSpec{

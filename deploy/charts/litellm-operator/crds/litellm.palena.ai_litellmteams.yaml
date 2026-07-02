@@ -57,6 +57,11 @@ spec:
           spec:
             description: LiteLLMTeamSpec defines the desired state of LiteLLMTeam.
             properties:
+              blocked:
+                description: |-
+                  Blocked disables all requests from this team when true. Useful for
+                  incident response without deleting the team.
+                type: boolean
               budgetDuration:
                 description: Budget reset duration (e.g., "30d", "7d").
                 type: string
@@ -184,11 +189,49 @@ spec:
                   type: string
                 description: Custom metadata for the team.
                 type: object
+              modelRpmLimit:
+                additionalProperties:
+                  type: integer
+                description: ModelRPMLimit sets a per-model requests-per-minute cap
+                  (model name -> RPM).
+                type: object
+              modelTpmLimit:
+                additionalProperties:
+                  type: integer
+                description: ModelTPMLimit sets a per-model tokens-per-minute cap
+                  (model name -> TPM).
+                type: object
               models:
                 description: Models this team can access.
                 items:
                   type: string
                 type: array
+              objectPermission:
+                description: |-
+                  ObjectPermission grants access to MCP servers, vector stores, agents,
+                  and access groups.
+                properties:
+                  accessGroups:
+                    description: Allowed MCP access groups.
+                    items:
+                      type: string
+                    type: array
+                  agents:
+                    description: Allowed agents (by name/ID).
+                    items:
+                      type: string
+                    type: array
+                  mcpServers:
+                    description: Allowed MCP servers (by name/ID).
+                    items:
+                      type: string
+                    type: array
+                  vectorStores:
+                    description: Allowed vector stores (by name/ID).
+                    items:
+                      type: string
+                    type: array
+                type: object
               organizationRef:
                 description: Reference to the organization this team belongs to.
                 properties:
@@ -201,6 +244,11 @@ spec:
               rpmLimit:
                 description: RPM limit for the team.
                 type: integer
+              softBudget:
+                description: |-
+                  SoftBudget is an alert threshold in USD below maxBudgetMonthly; crossing
+                  it triggers a budget alert without blocking requests.
+                type: number
               tags:
                 description: |-
                   Tags associated with this team. Keys generated for team members
@@ -211,6 +259,12 @@ spec:
               teamAlias:
                 description: Human-readable team alias.
                 type: string
+              teamMemberBudget:
+                description: |-
+                  Max budget in USD applied to each individual team member (distinct from
+                  the team-wide maxBudgetMonthly). The reset cadence follows the team's
+                  budgetDuration.
+                type: number
               teamMemberRpmLimit:
                 description: RPM limit per team member.
                 type: integer

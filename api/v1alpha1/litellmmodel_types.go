@@ -146,6 +146,27 @@ type LiteLLMModelParams struct {
 	// to this deployment (e.g. provider-specific routing or beta headers).
 	// +optional
 	ExtraHeaders map[string]string `json:"extraHeaders,omitempty"`
+
+	// DropParams silently drops request parameters the provider does not
+	// support instead of returning an error (e.g. `temperature` on reasoning
+	// models like the o-series / gpt-5). Applies to this deployment only.
+	// +optional
+	DropParams *bool `json:"dropParams,omitempty"`
+
+	// VertexProject is the GCP project ID for Vertex AI models.
+	// +optional
+	VertexProject string `json:"vertexProject,omitempty"`
+
+	// VertexLocation is the GCP region for Vertex AI models (e.g. "us-central1").
+	// +optional
+	VertexLocation string `json:"vertexLocation,omitempty"`
+
+	// VertexCredentialsSecretRef references a Secret key holding the GCP
+	// service-account JSON used to authenticate Vertex AI calls. The operator
+	// reads the JSON and sends it as `vertex_credentials`; the value is never
+	// logged. Ignored when credentialRef is set.
+	// +optional
+	VertexCredentialsSecretRef *SecretKeyRef `json:"vertexCredentialsSecretRef,omitempty"`
 }
 
 // ModelInfo defines optional model metadata.
