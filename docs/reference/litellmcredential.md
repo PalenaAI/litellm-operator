@@ -103,7 +103,7 @@ spec:
 | `apiKeySecretRef` | SecretKeyRef | Yes | Reference to a Kubernetes Secret containing the provider API key |
 | `apiBase` | string | No | API base URL for the provider (e.g., `https://api.openai.com/v1`) |
 | `apiVersion` | string | No | API version (e.g., `"2024-02-01"` for Azure OpenAI) |
-| `params` | map[string]string | No | Additional provider-specific parameters written verbatim into `credential_info`. Reserved keys (`api_key`, `api_base`, `api_version`) are ignored |
+| `params` | map[string]JSON | No | Additional provider-specific parameters merged into `credential_values`. Values are **arbitrary JSON** (strings, numbers, bools, or nested objects/arrays) — e.g. a Vertex AI service-account JSON object. Reserved keys (`api_key`, `api_base`, `api_version`) are ignored |
 
 ## Status Fields
 

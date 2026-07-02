@@ -16,6 +16,34 @@ limitations under the License.
 
 package v1alpha1
 
+import (
+	"encoding/json"
+
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+)
+
+// DecodeJSONParams decodes a map of raw-JSON free-form params into a map of Go
+// values (bool/float64/string/nested), suitable for merging into an API payload.
+// The apiserver validates that each value is well-formed JSON, so a decode error
+// here is not expected; such an entry is skipped rather than aborting the merge.
+func DecodeJSONParams(m map[string]apiextensionsv1.JSON) map[string]interface{} {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		if len(v.Raw) == 0 {
+			continue
+		}
+		var val interface{}
+		if err := json.Unmarshal(v.Raw, &val); err != nil {
+			continue
+		}
+		out[k] = val
+	}
+	return out
+}
+
 // ObjectPermission restricts which objects (MCP servers, vector stores, agents,
 // access groups) a team, user, key, organization, or customer may access. The
 // referenced objects are named by ID/name; this grants access, it does not

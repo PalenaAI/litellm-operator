@@ -259,7 +259,7 @@ spec:
                 type: string
               params:
                 additionalProperties:
-                  type: string
+                  x-kubernetes-preserve-unknown-fields: true
                 description: |-
                   Provider-specific parameters that are merged verbatim into the
                   guardrail's `litellm_params` section. For example, Bedrock guardrails
@@ -269,6 +269,11 @@ spec:
                   For provider == "generic_guardrail_api", these are nested under
                   `additional_provider_specific_params` instead of being merged at the
                   top level, since that is where the generic guardrail API reads them.
+
+                  Values are arbitrary JSON (strings, numbers, bools, or nested
+                  objects/arrays), so structured provider config — e.g. Presidio's
+                  `pii_entities_config` ({CREDIT_CARD: MASK}) or per-entity thresholds —
+                  can be expressed directly, not just as strings.
                 type: object
               provider:
                 description: |-

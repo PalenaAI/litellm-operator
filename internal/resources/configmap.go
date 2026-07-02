@@ -463,19 +463,16 @@ func buildGuardrailsList(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 		if g.Spec.UnreachableFallback != "" {
 			params["unreachable_fallback"] = g.Spec.UnreachableFallback
 		}
+		decodedParams := litellmv1alpha1.DecodeJSONParams(g.Spec.Params)
 		if g.Spec.Provider == "generic_guardrail_api" {
 			// The generic guardrail API reads custom params from a nested
 			// `additional_provider_specific_params` map rather than from the
 			// top-level litellm_params, so nest them there.
-			if len(g.Spec.Params) > 0 {
-				extra := make(map[string]interface{}, len(g.Spec.Params))
-				for k, v := range g.Spec.Params {
-					extra[k] = v
-				}
-				params["additional_provider_specific_params"] = extra
+			if len(decodedParams) > 0 {
+				params["additional_provider_specific_params"] = decodedParams
 			}
 		} else {
-			for k, v := range g.Spec.Params {
+			for k, v := range decodedParams {
 				// Don't let user params override the keys we set explicitly.
 				if _, reserved := params[k]; reserved {
 					continue

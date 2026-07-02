@@ -22,7 +22,8 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -1231,9 +1232,9 @@ func (in *LiteLLMCredentialSpec) DeepCopyInto(out *LiteLLMCredentialSpec) {
 	out.APIKeySecretRef = in.APIKeySecretRef
 	if in.Params != nil {
 		in, out := &in.Params, &out.Params
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]v1.JSON, len(*in))
 		for key, val := range *in {
-			(*out)[key] = val
+			(*out)[key] = *val.DeepCopy()
 		}
 	}
 }
@@ -1257,7 +1258,7 @@ func (in *LiteLLMCredentialStatus) DeepCopyInto(out *LiteLLMCredentialStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -1400,7 +1401,7 @@ func (in *LiteLLMCustomerStatus) DeepCopyInto(out *LiteLLMCustomerStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -1492,9 +1493,9 @@ func (in *LiteLLMGuardrailSpec) DeepCopyInto(out *LiteLLMGuardrailSpec) {
 	}
 	if in.Params != nil {
 		in, out := &in.Params, &out.Params
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]v1.JSON, len(*in))
 		for key, val := range *in {
-			(*out)[key] = val
+			(*out)[key] = *val.DeepCopy()
 		}
 	}
 	if in.EnvVars != nil {
@@ -1525,7 +1526,7 @@ func (in *LiteLLMGuardrailStatus) DeepCopyInto(out *LiteLLMGuardrailStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -1848,7 +1849,7 @@ func (in *LiteLLMInstanceStatus) DeepCopyInto(out *LiteLLMInstanceStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -2077,7 +2078,7 @@ func (in *LiteLLMModelStatus) DeepCopyInto(out *LiteLLMModelStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -2239,7 +2240,7 @@ func (in *LiteLLMOrganizationStatus) DeepCopyInto(out *LiteLLMOrganizationStatus
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -2476,7 +2477,7 @@ func (in *LiteLLMTeamStatus) DeepCopyInto(out *LiteLLMTeamStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -2650,7 +2651,7 @@ func (in *LiteLLMUserStatus) DeepCopyInto(out *LiteLLMUserStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -2852,7 +2853,7 @@ func (in *LiteLLMVirtualKeyStatus) DeepCopyInto(out *LiteLLMVirtualKeyStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

@@ -201,7 +201,7 @@ guardrails:
 Notes:
 
 - Unlike `custom_guardrail`, **no Python class and no custom proxy image are required** — your guardrail is a separate Deployment/Service.
-- `params` values are strings (`map[string]string`) and are nested under `additional_provider_specific_params`; they are **not** merged flat into `litellm_params`.
+- `params` values are arbitrary JSON and are nested under `additional_provider_specific_params`; they are **not** merged flat into `litellm_params`.
 - `unreachableFallback` is only valid for `generic_guardrail_api`; setting it on another provider fails validation.
 - The Generic Guardrail API is a **BETA** LiteLLM feature — the request/response contract may change in future LiteLLM releases.
 
@@ -249,7 +249,7 @@ The names must match `spec.guardrailName` on a LiteLLMGuardrail CR bound to the 
 | `apiBase` | string | Conditional | Provider API base URL. **Required** when `provider == generic_guardrail_api` (your guardrail HTTP endpoint) |
 | `defaultOn` | bool | No | When true, the guardrail runs on every request even when keys/teams do not explicitly opt in |
 | `unreachableFallback` | enum | Conditional | `fail_closed` (reject) or `fail_open` (allow) when the guardrail endpoint is unreachable. Only valid when `provider == generic_guardrail_api`; **must be empty** otherwise |
-| `params` | map[string]string | No | Provider-specific parameters merged into `litellm_params`. Reserved keys (`guardrail`, `mode`, `api_key`, `api_base`, `default_on`) cannot be overridden. For `generic_guardrail_api` they are nested under `additional_provider_specific_params` instead |
+| `params` | map[string]JSON | No | Provider-specific parameters merged into `litellm_params`. Values are **arbitrary JSON** (strings, numbers, bools, or nested objects/arrays) — e.g. Presidio's `pii_entities_config: {CREDIT_CARD: MASK}` or numeric thresholds. Reserved keys (`guardrail`, `mode`, `api_key`, `api_base`, `default_on`) cannot be overridden. For `generic_guardrail_api` they are nested under `additional_provider_specific_params` instead |
 | `envVars` | []EnvVar | No | Additional env vars for this guardrail (e.g., `AWS_ACCESS_KEY_ID`, `AWS_REGION`) — each becomes a container env var on the LiteLLM Deployment |
 
 ## Status Fields

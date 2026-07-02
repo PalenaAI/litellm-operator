@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -98,8 +99,13 @@ type LiteLLMGuardrailSpec struct {
 	// For provider == "generic_guardrail_api", these are nested under
 	// `additional_provider_specific_params` instead of being merged at the
 	// top level, since that is where the generic guardrail API reads them.
+	//
+	// Values are arbitrary JSON (strings, numbers, bools, or nested
+	// objects/arrays), so structured provider config — e.g. Presidio's
+	// `pii_entities_config` ({CREDIT_CARD: MASK}) or per-entity thresholds —
+	// can be expressed directly, not just as strings.
 	// +optional
-	Params map[string]string `json:"params,omitempty"`
+	Params map[string]apiextensionsv1.JSON `json:"params,omitempty"`
 
 	// Extra environment variables needed by this guardrail beyond the API
 	// key (e.g. additional credentials for bedrock, custom endpoints).

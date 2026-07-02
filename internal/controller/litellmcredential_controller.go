@@ -222,7 +222,7 @@ func buildCredentialPayload(cred *litellmv1alpha1.LiteLLMCredential, apiKey stri
 	if cred.Spec.APIVersion != "" {
 		values["api_version"] = cred.Spec.APIVersion
 	}
-	for k, v := range cred.Spec.Params {
+	for k, v := range litellmv1alpha1.DecodeJSONParams(cred.Spec.Params) {
 		if _, reserved := values[k]; reserved {
 			continue
 		}

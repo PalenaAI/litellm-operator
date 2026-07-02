@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`LiteLLMGuardrail.spec.params` and `LiteLLMCredential.spec.params` now accept arbitrary JSON values** (`map[string]JSON` instead of `map[string]string`). This unblocks structured provider config that couldn't be expressed as strings — e.g. Presidio's `pii_entities_config: {CREDIT_CARD: MASK}`, per-entity numeric thresholds, or a Vertex AI service-account JSON object as a credential value. Existing string-valued params remain valid (a string is valid JSON), so this is backward-compatible at the YAML level.
+
 ### Added
 
 - **Cross-CRD access & budget controls** on `LiteLLMOrganization`, `LiteLLMTeam`, `LiteLLMUser`, and `LiteLLMVirtualKey` (shared, consistent field names):

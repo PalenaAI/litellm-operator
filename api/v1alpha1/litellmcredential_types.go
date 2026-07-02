@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -46,10 +47,16 @@ type LiteLLMCredentialSpec struct {
 	// +optional
 	APIVersion string `json:"apiVersion,omitempty"`
 
-	// Additional provider-specific parameters written verbatim into
-	// credential_info alongside api_key / api_base / api_version.
+	// Additional provider-specific parameters merged into credential_values
+	// alongside api_key / api_base / api_version.
+	//
+	// Values are arbitrary JSON (strings, numbers, bools, or nested
+	// objects/arrays), so non-string credential values — e.g. a Vertex AI
+	// service-account JSON object or numeric timeouts — can be expressed
+	// directly. Reserved keys (api_key, api_base, api_version) cannot be
+	// overridden.
 	// +optional
-	Params map[string]string `json:"params,omitempty"`
+	Params map[string]apiextensionsv1.JSON `json:"params,omitempty"`
 }
 
 // LiteLLMCredentialStatus defines the observed state of LiteLLMCredential.

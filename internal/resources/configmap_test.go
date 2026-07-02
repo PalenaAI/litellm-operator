@@ -17,9 +17,11 @@ limitations under the License.
 package resources
 
 import (
+	"encoding/json"
 	"testing"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -30,6 +32,17 @@ const (
 )
 
 func intPtr(v int) *int { return &v }
+
+// jsonParams wraps plain string values as JSON-encoded params for the
+// map[string]apiextensionsv1.JSON fields (guardrail/credential params).
+func jsonParams(m map[string]string) map[string]apiextensionsv1.JSON {
+	out := make(map[string]apiextensionsv1.JSON, len(m))
+	for k, v := range m {
+		b, _ := json.Marshal(v)
+		out[k] = apiextensionsv1.JSON{Raw: b}
+	}
+	return out
+}
 
 func TestGenerateProxyConfig_DefaultFallbacks(t *testing.T) {
 	instance := newTestInstance()
@@ -1305,13 +1318,13 @@ func TestGenerateProxyConfig_GuardrailsWithParamsNotOverridingReserved(t *testin
 				Provider:        "bedrock",
 				Mode:            "post_call",
 				APIKeySecretRef: &litellmv1alpha1.SecretKeyRef{Name: "aws-secret", Key: "key"},
-				Params: map[string]string{
+				Params: jsonParams(map[string]string{
 					"guardrailIdentifier": "abc123",
 					"guardrailVersion":    "DRAFT",
 					// reserved keys — should be rejected
 					"guardrail": "lakera",
 					"mode":      "during_call",
-				},
+				}),
 			},
 		},
 	}
@@ -1335,6 +1348,47 @@ func TestGenerateProxyConfig_GuardrailsWithParamsNotOverridingReserved(t *testin
 	}
 }
 
+// TestGenerateProxyConfig_GuardrailStructuredParams verifies that non-string
+// params (nested objects, numbers) survive as structured JSON rather than being
+// stringified — e.g. Presidio's pii_entities_config map.
+func TestGenerateProxyConfig_GuardrailStructuredParams(t *testing.T) {
+	instance := newTestInstance()
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "presidio", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName: "presidio",
+				Provider:      "presidio",
+				Mode:          "pre_call",
+				Params: map[string]apiextensionsv1.JSON{
+					"pii_entities_config": {Raw: []byte(`{"CREDIT_CARD":"MASK","EMAIL":"BLOCK"}`)},
+					"presidio_threshold":  {Raw: []byte(`0.7`)},
+				},
+			},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, guardrails)
+	entries, _ := config["guardrails"].([]map[string]interface{})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 guardrail entry, got %d", len(entries))
+	}
+	params, _ := entries[0]["litellm_params"].(map[string]interface{})
+
+	cfg, ok := params["pii_entities_config"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected pii_entities_config to be a nested map, got %T (%v)", params["pii_entities_config"], params["pii_entities_config"])
+	}
+	if cfg["CREDIT_CARD"] != "MASK" || cfg["EMAIL"] != "BLOCK" {
+		t.Errorf("unexpected pii_entities_config contents: %v", cfg)
+	}
+	// JSON numbers decode to float64.
+	if params["presidio_threshold"] != float64(0.7) {
+		t.Errorf("expected presidio_threshold=0.7 (float64), got %T %v", params["presidio_threshold"], params["presidio_threshold"])
+	}
+}
+
 func TestGenerateProxyConfig_GuardrailsCustomGuardrailClass(t *testing.T) {
 	// For provider=custom_guardrail, litellm_params.guardrail must be the
 	// dotted Python import path from spec.guardrailClass, not the provider
@@ -1349,11 +1403,11 @@ func TestGenerateProxyConfig_GuardrailsCustomGuardrailClass(t *testing.T) {
 				Provider:       "custom_guardrail",
 				Mode:           "pre_call",
 				GuardrailClass: "my_pkg.adapters.MyGuardrail",
-				Params: map[string]string{
+				Params: jsonParams(map[string]string{
 					"some_setting": "value",
 					// reserved key — must not override the class path
 					"guardrail": "should_be_ignored",
-				},
+				}),
 			},
 		},
 	}
@@ -1392,10 +1446,10 @@ func TestGenerateProxyConfig_GuardrailsGenericAPI(t *testing.T) {
 				APIBase:             "http://my-guardrail.guardrails.svc.cluster.local:8080",
 				UnreachableFallback: "fail_open",
 				APIKeySecretRef:     &litellmv1alpha1.SecretKeyRef{Name: "gr-secret", Key: "api-key"},
-				Params: map[string]string{
+				Params: jsonParams(map[string]string{
 					"threshold": "0.8",
 					"language":  "en",
-				},
+				}),
 			},
 		},
 	}
