@@ -11,6 +11,7 @@ resources:
 - bases/litellm.palena.ai_litellmvirtualkeys.yaml
 - bases/litellm.palena.ai_litellmcredentials.yaml
 - bases/litellm.palena.ai_litellmguardrails.yaml
+- bases/litellm.palena.ai_litellmbudgets.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

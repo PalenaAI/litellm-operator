@@ -39,6 +39,7 @@ type Client interface {
 	Organizations() OrganizationService
 	Customers() CustomerService
 	Credentials() CredentialService
+	Budgets() BudgetService
 	Health() HealthService
 }
 
@@ -96,6 +97,7 @@ func (c *httpClient) Keys() KeyService                   { return &keyService{c}
 func (c *httpClient) Organizations() OrganizationService { return &organizationService{c} }
 func (c *httpClient) Customers() CustomerService         { return &customerService{c} }
 func (c *httpClient) Credentials() CredentialService     { return &credentialService{c} }
+func (c *httpClient) Budgets() BudgetService             { return &budgetService{c} }
 func (c *httpClient) Health() HealthService              { return &healthService{c} }
 
 func (c *httpClient) do(ctx context.Context, method, path string, body interface{}, result interface{}) error {

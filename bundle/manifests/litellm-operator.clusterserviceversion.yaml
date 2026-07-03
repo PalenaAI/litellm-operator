@@ -6,6 +6,29 @@ metadata:
       [
         {
           "apiVersion": "litellm.palena.ai/v1alpha1",
+          "kind": "LiteLLMBudget",
+          "metadata": {
+            "labels": {
+              "app.kubernetes.io/managed-by": "kustomize",
+              "app.kubernetes.io/name": "litellm-operator"
+            },
+            "name": "tier-standard"
+          },
+          "spec": {
+            "budgetDuration": "30d",
+            "budgetId": "tier-standard",
+            "instanceRef": {
+              "name": "litellminstance-sample"
+            },
+            "maxBudget": 100,
+            "maxParallelRequests": 20,
+            "rpmLimit": 1000,
+            "softBudget": 80,
+            "tpmLimit": 100000
+          }
+        },
+        {
+          "apiVersion": "litellm.palena.ai/v1alpha1",
           "kind": "LiteLLMCredential",
           "metadata": {
             "labels": {
@@ -498,7 +521,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.15.0
-    createdAt: "2026-07-02T19:32:16Z"
+    createdAt: "2026-07-03T11:18:09Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -511,6 +534,9 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - kind: LiteLLMBudget
+      name: litellmbudgets.litellm.palena.ai
+      version: v1alpha1
     - description: LiteLLMCredential is the Schema for the litellmcredentials API
         — reusable provider credentials rendered into the proxy config.
       displayName: LiteLLM Credential
@@ -1247,6 +1273,7 @@ spec:
         - apiGroups:
           - litellm.palena.ai
           resources:
+          - litellmbudgets
           - litellmcredentials
           - litellmcustomers
           - litellmguardrails
@@ -1267,6 +1294,7 @@ spec:
         - apiGroups:
           - litellm.palena.ai
           resources:
+          - litellmbudgets/finalizers
           - litellmcredentials/finalizers
           - litellmcustomers/finalizers
           - litellmguardrails/finalizers
@@ -1281,6 +1309,7 @@ spec:
         - apiGroups:
           - litellm.palena.ai
           resources:
+          - litellmbudgets/status
           - litellmcredentials/status
           - litellmcustomers/status
           - litellmguardrails/status

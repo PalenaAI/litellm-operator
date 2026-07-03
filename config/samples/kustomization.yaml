@@ -9,4 +9,5 @@ resources:
 - litellm_v1alpha1_litellmcustomer.yaml
 - litellm_v1alpha1_litellmcredential.yaml
 - litellm_v1alpha1_litellmguardrail.yaml
+- litellm_v1alpha1_litellmbudget.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

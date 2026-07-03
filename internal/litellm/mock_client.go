@@ -27,6 +27,7 @@ type MockClient struct {
 	MockOrganizations *MockOrganizationService
 	MockCustomers     *MockCustomerService
 	MockCredentials   *MockCredentialService
+	MockBudgets       *MockBudgetService
 	MockHealth        *MockHealthService
 }
 
@@ -40,6 +41,7 @@ func NewMockClient() *MockClient {
 		MockOrganizations: &MockOrganizationService{},
 		MockCustomers:     &MockCustomerService{},
 		MockCredentials:   &MockCredentialService{},
+		MockBudgets:       &MockBudgetService{},
 		MockHealth:        &MockHealthService{},
 	}
 }
@@ -51,7 +53,48 @@ func (m *MockClient) Keys() KeyService                   { return m.MockKeys }
 func (m *MockClient) Organizations() OrganizationService { return m.MockOrganizations }
 func (m *MockClient) Customers() CustomerService         { return m.MockCustomers }
 func (m *MockClient) Credentials() CredentialService     { return m.MockCredentials }
+func (m *MockClient) Budgets() BudgetService             { return m.MockBudgets }
 func (m *MockClient) Health() HealthService              { return m.MockHealth }
+
+// MockBudgetService records calls and returns configured responses.
+type MockBudgetService struct {
+	CreateFunc func(ctx context.Context, req BudgetRequest) (*BudgetResponse, error)
+	UpdateFunc func(ctx context.Context, req BudgetRequest) error
+	DeleteFunc func(ctx context.Context, budgetID string) error
+	GetFunc    func(ctx context.Context, budgetID string) (*BudgetInfo, error)
+}
+
+func (m *MockBudgetService) Create(ctx context.Context, req BudgetRequest) (*BudgetResponse, error) {
+	if m.CreateFunc != nil {
+		return m.CreateFunc(ctx, req)
+	}
+	id := req.BudgetID
+	if id == "" {
+		id = "mock-budget-id"
+	}
+	return &BudgetResponse{BudgetID: id}, nil
+}
+
+func (m *MockBudgetService) Update(ctx context.Context, req BudgetRequest) error {
+	if m.UpdateFunc != nil {
+		return m.UpdateFunc(ctx, req)
+	}
+	return nil
+}
+
+func (m *MockBudgetService) Delete(ctx context.Context, budgetID string) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, budgetID)
+	}
+	return nil
+}
+
+func (m *MockBudgetService) Get(ctx context.Context, budgetID string) (*BudgetInfo, error) {
+	if m.GetFunc != nil {
+		return m.GetFunc(ctx, budgetID)
+	}
+	return &BudgetInfo{BudgetID: budgetID}, nil
+}
 
 // MockModelService records calls and returns configured responses.
 type MockModelService struct {

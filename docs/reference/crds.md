@@ -14,6 +14,7 @@ The LiteLLM Operator defines nine Custom Resource Definitions in the `litellm.pa
 | [LiteLLMCustomer](/reference/litellmcustomer) | `lcust` | Namespaced | Creates an external end-user with budgets and rate limits |
 | [LiteLLMCredential](/reference/litellmcredential) | `lc` | Namespaced | Declares a reusable provider credential materialized into `credential_list` |
 | [LiteLLMGuardrail](/reference/litellmguardrail) | `lg` | Namespaced | Declares a content moderation / safety guardrail materialized into `guardrails` |
+| [LiteLLMBudget](/reference/litellmbudget) | `lb` | Namespaced | Declares a reusable budget / rate-limit tier via `/budget/*`, referenced by `budgetId` |
 | [LiteLLMVirtualKey](/reference/litellmvirtualkey) | `lk` | Namespaced | Generates a scoped API key |
 
 ## Relationship Diagram

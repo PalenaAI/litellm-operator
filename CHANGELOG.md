@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **New `LiteLLMBudget` CRD** — declares a reusable budget / rate-limit tier via the LiteLLM REST API (`/budget/new`, `/budget/update`, `/budget/info`, `/budget/delete`). Fields: `budgetId` (defaults to the object name), `maxBudget`, `softBudget`, `budgetDuration`, `tpmLimit`, `rpmLimit`, `maxParallelRequests`, `modelMaxBudget`. Other resources reference it by `budget_id` (e.g. `LiteLLMVirtualKey.spec.budgetId`), which previously had no CRD to create the tier — you had to make budgets out-of-band. Short name `lb`; finalizer-backed delete; `status.currentSpend` refreshed from `/budget/info`.
 - **Cross-CRD access & budget controls** on `LiteLLMOrganization`, `LiteLLMTeam`, `LiteLLMUser`, and `LiteLLMVirtualKey` (shared, consistent field names):
   - `objectPermission` — grant access to MCP servers, vector stores, agents, and access groups (`object_permission`; the `LiteLLMCustomer` type was generalized into a shared `ObjectPermission`).
   - `softBudget` — alert threshold below the hard budget (`soft_budget`).

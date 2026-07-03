@@ -76,6 +76,7 @@ rules:
 - apiGroups:
   - litellm.palena.ai
   resources:
+  - litellmbudgets
   - litellmcredentials
   - litellmcustomers
   - litellmguardrails
@@ -96,6 +97,7 @@ rules:
 - apiGroups:
   - litellm.palena.ai
   resources:
+  - litellmbudgets/finalizers
   - litellmcredentials/finalizers
   - litellmcustomers/finalizers
   - litellmguardrails/finalizers
@@ -110,6 +112,7 @@ rules:
 - apiGroups:
   - litellm.palena.ai
   resources:
+  - litellmbudgets/status
   - litellmcredentials/status
   - litellmcustomers/status
   - litellmguardrails/status

@@ -1,0 +1,19 @@
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMBudget
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: tier-standard
+spec:
+  instanceRef:
+    name: litellminstance-sample
+  # Stable id other resources reference (e.g. LiteLLMVirtualKey.spec.budgetId).
+  # Defaults to metadata.name when omitted.
+  budgetId: tier-standard
+  maxBudget: 100.0
+  softBudget: 80.0
+  budgetDuration: 30d
+  tpmLimit: 100000
+  rpmLimit: 1000
+  maxParallelRequests: 20
