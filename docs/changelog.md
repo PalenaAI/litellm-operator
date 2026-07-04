@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **OLM CSV descriptors for the new `LiteLLMBudget` CRD.** The v0.16.0 bundle listed `LiteLLMBudget` as a bare stub (no `displayName`, `resources`, or `specDescriptors`), which failed the operator-sdk scorecard `olm-crds-have-resources` and `olm-spec-descriptors` tests. Added the complete owned-CRD entry to the CSV base.
+- **CI lint cleanups** (pre-existing, unrelated to features): extracted the repeated `"ca.crt"` Secret key into a `caCrtKey` constant (`goconst`) and dropped the always-`"gw"` parameter from the `tlsInstance` test helper (`unparam`).
+- **Hardened CI syft install** in `e2e.yml` and `release.yml`: download the pinned installer to a file before executing instead of piping `curl` into a shell (clears the Semgrep `gha-curl-pipe-shell` finding).
+
 ## [0.16.0] - 2026-07-04
 
 ### Changed
