@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: ghcr.io/palenaai/litellm-operator
-  newTag: v0.15.0
+  newTag: v0.16.0
