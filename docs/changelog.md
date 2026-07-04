@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-07-04
+
 ### Fixed
 
 - **OLM CSV descriptors for the new `LiteLLMBudget` CRD.** The v0.16.0 bundle listed `LiteLLMBudget` as a bare stub (no `displayName`, `resources`, or `specDescriptors`), which failed the operator-sdk scorecard `olm-crds-have-resources` and `olm-spec-descriptors` tests. Added the complete owned-CRD entry to the CSV base.
