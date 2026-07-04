@@ -70,7 +70,7 @@ func TestValidateTLSSecrets_AllPresent(t *testing.T) {
 	}
 	ca := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "ca-bundle", Namespace: "default"},
-		Data:       map[string][]byte{"ca.crt": []byte("ca")},
+		Data:       map[string][]byte{caCrtKey: []byte("ca")},
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(serverTLS, ca).Build()
 	rec := record.NewFakeRecorder(10)
@@ -121,9 +121,9 @@ func TestValidateTLSSecrets_ServerCertMissingKey(t *testing.T) {
 	}
 }
 
-func tlsInstance(name string) *litellmv1alpha1.LiteLLMInstance {
+func tlsInstance() *litellmv1alpha1.LiteLLMInstance {
 	return &litellmv1alpha1.LiteLLMInstance{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "default"},
 		Spec: litellmv1alpha1.LiteLLMInstanceSpec{
 			TLS: &litellmv1alpha1.TLSSpec{
 				ServerCertSecretRef: &litellmv1alpha1.SecretRef{Name: "server-tls"},
@@ -136,15 +136,15 @@ func TestOperatorProxyCACert_PrefersServerSecretCACert(t *testing.T) {
 	scheme := tlsTestScheme(t)
 	serverTLS := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "server-tls", Namespace: "default"},
-		Data:       map[string][]byte{"tls.crt": []byte("c"), "tls.key": []byte("k"), "ca.crt": []byte("SERVER-CA")},
+		Data:       map[string][]byte{"tls.crt": []byte("c"), "tls.key": []byte("k"), caCrtKey: []byte("SERVER-CA")},
 	}
 	trusted := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{Name: "trusted", Namespace: "default"},
-		Data:       map[string][]byte{"ca.crt": []byte("TRUSTED-CA")},
+		Data:       map[string][]byte{caCrtKey: []byte("TRUSTED-CA")},
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(serverTLS, trusted).Build()
 
-	inst := tlsInstance("gw")
+	inst := tlsInstance()
 	inst.Spec.TLS.TrustedCASecretRef = &litellmv1alpha1.CASecretRef{Name: "trusted"}
 
 	got := operatorProxyCACert(context.Background(), cl, inst)
@@ -166,7 +166,7 @@ func TestOperatorProxyCACert_FallsBackToTrustedCA(t *testing.T) {
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(serverTLS, trusted).Build()
 
-	inst := tlsInstance("gw")
+	inst := tlsInstance()
 	inst.Spec.TLS.TrustedCASecretRef = &litellmv1alpha1.CASecretRef{Name: "trusted", Key: "root.pem"}
 
 	got := operatorProxyCACert(context.Background(), cl, inst)
@@ -195,7 +195,7 @@ func TestValidateTLSSecrets_ServingTLSNoCAWarns(t *testing.T) {
 	rec := record.NewFakeRecorder(10)
 	r := &LiteLLMInstanceReconciler{Client: cl, Scheme: scheme, Recorder: rec}
 
-	r.validateTLSSecrets(context.Background(), tlsInstance("gw"))
+	r.validateTLSSecrets(context.Background(), tlsInstance())
 
 	events := drainEvents(rec)
 	if !containsEvent(events, EventReasonValidationFailed) || !containsEvent(events, "no CA is resolvable") {
@@ -205,7 +205,7 @@ func TestValidateTLSSecrets_ServingTLSNoCAWarns(t *testing.T) {
 
 func TestUpdateInstanceStatus_HTTPSEndpointWhenServingTLS(t *testing.T) {
 	scheme := tlsTestScheme(t)
-	inst := tlsInstance("gw")
+	inst := tlsInstance()
 	inst.Spec.Service.Port = 4000
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(inst).WithStatusSubresource(inst).Build()
 	rec := record.NewFakeRecorder(10)

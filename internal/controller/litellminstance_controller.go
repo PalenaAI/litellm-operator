@@ -982,7 +982,7 @@ func (r *LiteLLMInstanceReconciler) validateTLSSecrets(ctx context.Context, inst
 		if tls.TrustedCASecretRef != nil {
 			key := tls.TrustedCASecretRef.Key
 			if key == "" {
-				key = "ca.crt"
+				key = caCrtKey
 			}
 			r.requireSecretKeys(ctx, instance, tls.TrustedCASecretRef.Name, "spec.tls.trustedCASecretRef", key)
 		}
@@ -993,7 +993,7 @@ func (r *LiteLLMInstanceReconciler) validateTLSSecrets(ctx context.Context, inst
 		if dbTLS.CASecretRef != nil {
 			key := dbTLS.CASecretRef.Key
 			if key == "" {
-				key = "ca.crt"
+				key = caCrtKey
 			}
 			r.requireSecretKeys(ctx, instance, dbTLS.CASecretRef.Name, "spec.database.tls.caSecretRef", key)
 		}

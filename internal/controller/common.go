@@ -39,6 +39,10 @@ const (
 	// FinalizerName is the finalizer used by all controllers.
 	FinalizerName = "litellm.palena.ai/finalizer"
 
+	// caCrtKey is the conventional Secret key holding a CA certificate bundle
+	// (cert-manager populates it for CA/intermediate issuers).
+	caCrtKey = "ca.crt"
+
 	// AnnotationManagedBy marks resources managed by the operator.
 	AnnotationManagedBy = "litellm.palena.ai/managed-by"
 
@@ -177,7 +181,7 @@ func operatorProxyCACert(ctx context.Context, c client.Client, instance *litellm
 	ns := instance.Namespace
 	// 1. ca.crt inside the server-cert Secret.
 	if ref := instance.Spec.TLS.ServerCertSecretRef; ref != nil {
-		if pem := readSecretKey(ctx, c, ns, ref.Name, "ca.crt"); len(pem) > 0 {
+		if pem := readSecretKey(ctx, c, ns, ref.Name, caCrtKey); len(pem) > 0 {
 			return pem
 		}
 	}
@@ -185,7 +189,7 @@ func operatorProxyCACert(ctx context.Context, c client.Client, instance *litellm
 	if ref := instance.Spec.TLS.TrustedCASecretRef; ref != nil {
 		key := ref.Key
 		if key == "" {
-			key = "ca.crt"
+			key = caCrtKey
 		}
 		if pem := readSecretKey(ctx, c, ns, ref.Name, key); len(pem) > 0 {
 			return pem

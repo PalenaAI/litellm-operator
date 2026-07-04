@@ -521,7 +521,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.16.0
-    createdAt: "2026-07-04T19:36:46Z"
+    createdAt: "2026-07-04T21:34:47Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -534,8 +534,33 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - kind: LiteLLMBudget
+    - description: LiteLLMBudget is the Schema for the litellmbudgets API.
+      displayName: LiteLLM Budget
+      kind: LiteLLMBudget
       name: litellmbudgets.litellm.palena.ai
+      resources:
+      - kind: LiteLLMInstance
+        name: ""
+        version: v1alpha1
+      specDescriptors:
+      - displayName: Budget Duration
+        path: budgetDuration
+      - displayName: Budget ID
+        path: budgetId
+      - displayName: Instance Ref
+        path: instanceRef
+      - displayName: Max Budget
+        path: maxBudget
+      - displayName: Max Parallel Requests
+        path: maxParallelRequests
+      - displayName: Model Max Budget
+        path: modelMaxBudget
+      - displayName: RPM Limit
+        path: rpmLimit
+      - displayName: Soft Budget
+        path: softBudget
+      - displayName: TPM Limit
+        path: tpmLimit
       version: v1alpha1
     - description: LiteLLMCredential is the Schema for the litellmcredentials API
         — reusable provider credentials rendered into the proxy config.

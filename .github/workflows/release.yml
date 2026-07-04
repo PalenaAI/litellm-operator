@@ -199,8 +199,10 @@ jobs:
 
       - name: Install syft
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b /usr/local/bin v1.19.0
+          # Download the installer (pinned to the release tag) before executing,
+          # rather than piping curl straight into a shell.
+          curl -sSfL https://raw.githubusercontent.com/anchore/syft/v1.19.0/install.sh -o /tmp/syft-install.sh
+          sh /tmp/syft-install.sh -b /usr/local/bin v1.19.0
 
       - name: Generate SBOM (CycloneDX) for operator image
         env:

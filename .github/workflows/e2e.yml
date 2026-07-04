@@ -176,8 +176,10 @@ jobs:
         env:
           SYFT_VERSION: 1.19.0
         run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b /usr/local/bin "v${SYFT_VERSION}"
+          # Download the installer (pinned to the release tag) before executing,
+          # rather than piping curl straight into a shell.
+          curl -sSfL "https://raw.githubusercontent.com/anchore/syft/v${SYFT_VERSION}/install.sh" -o /tmp/syft-install.sh
+          sh /tmp/syft-install.sh -b /usr/local/bin "v${SYFT_VERSION}"
           syft --version
 
       - name: Generate SBOM
