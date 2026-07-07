@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.2] - 2026-07-07
+
+### Fixed
+
+- **The operator no longer live-probes models when health checks are disabled — a real cost fix.** On every `LiteLLMModel` reconcile (~5 min) the operator called `GET /health` to populate `status.health`. When `background_health_checks` is off (the LiteLLM default), `GET /health` **live-probes every deployment** — a billable completion per model — so setting `spec.generalSettings.backgroundHealthChecks: false` disabled LiteLLM's background loop but the operator kept triggering paid probes. The operator now polls `/health` **only when `backgroundHealthChecks: true`** (when it returns cached results); otherwise it skips the probe and marks `status.health: unknown`. Leaving the field unset also means no probing.
+
+### Added
+
+- **`LiteLLMInstance.spec.generalSettings.healthCheckSkipDisabledModels`** → renders `health_check_skip_disabled_background_models`, so models with `modelInfo.healthCheck.disableBackgroundHealthCheck: true` are also excluded from the on-demand `GET /health` probe (not just the background loop).
+
 ## [0.16.1] - 2026-07-04
 
 ### Fixed
