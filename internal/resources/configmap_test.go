@@ -239,12 +239,13 @@ func TestGenerateProxyConfig_Tier1InstanceKnobs(t *testing.T) {
 		ModelGroupAlias:     map[string]string{"gpt-4": "gpt-4o"},
 	}
 	instance.Spec.GeneralSettings = &litellmv1alpha1.GeneralSettingsSpec{
-		Alerting:               []string{"slack"},
-		AlertingThreshold:      intPtr(300),
-		AlertToWebhookURL:      map[string]string{"budget_alerts": "https://hooks.example/x"},
-		BackgroundHealthChecks: boolPtr(true),
-		HealthCheckInterval:    intPtr(120),
-		HealthCheckDetails:     boolPtr(false),
+		Alerting:                      []string{"slack"},
+		AlertingThreshold:             intPtr(300),
+		AlertToWebhookURL:             map[string]string{"budget_alerts": "https://hooks.example/x"},
+		BackgroundHealthChecks:        boolPtr(true),
+		HealthCheckInterval:           intPtr(120),
+		HealthCheckDetails:            boolPtr(false),
+		HealthCheckSkipDisabledModels: boolPtr(true),
 	}
 	instance.Spec.LiteLLMSettings = &litellmv1alpha1.LiteLLMSettingsSpec{
 		JSONLogs: boolPtr(true),
@@ -275,6 +276,9 @@ func TestGenerateProxyConfig_Tier1InstanceKnobs(t *testing.T) {
 	}
 	if gs["health_check_details"] != false {
 		t.Errorf("expected health_check_details=false, got %v", gs["health_check_details"])
+	}
+	if gs["health_check_skip_disabled_background_models"] != true {
+		t.Errorf("expected health_check_skip_disabled_background_models=true, got %v", gs["health_check_skip_disabled_background_models"])
 	}
 
 	ls := config["litellm_settings"].(map[string]interface{})

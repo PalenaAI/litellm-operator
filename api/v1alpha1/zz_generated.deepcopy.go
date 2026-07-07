@@ -843,6 +843,11 @@ func (in *GeneralSettingsSpec) DeepCopyInto(out *GeneralSettingsSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.HealthCheckSkipDisabledModels != nil {
+		in, out := &in.HealthCheckSkipDisabledModels, &out.HealthCheckSkipDisabledModels
+		*out = new(bool)
+		**out = **in
+	}
 	if in.AllowUserAuth != nil {
 		in, out := &in.AllowUserAuth, &out.AllowUserAuth
 		*out = new(bool)

@@ -898,6 +898,15 @@ type GeneralSettingsSpec struct {
 	// +optional
 	HealthCheckDetails *bool `json:"healthCheckDetails,omitempty"`
 
+	// HealthCheckSkipDisabledModels excludes models that set
+	// modelInfo.healthCheck.disableBackgroundHealthCheck: true from the
+	// on-demand GET /health probe as well (not just the background loop),
+	// rendering health_check_skip_disabled_background_models. Use this to stop
+	// on-demand /health from live-probing (and billing for) models you have
+	// opted out of health checking.
+	// +optional
+	HealthCheckSkipDisabledModels *bool `json:"healthCheckSkipDisabledModels,omitempty"`
+
 	// Custom key generation function.
 	// +optional
 	CustomKeyGenerate string `json:"customKeyGenerate,omitempty"`

@@ -301,14 +301,36 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			"Model %q updated in LiteLLM", model.Spec.ModelName)
 	}
 
-	// Poll /health to report operand health into model status. Failure is
-	// non-fatal — the model sync is still considered successful even if the
-	// health endpoint is slow or unreachable on this reconcile.
-	r.updateModelHealth(ctx, apiClient, model)
+	// Poll /health to report operand health into model status — but ONLY when
+	// background health checks are enabled on the instance. This is a cost
+	// safeguard: with background_health_checks=true, GET /health returns the
+	// cached background results (cheap). With it disabled (or unset), GET
+	// /health live-probes every deployment on each call — a real, paid
+	// completion per model — so polling it here would silently reintroduce the
+	// exact cost the operator was asked to avoid. When checks are off we skip
+	// the probe entirely and mark health "unknown". Failure is non-fatal.
+	if backgroundHealthChecksEnabled(resolved.Instance) {
+		r.updateModelHealth(ctx, apiClient, model)
+	} else {
+		model.Status.Health = healthStatusUnknown
+	}
 
 	now := metav1.Now()
 	model.Status.LastSyncTime = &now
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+// backgroundHealthChecksEnabled reports whether the instance has opted into
+// health checking via spec.generalSettings.backgroundHealthChecks: true. Only
+// then does GET /health serve cached (cheap) results; otherwise the operator
+// must not call it, because /health live-probes every model (a paid completion
+// per model) when background checks are off.
+func backgroundHealthChecksEnabled(instance *litellmv1alpha1.LiteLLMInstance) bool {
+	if instance == nil || instance.Spec.GeneralSettings == nil {
+		return false
+	}
+	return instance.Spec.GeneralSettings.BackgroundHealthChecks != nil &&
+		*instance.Spec.GeneralSettings.BackgroundHealthChecks
 }
 
 // updateModelHealth asks the LiteLLM proxy for its /health report and
@@ -322,7 +344,7 @@ func (r *LiteLLMModelReconciler) updateModelHealth(ctx context.Context, apiClien
 	report, err := apiClient.Health().Check(probeCtx)
 	if err != nil {
 		log.V(1).Info("model health probe failed", "error", err)
-		model.Status.Health = "unknown"
+		model.Status.Health = healthStatusUnknown
 		return
 	}
 	for _, ep := range report.HealthyEndpoints {
@@ -343,12 +365,16 @@ func (r *LiteLLMModelReconciler) updateModelHealth(ctx context.Context, apiClien
 	}
 	// Not present in either list — treat as unknown rather than unhealthy
 	// so a silently-dropped model doesn't get false-flagged.
-	model.Status.Health = "unknown"
+	model.Status.Health = healthStatusUnknown
 }
 
 const (
 	authModeInline     = "inline"
 	authModeCredential = "credential"
+
+	// healthStatusUnknown is the status.health value used when the operator has
+	// no health signal for a model (not probed, or not present in /health).
+	healthStatusUnknown = "unknown"
 )
 
 // resolvedCredential holds the LiteLLMCredential values the model controller

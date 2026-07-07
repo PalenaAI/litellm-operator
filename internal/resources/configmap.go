@@ -210,6 +210,9 @@ func buildGeneralSettings(spec *litellmv1alpha1.GeneralSettingsSpec) map[string]
 	if spec.HealthCheckDetails != nil {
 		gs["health_check_details"] = *spec.HealthCheckDetails
 	}
+	if spec.HealthCheckSkipDisabledModels != nil {
+		gs["health_check_skip_disabled_background_models"] = *spec.HealthCheckSkipDisabledModels
+	}
 	if spec.CustomKeyGenerate != "" {
 		gs["custom_key_generate"] = spec.CustomKeyGenerate
 	}
