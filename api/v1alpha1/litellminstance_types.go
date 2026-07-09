@@ -1723,9 +1723,34 @@ type JWTAuthSpec struct {
 	// +optional
 	UserEmailJWTField string `json:"userEmailJwtField,omitempty"`
 
-	// JWT field containing the user role.
+	// JWT field containing the user role (a single role value).
 	// +optional
 	UserRoleJWTField string `json:"userRoleJwtField,omitempty"`
+
+	// UserRolesJWTField is the JWT claim containing a LIST of the user's roles
+	// (e.g. "roles"). Distinct from userRoleJwtField (a single role). Combined
+	// with userAllowedRoles and enforceRbac this drives JWT role-based model
+	// access (LiteLLM's role_permissions).
+	// +optional
+	UserRolesJWTField string `json:"userRolesJwtField,omitempty"`
+
+	// UserAllowedRoles are the role values (read from userRolesJwtField) that
+	// map to an internal_user on LiteLLM (e.g. ["basic_user"]). When
+	// enforceRbac is true, callers whose roles are not listed are denied.
+	// +optional
+	UserAllowedRoles []string `json:"userAllowedRoles,omitempty"`
+
+	// EnforceRBAC turns on JWT role-based access control: LiteLLM checks the
+	// caller's role (from the JWT) against general_settings.role_permissions
+	// before allowing model access. Rendered under litellm_jwtauth — distinct
+	// from spec.rbac.enforceRbac, which is the general_settings-level toggle.
+	// +optional
+	EnforceRBAC *bool `json:"enforceRbac,omitempty"`
+
+	// ObjectIDJWTField is the JWT claim holding an object id — either a user or
+	// a team id, inferred from the role mapping.
+	// +optional
+	ObjectIDJWTField string `json:"objectIdJwtField,omitempty"`
 
 	// JWT field containing the end-user ID.
 	// +optional

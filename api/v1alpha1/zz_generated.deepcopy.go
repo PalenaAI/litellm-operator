@@ -1098,6 +1098,16 @@ func (in *JWTAuthSpec) DeepCopyInto(out *JWTAuthSpec) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
+	if in.UserAllowedRoles != nil {
+		in, out := &in.UserAllowedRoles, &out.UserAllowedRoles
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
+	if in.EnforceRBAC != nil {
+		in, out := &in.EnforceRBAC, &out.EnforceRBAC
+		*out = new(bool)
+		**out = **in
+	}
 	if in.PublicKeyTTL != nil {
 		in, out := &in.PublicKeyTTL, &out.PublicKeyTTL
 		*out = new(int)

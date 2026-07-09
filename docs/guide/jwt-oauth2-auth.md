@@ -64,8 +64,14 @@ jwtAuth:
   orgIdJwtField: "org_id"           # organization ID
   userIdJwtField: "sub"             # user ID
   userEmailJwtField: "email"        # user email
-  userRoleJwtField: "role"          # user role
+  userRoleJwtField: "role"          # user role (single value)
   endUserIdJwtField: "end_user_id"  # end-user ID (for customer tracking)
+
+  # Role-based model access (RBAC via JWT roles)
+  userRolesJwtField: "roles"        # JWT claim holding a LIST of roles
+  userAllowedRoles: ["basic_user"]  # roles that map to internal_user
+  enforceRbac: true                 # check the role against rbac.rolePermissions
+  objectIdJwtField: "oid"           # object id claim (user or team)
 
   # Public key caching
   publicKeyTtl: 600  # cache JWKS keys for 10 minutes
@@ -85,6 +91,32 @@ jwtAuth:
 ### Scope-to-Model Mappings
 
 `scopeModelMappings` restricts which models a JWT holder can access based on their token scopes. A token with `scope: "scope:gpt"` can only use `gpt-4` and `gpt-4-mini`. Use `"*"` to grant access to all models.
+
+### Role-Based Model Access (RBAC via JWT roles)
+
+For role-based (rather than scope-based) access, LiteLLM reads the caller's roles from the JWT and checks them against per-role model allow-lists. Wire it up with three `jwtAuth` fields plus `spec.rbac.rolePermissions`:
+
+- **`userRolesJwtField`** — the JWT claim holding the caller's roles (e.g. `roles`).
+- **`userAllowedRoles`** — the role values that map to an `internal_user` on LiteLLM (e.g. `["basic_user"]`).
+- **`enforceRbac: true`** — turns on the check; unlisted roles are denied.
+
+Then define what each role may use with [`spec.rbac.rolePermissions`](./rbac) (rendered as `general_settings.role_permissions`):
+
+```yaml
+spec:
+  jwtAuth:
+    enabled: true
+    userRolesJwtField: "roles"
+    userAllowedRoles: ["basic_user"]
+    enforceRbac: true
+  rbac:
+    enabled: true
+    rolePermissions:
+      internal_user:
+        models: ["anthropic-claude"]
+```
+
+This reproduces the standard LiteLLM JWT-RBAC config: a `basic_user` role from the token maps to `internal_user`, which is limited to `anthropic-claude`. All JWT/RBAC features require a LiteLLM Enterprise license.
 
 ## OAuth2 Machine-to-Machine Auth
 

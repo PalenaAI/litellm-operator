@@ -2965,6 +2965,18 @@ spec:
                   endUserIdJwtField:
                     description: JWT field containing the end-user ID.
                     type: string
+                  enforceRbac:
+                    description: |-
+                      EnforceRBAC turns on JWT role-based access control: LiteLLM checks the
+                      caller's role (from the JWT) against general_settings.role_permissions
+                      before allowing model access. Rendered under litellm_jwtauth — distinct
+                      from spec.rbac.enforceRbac, which is the general_settings-level toggle.
+                    type: boolean
+                  objectIdJwtField:
+                    description: |-
+                      ObjectIDJWTField is the JWT claim holding an object id — either a user or
+                      a team id, inferred from the role mapping.
+                    type: string
                   orgIdJwtField:
                     description: JWT field containing the organization ID.
                     type: string
@@ -2986,6 +2998,14 @@ spec:
                   teamIdsJwtField:
                     description: JWT field containing team IDs (array).
                     type: string
+                  userAllowedRoles:
+                    description: |-
+                      UserAllowedRoles are the role values (read from userRolesJwtField) that
+                      map to an internal_user on LiteLLM (e.g. ["basic_user"]). When
+                      enforceRbac is true, callers whose roles are not listed are denied.
+                    items:
+                      type: string
+                    type: array
                   userEmailJwtField:
                     description: JWT field containing the user email.
                     type: string
@@ -2993,7 +3013,15 @@ spec:
                     description: JWT field containing the user ID.
                     type: string
                   userRoleJwtField:
-                    description: JWT field containing the user role.
+                    description: JWT field containing the user role (a single role
+                      value).
+                    type: string
+                  userRolesJwtField:
+                    description: |-
+                      UserRolesJWTField is the JWT claim containing a LIST of the user's roles
+                      (e.g. "roles"). Distinct from userRoleJwtField (a single role). Combined
+                      with userAllowedRoles and enforceRbac this drives JWT role-based model
+                      access (LiteLLM's role_permissions).
                     type: string
                 required:
                 - enabled

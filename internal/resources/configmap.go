@@ -382,6 +382,18 @@ func buildJWTAuthConfig(jwt *litellmv1alpha1.JWTAuthSpec, config map[string]inte
 	if jwt.UserRoleJWTField != "" {
 		jwtauth["user_role_jwt_field"] = jwt.UserRoleJWTField
 	}
+	if jwt.UserRolesJWTField != "" {
+		jwtauth["user_roles_jwt_field"] = jwt.UserRolesJWTField
+	}
+	if len(jwt.UserAllowedRoles) > 0 {
+		jwtauth["user_allowed_roles"] = jwt.UserAllowedRoles
+	}
+	if jwt.EnforceRBAC != nil {
+		jwtauth["enforce_rbac"] = *jwt.EnforceRBAC
+	}
+	if jwt.ObjectIDJWTField != "" {
+		jwtauth["object_id_jwt_field"] = jwt.ObjectIDJWTField
+	}
 	if jwt.EndUserIDJWTField != "" {
 		jwtauth["end_user_id_jwt_field"] = jwt.EndUserIDJWTField
 	}

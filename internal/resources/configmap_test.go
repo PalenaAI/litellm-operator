@@ -1707,6 +1707,40 @@ func TestGenerateProxyConfig_JWTAuthEnabled(t *testing.T) {
 	}
 }
 
+// TestGenerateProxyConfig_JWTAuthRoleRBAC covers the JWT role-based model-access
+// fields: user_roles_jwt_field, user_allowed_roles, enforce_rbac (nested under
+// litellm_jwtauth), and object_id_jwt_field.
+func TestGenerateProxyConfig_JWTAuthRoleRBAC(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
+		Enabled:           true,
+		UserRolesJWTField: "roles",
+		UserAllowedRoles:  []string{"basic_user", "power_user"},
+		EnforceRBAC:       boolPtr(true),
+		ObjectIDJWTField:  "oid",
+	}
+
+	config := GenerateProxyConfig(instance, nil)
+	gs := config["general_settings"].(map[string]interface{})
+	jwtauth, ok := gs["litellm_jwtauth"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected litellm_jwtauth to be present")
+	}
+	if jwtauth["user_roles_jwt_field"] != "roles" {
+		t.Errorf("unexpected user_roles_jwt_field: %v", jwtauth["user_roles_jwt_field"])
+	}
+	roles, ok := jwtauth["user_allowed_roles"].([]string)
+	if !ok || len(roles) != 2 || roles[0] != "basic_user" {
+		t.Errorf("unexpected user_allowed_roles: %v", jwtauth["user_allowed_roles"])
+	}
+	if jwtauth["enforce_rbac"] != true {
+		t.Errorf("expected enforce_rbac=true under litellm_jwtauth, got %v", jwtauth["enforce_rbac"])
+	}
+	if jwtauth["object_id_jwt_field"] != "oid" {
+		t.Errorf("unexpected object_id_jwt_field: %v", jwtauth["object_id_jwt_field"])
+	}
+}
+
 func TestGenerateProxyConfig_JWTAuthMinimal(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{

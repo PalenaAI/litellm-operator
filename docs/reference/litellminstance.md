@@ -583,7 +583,11 @@ JWT-based authentication configuration (enterprise). When enabled, LiteLLM valid
 | `orgIdJwtField` | string | — | JWT field containing the organization ID |
 | `userIdJwtField` | string | — | JWT field containing the user ID |
 | `userEmailJwtField` | string | — | JWT field containing the user email |
-| `userRoleJwtField` | string | — | JWT field containing the user role |
+| `userRoleJwtField` | string | — | JWT field containing the user role (single value) |
+| `userRolesJwtField` | string | — | JWT claim containing a **list** of roles (e.g. `roles`); drives role-based model access |
+| `userAllowedRoles` | []string | — | Role values (from `userRolesJwtField`) that map to `internal_user` (e.g. `["basic_user"]`) |
+| `enforceRbac` | *bool | — | Enable JWT role-based access control (rendered under `litellm_jwtauth`); checks the caller's role against `spec.rbac.rolePermissions` before allowing model access |
+| `objectIdJwtField` | string | — | JWT claim holding an object id (user or team, inferred from role mapping) |
 | `endUserIdJwtField` | string | — | JWT field containing the end-user ID |
 | `publicKeyTtl` | *int | — | TTL in seconds for caching the public key |
 | `scopeModelMappings` | map[string][]string | — | Scope-to-model mappings (key: JWT scope, value: allowed model names) |
