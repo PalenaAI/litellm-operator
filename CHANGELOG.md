@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-07-09
+
 ### Added
 
 - **JWT role-based model access (RBAC) on `LiteLLMInstance.spec.jwtAuth`** (enterprise). Four new fields wire a JWT roles claim into LiteLLM's `role_permissions`: `userRolesJwtField` (`user_roles_jwt_field` — the claim holding a *list* of roles, distinct from the existing single-value `userRoleJwtField`), `userAllowedRoles` (`user_allowed_roles` — roles that map to `internal_user`), `enforceRbac` (`litellm_jwtauth.enforce_rbac` — the JWT-level RBAC toggle, distinct from the `general_settings`-level `spec.rbac.enforceRbac`), and `objectIdJwtField` (`object_id_jwt_field`). Combined with `spec.rbac.rolePermissions`, this reproduces the standard LiteLLM JWT-RBAC config (a JWT role → `internal_user` → per-role model allow-list) — previously the `role_permissions` target was expressible but the JWT plumbing to feed it was not.

@@ -24,7 +24,7 @@
 
 The community LiteLLM Helm chart deploys the proxy, but leaves you with a hard trade-off: manage models and keys through the **Admin UI** (convenient, but not GitOps-friendly) or through `proxy_server_config.yaml` (reproducible, but no UI). Pick one and you lose the other.
 
-This operator dissolves that trade-off. Every resource — instances, organizations, models, teams, users, keys, credentials, guardrails — is a first-class Kubernetes CRD, reconciled continuously against the LiteLLM REST API. Git is the source of truth; Admin-UI drift is detected on every sync interval and resolved per your policy (`crd-wins`, `api-wins`, or `manual`). You get GitOps **and** the Admin UI, backed by the same state.
+This operator dissolves that trade-off. Every resource — instances, organizations, models, teams, users, keys, customers, credentials, guardrails, budget tiers — is a first-class Kubernetes CRD, reconciled continuously against the LiteLLM REST API. Git is the source of truth; Admin-UI drift is detected on every sync interval and resolved per your policy (`crd-wins`, `api-wins`, or `manual`). You get GitOps **and** the Admin UI, backed by the same state.
 
 It also handles the parts a Helm chart can't: finalizer-based cleanup that deletes upstream API objects, generated virtual keys stored as garbage-collected Kubernetes Secrets, enterprise license activation, rollback-on-failure, OpenShift-native routing, six-backend response caching, and external secret-manager integration so provider API keys never touch etcd.
 
@@ -40,6 +40,7 @@ It also handles the parts a Helm chart can't: finalizer-based cleanup that delet
  │   LiteLLMInstance     LiteLLMOrganization   LiteLLMModel    │
  │   LiteLLMTeam         LiteLLMUser           LiteLLMCustomer │
  │   LiteLLMVirtualKey   LiteLLMCredential     LiteLLMGuardrail│
+ │   LiteLLMBudget                                             │
  └──────────────────────────────┬──────────────────────────────┘
                                 │   watches / reconciles
                                 ▼
@@ -69,7 +70,7 @@ It also handles the parts a Helm chart can't: finalizer-based cleanup that delet
 | **Infrastructure** | Declarative Deployment, ConfigMap, Service, Secrets, HPA v2, PDB, NetworkPolicy; migration Jobs per image tag; auto-rollback on `ProgressDeadlineExceeded`; topology spread constraints; `runAsNonRoot` mode using the official non-root image |
 | **Networking** | Kubernetes Ingress, OpenShift Route, Gateway API HTTPRoute — pick one declaratively per instance |
 | **Multi-tenancy** | Full Organization → Team → User → Key hierarchy with budgets, member management (`crd` / `sso` / `mixed` modes), and org-scoped model access |
-| **API-managed CRDs** | `LiteLLMOrganization`, `LiteLLMModel`, `LiteLLMTeam`, `LiteLLMUser`, `LiteLLMCustomer`, `LiteLLMVirtualKey` — reconciled via the LiteLLM REST API with finalizer-based cleanup and spec-hash change detection |
+| **API-managed CRDs** | `LiteLLMOrganization`, `LiteLLMModel`, `LiteLLMTeam`, `LiteLLMUser`, `LiteLLMCustomer`, `LiteLLMVirtualKey`, `LiteLLMBudget` — reconciled via the LiteLLM REST API with finalizer-based cleanup and spec-hash change detection |
 | **Config-managed CRDs** | `LiteLLMCredential` (reusable provider API keys via `credentialRef`) and `LiteLLMGuardrail` (Aporia, Lakera, Presidio, Bedrock, LLM Guard, Guardrails AI, Azure, Google Text Moderation, custom) — materialized into `proxy_server_config.yaml`, keys injected via `secretKeyRef` (never read into operator memory) |
 | **Bidirectional sync** | Periodic drift detection with `crd-wins` / `api-wins` / `manual` resolution and `preserve` / `prune` / `adopt` policies for unmanaged resources |
 | **VirtualKey lifecycle** | Generated API keys stored in owner-referenced Kubernetes Secrets; rotation and revocation follow CRD deletion |
@@ -97,6 +98,7 @@ It also handles the parts a Helm chart can't: finalizer-based cleanup that delet
 | `LiteLLMCredential` | `lc` | Defines a reusable provider credential (API key + optional base URL) shared across models |
 | `LiteLLMGuardrail` | `lg` | Defines a content moderation / safety integration (Aporia, Lakera, Presidio, Bedrock, etc.) |
 | `LiteLLMVirtualKey` | `lk` | Generates an API key scoped to a team/user with budget and rate limits |
+| `LiteLLMBudget` | `lb` | Declares a reusable budget / rate-limit tier (via `/budget/*`) referenced by `budgetId` from keys, customers, and the instance default |
 
 All secondary resources reference a `LiteLLMInstance` via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`.
 
@@ -641,7 +643,7 @@ make deploy        # Deploy operator
 ### OLM (OpenShift / clusters with OLM)
 
 ```sh
-operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:v0.11.3
+operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:latest
 ```
 
 ### Helm
