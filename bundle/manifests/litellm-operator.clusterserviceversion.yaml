@@ -521,7 +521,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.17.0
-    createdAt: "2026-07-09T21:09:38Z"
+    createdAt: "2026-07-10T09:26:41Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1

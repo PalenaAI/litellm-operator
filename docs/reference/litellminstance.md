@@ -582,6 +582,7 @@ JWT-based authentication configuration (enterprise). When enabled, LiteLLM valid
 | `teamIdsJwtField` | string | — | JWT field containing team IDs (array) |
 | `orgIdJwtField` | string | — | JWT field containing the organization ID |
 | `userIdJwtField` | string | — | JWT field containing the user ID |
+| `userIdUpsert` | *bool | — | Auto-create the LiteLLM user on first sight of an unknown JWT user id (`user_id_upsert`) |
 | `userEmailJwtField` | string | — | JWT field containing the user email |
 | `userRoleJwtField` | string | — | JWT field containing the user role (single value) |
 | `userRolesJwtField` | string | — | JWT claim containing a **list** of roles (e.g. `roles`); drives role-based model access |
@@ -590,7 +591,28 @@ JWT-based authentication configuration (enterprise). When enabled, LiteLLM valid
 | `objectIdJwtField` | string | — | JWT claim holding an object id (user or team, inferred from role mapping) |
 | `endUserIdJwtField` | string | — | JWT field containing the end-user ID |
 | `publicKeyTtl` | *int | — | TTL in seconds for caching the public key |
-| `scopeModelMappings` | map[string][]string | — | Scope-to-model mappings (key: JWT scope, value: allowed model names) |
+| `scopeModelMappings` | map[string][]string | — | Scope→models (key: JWT scope, value: allowed models). Rendered into `scope_mappings`. Prefer `scopeMappings` for new configs |
+| `scopeMappings` | []JWTScopeMapping | — | Structured scope→models (and optionally `routes`) list → `scope_mappings` |
+| `rolesJwtField` | string | — | JWT claim containing the caller's roles (used by `roleMappings`) → `roles_jwt_field` |
+| `roleMappings` | []JWTRoleMapping | — | Map a JWT role → LiteLLM internal role (`{role, internalRole}`) → `role_mappings` |
+| `jwtLitellmRoleMap` | []JWTLiteLLMRoleMapEntry | — | Map a JWT role → LiteLLM user role (`{jwtRole, litellmRole}`) → `jwt_litellm_role_map` |
+| `teamAliasJwtField` | string | — | Look up a team by its name/alias claim → `team_alias_jwt_field` |
+| `orgAliasJwtField` | string | — | Look up an org by its name/alias claim → `org_alias_jwt_field` |
+| `teamIdDefault` | string | — | Fallback team id when the team claim doesn't resolve → `team_id_default` |
+| `teamAllowedRoutes` | []string | — | Route allowlist for team tokens → `team_allowed_routes` |
+| `teamIdUpsert` | *bool | — | Auto-create a team on unknown JWT team id → `team_id_upsert` |
+| `teamClaimFallback` | *bool | — | Fall back to the user's single DB team when the team claim is unresolved → `team_claim_fallback` |
+| `userAllowedEmailDomain` | string | — | Grant access to any caller whose JWT email is in this domain → `user_allowed_email_domain` |
+| `enforceTeamBasedModelAccess` | *bool | — | Deny models unless the team has access → `enforce_team_based_model_access` |
+| `enforceScopeBasedAccess` | *bool | — | Enforce model access via `scopeMappings` → `enforce_scope_based_access` |
+| `syncUserRoleAndTeams` | *bool | — | Sync the user's role + team membership from the IdP → `sync_user_role_and_teams` |
+| `customValidate` | string | — | Dotted path to a custom JWT-validation function baked into the proxy image → `custom_validate` |
+| `virtualKeyClaimField` | string | — | JWT claim to look up in virtual-key mappings → `virtual_key_claim_field` |
+| `virtualKeyMappingCacheTtl` | *int | — | Cache TTL (s) for the virtual-key lookup → `virtual_key_mapping_cache_ttl` |
+| `routingOverrides` | []JWTRoutingOverride | — | Route JWT-shaped tokens to OAuth2 by claim (`{iss, clientId, scope, aud, path}`) → `routing_overrides` |
+| `oidcUserinfoEnabled` | *bool | — | Fetch extra claims from the IdP UserInfo endpoint → `oidc_userinfo_enabled` |
+| `oidcUserinfoEndpoint` | string | — | IdP UserInfo endpoint URL → `oidc_userinfo_endpoint` |
+| `oidcUserinfoCacheTtl` | *int | — | Cache TTL (s) for UserInfo responses → `oidc_userinfo_cache_ttl` |
 
 ### `oauth2Auth`
 

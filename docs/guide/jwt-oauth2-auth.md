@@ -63,6 +63,7 @@ jwtAuth:
   teamIdsJwtField: "groups"         # array of team IDs
   orgIdJwtField: "org_id"           # organization ID
   userIdJwtField: "sub"             # user ID
+  userIdUpsert: true                # auto-create the user on first unknown JWT user id
   userEmailJwtField: "email"        # user email
   userRoleJwtField: "role"          # user role (single value)
   endUserIdJwtField: "end_user_id"  # end-user ID (for customer tracking)

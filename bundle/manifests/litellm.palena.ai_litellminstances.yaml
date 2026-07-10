@@ -2959,6 +2959,12 @@ spec:
                   adminJwtScope:
                     description: JWT scope value that grants proxy admin access.
                     type: string
+                  customValidate:
+                    description: |-
+                      CustomValidate is the dotted import path to a custom JWT-validation
+                      function that must be present in the proxy image (same packaging pattern
+                      as spec.sso.customSsoHandler in module mode). Rendered as custom_validate.
+                    type: string
                   enabled:
                     description: Enable JWT-based authentication.
                     type: boolean
@@ -2972,10 +2978,51 @@ spec:
                       before allowing model access. Rendered under litellm_jwtauth — distinct
                       from spec.rbac.enforceRbac, which is the general_settings-level toggle.
                     type: boolean
+                  enforceScopeBasedAccess:
+                    description: EnforceScopeBasedAccess enforces model access via
+                      scopeMappings.
+                    type: boolean
+                  enforceTeamBasedModelAccess:
+                    description: |-
+                      EnforceTeamBasedModelAccess denies model access unless the caller's team
+                      has access to the model.
+                    type: boolean
+                  jwtLitellmRoleMap:
+                    description: |-
+                      JWTLiteLLMRoleMap maps a JWT role to a LiteLLM user role (proxy_admin,
+                      internal_user, ...), with wildcard support. Rendered as
+                      jwt_litellm_role_map.
+                    items:
+                      description: JWTLiteLLMRoleMapEntry maps a JWT role to a LiteLLM
+                        user role.
+                      properties:
+                        jwtRole:
+                          description: JWT role value (e.g. "ADMIN").
+                          type: string
+                        litellmRole:
+                          description: LiteLLM user role (e.g. "proxy_admin", "internal_user").
+                          type: string
+                      required:
+                      - jwtRole
+                      - litellmRole
+                      type: object
+                    type: array
                   objectIdJwtField:
                     description: |-
                       ObjectIDJWTField is the JWT claim holding an object id — either a user or
                       a team id, inferred from the role mapping.
+                    type: string
+                  oidcUserinfoCacheTtl:
+                    type: integer
+                  oidcUserinfoEnabled:
+                    description: |-
+                      OIDCUserInfoEnabled fetches additional claims from the IdP UserInfo
+                      endpoint (OIDCUserInfoEndpoint) and caches them for OIDCUserInfoCacheTTL
+                      seconds.
+                    type: boolean
+                  oidcUserinfoEndpoint:
+                    type: string
+                  orgAliasJwtField:
                     type: string
                   orgIdJwtField:
                     description: JWT field containing the organization ID.
@@ -2983,20 +3030,135 @@ spec:
                   publicKeyTtl:
                     description: TTL in seconds for caching the public key.
                     type: integer
+                  roleMappings:
+                    description: RoleMappings map a JWT role value to a LiteLLM internal
+                      role.
+                    items:
+                      description: |-
+                        JWTRoleMapping maps a JWT role value to a LiteLLM internal role
+                        (e.g. "team", "internal_user").
+                      properties:
+                        internalRole:
+                          description: LiteLLM internal role this JWT role maps to.
+                          type: string
+                        role:
+                          description: JWT role value.
+                          type: string
+                      required:
+                      - internalRole
+                      - role
+                      type: object
+                    type: array
+                  rolesJwtField:
+                    description: |-
+                      RolesJWTField is the JWT claim containing the caller's roles (used by
+                      roleMappings). Rendered as roles_jwt_field.
+                    type: string
+                  routingOverrides:
+                    description: |-
+                      RoutingOverrides route JWT-shaped tokens to OAuth2 handling based on
+                      claims. Rendered as routing_overrides.
+                    items:
+                      description: |-
+                        JWTRoutingOverride routes JWT-shaped tokens to OAuth2 handling based on
+                        matching claims. Rendered as an entry in litellm_jwtauth.routing_overrides.
+                      properties:
+                        aud:
+                          description: Audience claim to match.
+                          type: string
+                        clientId:
+                          description: Client id claim to match.
+                          type: string
+                        iss:
+                          description: Issuer claim to match (required).
+                          type: string
+                        path:
+                          description: Handling path (e.g. "oauth2").
+                          type: string
+                        scope:
+                          description: Scope claim to match.
+                          type: string
+                      required:
+                      - iss
+                      type: object
+                    type: array
+                  scopeMappings:
+                    description: |-
+                      ScopeMappings restricts models (and optionally routes) per JWT scope.
+                      Rendered into litellm_jwtauth.scope_mappings.
+                    items:
+                      description: |-
+                        JWTScopeMapping restricts the models (and optionally routes) a JWT scope may
+                        access. Rendered as an entry in litellm_jwtauth.scope_mappings.
+                      properties:
+                        models:
+                          description: Allowed model names for this scope.
+                          items:
+                            type: string
+                          type: array
+                        routes:
+                          description: Allowed routes for this scope.
+                          items:
+                            type: string
+                          type: array
+                        scope:
+                          description: JWT scope value.
+                          type: string
+                      required:
+                      - scope
+                      type: object
+                    type: array
                   scopeModelMappings:
                     additionalProperties:
                       items:
                         type: string
                       type: array
                     description: |-
-                      Scope-to-model mappings for fine-grained access control.
-                      Key: JWT scope value, Value: list of allowed model names.
+                      ScopeModelMappings maps a JWT scope to a list of allowed model names.
+                      Rendered into litellm_jwtauth.scope_mappings (the shape LiteLLM reads).
+                      Prefer scopeMappings for new configs (it also supports per-scope routes);
+                      both are merged into scope_mappings.
                     type: object
+                  syncUserRoleAndTeams:
+                    description: |-
+                      SyncUserRoleAndTeams keeps the user's LiteLLM role and team memberships in
+                      sync with the IdP on each request.
+                    type: boolean
+                  teamAliasJwtField:
+                    description: |-
+                      TeamAliasJWTField / OrgAliasJWTField look up a team / organization by its
+                      name (alias) claim instead of its id.
+                    type: string
+                  teamAllowedRoutes:
+                    description: TeamAllowedRoutes restricts which routes team JWT
+                      holders may call.
+                    items:
+                      type: string
+                    type: array
+                  teamClaimFallback:
+                    description: |-
+                      TeamClaimFallback defers to the user's single DB team when the JWT team
+                      claim is unresolved.
+                    type: boolean
+                  teamIdDefault:
+                    description: |-
+                      TeamIDDefault is the fallback team id used when the JWT team claim does
+                      not resolve.
+                    type: string
                   teamIdJwtField:
                     description: JWT field containing the team ID.
                     type: string
+                  teamIdUpsert:
+                    description: TeamIDUpsert auto-creates a team on first sight of
+                      an unknown JWT team id.
+                    type: boolean
                   teamIdsJwtField:
                     description: JWT field containing team IDs (array).
+                    type: string
+                  userAllowedEmailDomain:
+                    description: |-
+                      UserAllowedEmailDomain grants proxy access to any caller whose JWT email
+                      belongs to this domain (e.g. "my-co.com").
                     type: string
                   userAllowedRoles:
                     description: |-
@@ -3012,6 +3174,12 @@ spec:
                   userIdJwtField:
                     description: JWT field containing the user ID.
                     type: string
+                  userIdUpsert:
+                    description: |-
+                      UserIDUpsert auto-creates (upserts) a LiteLLM user record the first time
+                      a JWT presents a user id that does not yet exist in the DB, instead of
+                      rejecting the request. Renders litellm_jwtauth.user_id_upsert.
+                    type: boolean
                   userRoleJwtField:
                     description: JWT field containing the user role (a single role
                       value).
@@ -3023,6 +3191,13 @@ spec:
                       with userAllowedRoles and enforceRbac this drives JWT role-based model
                       access (LiteLLM's role_permissions).
                     type: string
+                  virtualKeyClaimField:
+                    description: |-
+                      VirtualKeyClaimField is the JWT claim to look up in the virtual-key
+                      mappings (JWT → virtual key). VirtualKeyMappingCacheTTL caches that lookup.
+                    type: string
+                  virtualKeyMappingCacheTtl:
+                    type: integer
                 required:
                 - enabled
                 type: object

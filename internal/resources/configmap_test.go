@@ -1658,6 +1658,7 @@ func TestGenerateProxyConfig_JWTAuthEnabled(t *testing.T) {
 		UserEmailJWTField:  "email",
 		UserRoleJWTField:   "role",
 		EndUserIDJWTField:  "end_user_id",
+		UserIDUpsert:       boolPtr(true),
 		PublicKeyTTL:       intPtr(600),
 	}
 
@@ -1704,6 +1705,9 @@ func TestGenerateProxyConfig_JWTAuthEnabled(t *testing.T) {
 	}
 	if jwtauth["public_key_ttl"] != 600 {
 		t.Errorf("unexpected public_key_ttl: %v", jwtauth["public_key_ttl"])
+	}
+	if jwtauth["user_id_upsert"] != true {
+		t.Errorf("expected user_id_upsert=true, got %v", jwtauth["user_id_upsert"])
 	}
 }
 
@@ -1776,15 +1780,114 @@ func TestGenerateProxyConfig_JWTAuthScopeModelMappings(t *testing.T) {
 
 	gs := config["general_settings"].(map[string]interface{})
 	jwtauth := gs["litellm_jwtauth"].(map[string]interface{})
-	mappings, ok := jwtauth["scope_model_mappings"].(map[string][]string)
-	if !ok {
-		t.Fatal("expected scope_model_mappings to be map[string][]string")
+	// scopeModelMappings (a map) now renders into scope_mappings (a list), the
+	// shape LiteLLM actually reads. Entries are sorted by scope for determinism.
+	if _, dead := jwtauth["scope_model_mappings"]; dead {
+		t.Error("scope_model_mappings must not be emitted (LiteLLM has no such key)")
 	}
-	if len(mappings["scope:gpt"]) != 2 || mappings["scope:gpt"][0] != "gpt-4" {
-		t.Errorf("unexpected scope:gpt mapping: %v", mappings["scope:gpt"])
+	mappings, ok := jwtauth["scope_mappings"].([]map[string]interface{})
+	if !ok || len(mappings) != 2 {
+		t.Fatalf("expected scope_mappings to be a 2-entry list, got %T %v", jwtauth["scope_mappings"], jwtauth["scope_mappings"])
 	}
-	if len(mappings["scope:all"]) != 1 || mappings["scope:all"][0] != "*" {
-		t.Errorf("unexpected scope:all mapping: %v", mappings["scope:all"])
+	// Sorted: "scope:all" < "scope:gpt".
+	if mappings[0]["scope"] != "scope:all" {
+		t.Errorf("expected first scope=scope:all, got %v", mappings[0]["scope"])
+	}
+	gptModels, _ := mappings[1]["models"].([]string)
+	if mappings[1]["scope"] != "scope:gpt" || len(gptModels) != 2 || gptModels[0] != "gpt-4" {
+		t.Errorf("unexpected scope:gpt entry: %v", mappings[1])
+	}
+}
+
+// TestGenerateProxyConfig_JWTAuthAdvanced covers the full set of advanced
+// litellm_jwtauth fields: team/org aliases + upsert + defaults, structured
+// scope/role mappings, OIDC UserInfo, virtual-key mapping, routing overrides,
+// and the various enforce_* / sync toggles.
+func TestGenerateProxyConfig_JWTAuthAdvanced(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
+		Enabled:                     true,
+		TeamAliasJWTField:           "team_name",
+		OrgAliasJWTField:            "org_name",
+		TeamIDDefault:               "default-team",
+		TeamAllowedRoutes:           []string{"openai_routes"},
+		TeamIDUpsert:                boolPtr(true),
+		TeamClaimFallback:           boolPtr(true),
+		UserAllowedEmailDomain:      "my-co.com",
+		EnforceTeamBasedModelAccess: boolPtr(true),
+		EnforceScopeBasedAccess:     boolPtr(true),
+		SyncUserRoleAndTeams:        boolPtr(true),
+		RolesJWTField:               "resource_access.litellm.roles",
+		CustomValidate:              "custom_validate.my_fn",
+		VirtualKeyClaimField:        "email",
+		VirtualKeyMappingCacheTTL:   intPtr(300),
+		OIDCUserInfoEnabled:         boolPtr(true),
+		OIDCUserInfoEndpoint:        "https://idp/userinfo",
+		OIDCUserInfoCacheTTL:        intPtr(120),
+		ScopeMappings: []litellmv1alpha1.JWTScopeMapping{
+			{Scope: "litellm.api.consumer", Models: []string{"anthropic-claude"}, Routes: []string{"/v1/chat/completions"}},
+		},
+		RoleMappings: []litellmv1alpha1.JWTRoleMapping{
+			{Role: "litellm.api.consumer", InternalRole: "team"},
+		},
+		JWTLiteLLMRoleMap: []litellmv1alpha1.JWTLiteLLMRoleMapEntry{
+			{JWTRole: "ADMIN", LiteLLMRole: "proxy_admin"},
+		},
+		RoutingOverrides: []litellmv1alpha1.JWTRoutingOverride{
+			{Iss: "issuer.example", ClientID: "MID", Scope: "App:LiteLLM", Aud: "api://litellm", Path: "oauth2"},
+		},
+	}
+
+	config := GenerateProxyConfig(instance, nil)
+	j := config["general_settings"].(map[string]interface{})["litellm_jwtauth"].(map[string]interface{})
+
+	// Scalars / bools.
+	checks := map[string]interface{}{
+		"team_alias_jwt_field":            "team_name",
+		"org_alias_jwt_field":             "org_name",
+		"team_id_default":                 "default-team",
+		"team_id_upsert":                  true,
+		"team_claim_fallback":             true,
+		"user_allowed_email_domain":       "my-co.com",
+		"enforce_team_based_model_access": true,
+		"enforce_scope_based_access":      true,
+		"sync_user_role_and_teams":        true,
+		"roles_jwt_field":                 "resource_access.litellm.roles",
+		"custom_validate":                 "custom_validate.my_fn",
+		"virtual_key_claim_field":         "email",
+		"virtual_key_mapping_cache_ttl":   300,
+		"oidc_userinfo_enabled":           true,
+		"oidc_userinfo_endpoint":          "https://idp/userinfo",
+		"oidc_userinfo_cache_ttl":         120,
+	}
+	for k, want := range checks {
+		if j[k] != want {
+			t.Errorf("jwtauth[%q] = %v, want %v", k, j[k], want)
+		}
+	}
+	if routes, _ := j["team_allowed_routes"].([]string); len(routes) != 1 || routes[0] != "openai_routes" {
+		t.Errorf("unexpected team_allowed_routes: %v", j["team_allowed_routes"])
+	}
+
+	// Structured lists.
+	sm := j["scope_mappings"].([]map[string]interface{})
+	if len(sm) != 1 || sm[0]["scope"] != "litellm.api.consumer" {
+		t.Fatalf("unexpected scope_mappings: %v", sm)
+	}
+	if rts, _ := sm[0]["routes"].([]string); len(rts) != 1 || rts[0] != "/v1/chat/completions" {
+		t.Errorf("expected scope_mappings routes preserved, got %v", sm[0]["routes"])
+	}
+	rm := j["role_mappings"].([]map[string]interface{})
+	if len(rm) != 1 || rm[0]["role"] != "litellm.api.consumer" || rm[0]["internal_role"] != "team" {
+		t.Errorf("unexpected role_mappings: %v", rm)
+	}
+	jrm := j["jwt_litellm_role_map"].([]map[string]interface{})
+	if len(jrm) != 1 || jrm[0]["jwt_role"] != "ADMIN" || jrm[0]["litellm_role"] != "proxy_admin" {
+		t.Errorf("unexpected jwt_litellm_role_map: %v", jrm)
+	}
+	ro := j["routing_overrides"].([]map[string]interface{})
+	if len(ro) != 1 || ro[0]["iss"] != "issuer.example" || ro[0]["client_id"] != "MID" || ro[0]["path"] != "oauth2" {
+		t.Errorf("unexpected routing_overrides: %v", ro)
 	}
 }
 

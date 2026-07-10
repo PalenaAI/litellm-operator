@@ -1719,6 +1719,12 @@ type JWTAuthSpec struct {
 	// +optional
 	UserIDJWTField string `json:"userIdJwtField,omitempty"`
 
+	// UserIDUpsert auto-creates (upserts) a LiteLLM user record the first time
+	// a JWT presents a user id that does not yet exist in the DB, instead of
+	// rejecting the request. Renders litellm_jwtauth.user_id_upsert.
+	// +optional
+	UserIDUpsert *bool `json:"userIdUpsert,omitempty"`
+
 	// JWT field containing the user email.
 	// +optional
 	UserEmailJWTField string `json:"userEmailJwtField,omitempty"`
@@ -1760,10 +1766,153 @@ type JWTAuthSpec struct {
 	// +optional
 	PublicKeyTTL *int `json:"publicKeyTtl,omitempty"`
 
-	// Scope-to-model mappings for fine-grained access control.
-	// Key: JWT scope value, Value: list of allowed model names.
+	// ScopeModelMappings maps a JWT scope to a list of allowed model names.
+	// Rendered into litellm_jwtauth.scope_mappings (the shape LiteLLM reads).
+	// Prefer scopeMappings for new configs (it also supports per-scope routes);
+	// both are merged into scope_mappings.
 	// +optional
 	ScopeModelMappings map[string][]string `json:"scopeModelMappings,omitempty"`
+
+	// ScopeMappings restricts models (and optionally routes) per JWT scope.
+	// Rendered into litellm_jwtauth.scope_mappings.
+	// +optional
+	ScopeMappings []JWTScopeMapping `json:"scopeMappings,omitempty"`
+
+	// RolesJWTField is the JWT claim containing the caller's roles (used by
+	// roleMappings). Rendered as roles_jwt_field.
+	// +optional
+	RolesJWTField string `json:"rolesJwtField,omitempty"`
+
+	// RoleMappings map a JWT role value to a LiteLLM internal role.
+	// +optional
+	RoleMappings []JWTRoleMapping `json:"roleMappings,omitempty"`
+
+	// JWTLiteLLMRoleMap maps a JWT role to a LiteLLM user role (proxy_admin,
+	// internal_user, ...), with wildcard support. Rendered as
+	// jwt_litellm_role_map.
+	// +optional
+	JWTLiteLLMRoleMap []JWTLiteLLMRoleMapEntry `json:"jwtLitellmRoleMap,omitempty"`
+
+	// TeamAliasJWTField / OrgAliasJWTField look up a team / organization by its
+	// name (alias) claim instead of its id.
+	// +optional
+	TeamAliasJWTField string `json:"teamAliasJwtField,omitempty"`
+	// +optional
+	OrgAliasJWTField string `json:"orgAliasJwtField,omitempty"`
+
+	// TeamIDDefault is the fallback team id used when the JWT team claim does
+	// not resolve.
+	// +optional
+	TeamIDDefault string `json:"teamIdDefault,omitempty"`
+
+	// TeamAllowedRoutes restricts which routes team JWT holders may call.
+	// +optional
+	TeamAllowedRoutes []string `json:"teamAllowedRoutes,omitempty"`
+
+	// TeamIDUpsert auto-creates a team on first sight of an unknown JWT team id.
+	// +optional
+	TeamIDUpsert *bool `json:"teamIdUpsert,omitempty"`
+
+	// TeamClaimFallback defers to the user's single DB team when the JWT team
+	// claim is unresolved.
+	// +optional
+	TeamClaimFallback *bool `json:"teamClaimFallback,omitempty"`
+
+	// UserAllowedEmailDomain grants proxy access to any caller whose JWT email
+	// belongs to this domain (e.g. "my-co.com").
+	// +optional
+	UserAllowedEmailDomain string `json:"userAllowedEmailDomain,omitempty"`
+
+	// EnforceTeamBasedModelAccess denies model access unless the caller's team
+	// has access to the model.
+	// +optional
+	EnforceTeamBasedModelAccess *bool `json:"enforceTeamBasedModelAccess,omitempty"`
+
+	// EnforceScopeBasedAccess enforces model access via scopeMappings.
+	// +optional
+	EnforceScopeBasedAccess *bool `json:"enforceScopeBasedAccess,omitempty"`
+
+	// SyncUserRoleAndTeams keeps the user's LiteLLM role and team memberships in
+	// sync with the IdP on each request.
+	// +optional
+	SyncUserRoleAndTeams *bool `json:"syncUserRoleAndTeams,omitempty"`
+
+	// CustomValidate is the dotted import path to a custom JWT-validation
+	// function that must be present in the proxy image (same packaging pattern
+	// as spec.sso.customSsoHandler in module mode). Rendered as custom_validate.
+	// +optional
+	CustomValidate string `json:"customValidate,omitempty"`
+
+	// VirtualKeyClaimField is the JWT claim to look up in the virtual-key
+	// mappings (JWT → virtual key). VirtualKeyMappingCacheTTL caches that lookup.
+	// +optional
+	VirtualKeyClaimField string `json:"virtualKeyClaimField,omitempty"`
+	// +optional
+	VirtualKeyMappingCacheTTL *int `json:"virtualKeyMappingCacheTtl,omitempty"`
+
+	// RoutingOverrides route JWT-shaped tokens to OAuth2 handling based on
+	// claims. Rendered as routing_overrides.
+	// +optional
+	RoutingOverrides []JWTRoutingOverride `json:"routingOverrides,omitempty"`
+
+	// OIDCUserInfoEnabled fetches additional claims from the IdP UserInfo
+	// endpoint (OIDCUserInfoEndpoint) and caches them for OIDCUserInfoCacheTTL
+	// seconds.
+	// +optional
+	OIDCUserInfoEnabled *bool `json:"oidcUserinfoEnabled,omitempty"`
+	// +optional
+	OIDCUserInfoEndpoint string `json:"oidcUserinfoEndpoint,omitempty"`
+	// +optional
+	OIDCUserInfoCacheTTL *int `json:"oidcUserinfoCacheTtl,omitempty"`
+}
+
+// JWTScopeMapping restricts the models (and optionally routes) a JWT scope may
+// access. Rendered as an entry in litellm_jwtauth.scope_mappings.
+type JWTScopeMapping struct {
+	// JWT scope value.
+	Scope string `json:"scope"`
+	// Allowed model names for this scope.
+	// +optional
+	Models []string `json:"models,omitempty"`
+	// Allowed routes for this scope.
+	// +optional
+	Routes []string `json:"routes,omitempty"`
+}
+
+// JWTRoleMapping maps a JWT role value to a LiteLLM internal role
+// (e.g. "team", "internal_user").
+type JWTRoleMapping struct {
+	// JWT role value.
+	Role string `json:"role"`
+	// LiteLLM internal role this JWT role maps to.
+	InternalRole string `json:"internalRole"`
+}
+
+// JWTLiteLLMRoleMapEntry maps a JWT role to a LiteLLM user role.
+type JWTLiteLLMRoleMapEntry struct {
+	// JWT role value (e.g. "ADMIN").
+	JWTRole string `json:"jwtRole"`
+	// LiteLLM user role (e.g. "proxy_admin", "internal_user").
+	LiteLLMRole string `json:"litellmRole"`
+}
+
+// JWTRoutingOverride routes JWT-shaped tokens to OAuth2 handling based on
+// matching claims. Rendered as an entry in litellm_jwtauth.routing_overrides.
+type JWTRoutingOverride struct {
+	// Issuer claim to match (required).
+	Iss string `json:"iss"`
+	// Client id claim to match.
+	// +optional
+	ClientID string `json:"clientId,omitempty"`
+	// Scope claim to match.
+	// +optional
+	Scope string `json:"scope,omitempty"`
+	// Audience claim to match.
+	// +optional
+	Aud string `json:"aud,omitempty"`
+	// Handling path (e.g. "oauth2").
+	// +optional
+	Path string `json:"path,omitempty"`
 }
 
 // OAuth2AuthSpec defines OAuth2 machine-to-machine authentication configuration (enterprise).

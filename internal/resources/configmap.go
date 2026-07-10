@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -358,53 +359,136 @@ func buildJWTAuthConfig(jwt *litellmv1alpha1.JWTAuthSpec, config map[string]inte
 	gs["enable_jwt_auth"] = true
 
 	jwtauth := map[string]interface{}{}
-	if jwt.AdminJWTScope != "" {
-		jwtauth["admin_jwt_scope"] = jwt.AdminJWTScope
+
+	// String fields — emitted when non-empty.
+	for key, val := range map[string]string{
+		"admin_jwt_scope":           jwt.AdminJWTScope,
+		"team_id_jwt_field":         jwt.TeamIDJWTField,
+		"team_ids_jwt_field":        jwt.TeamIDsJWTField,
+		"team_alias_jwt_field":      jwt.TeamAliasJWTField,
+		"team_id_default":           jwt.TeamIDDefault,
+		"org_id_jwt_field":          jwt.OrgIDJWTField,
+		"org_alias_jwt_field":       jwt.OrgAliasJWTField,
+		"user_id_jwt_field":         jwt.UserIDJWTField,
+		"user_email_jwt_field":      jwt.UserEmailJWTField,
+		"user_role_jwt_field":       jwt.UserRoleJWTField,
+		"user_roles_jwt_field":      jwt.UserRolesJWTField,
+		"user_allowed_email_domain": jwt.UserAllowedEmailDomain,
+		"object_id_jwt_field":       jwt.ObjectIDJWTField,
+		"roles_jwt_field":           jwt.RolesJWTField,
+		"end_user_id_jwt_field":     jwt.EndUserIDJWTField,
+		"custom_validate":           jwt.CustomValidate,
+		"virtual_key_claim_field":   jwt.VirtualKeyClaimField,
+		"oidc_userinfo_endpoint":    jwt.OIDCUserInfoEndpoint,
+	} {
+		if val != "" {
+			jwtauth[key] = val
+		}
 	}
-	if len(jwt.AdminAllowedRoutes) > 0 {
-		jwtauth["admin_allowed_routes"] = jwt.AdminAllowedRoutes
+
+	// []string fields — emitted when non-empty.
+	for key, val := range map[string][]string{
+		"admin_allowed_routes": jwt.AdminAllowedRoutes,
+		"team_allowed_routes":  jwt.TeamAllowedRoutes,
+		"user_allowed_roles":   jwt.UserAllowedRoles,
+	} {
+		if len(val) > 0 {
+			jwtauth[key] = val
+		}
 	}
-	if jwt.TeamIDJWTField != "" {
-		jwtauth["team_id_jwt_field"] = jwt.TeamIDJWTField
+
+	// *bool fields — emitted when set.
+	for key, val := range map[string]*bool{
+		"user_id_upsert":                  jwt.UserIDUpsert,
+		"team_id_upsert":                  jwt.TeamIDUpsert,
+		"team_claim_fallback":             jwt.TeamClaimFallback,
+		"enforce_rbac":                    jwt.EnforceRBAC,
+		"enforce_team_based_model_access": jwt.EnforceTeamBasedModelAccess,
+		"enforce_scope_based_access":      jwt.EnforceScopeBasedAccess,
+		"sync_user_role_and_teams":        jwt.SyncUserRoleAndTeams,
+		"oidc_userinfo_enabled":           jwt.OIDCUserInfoEnabled,
+	} {
+		if val != nil {
+			jwtauth[key] = *val
+		}
 	}
-	if jwt.TeamIDsJWTField != "" {
-		jwtauth["team_ids_jwt_field"] = jwt.TeamIDsJWTField
+
+	// *int fields — emitted when set.
+	for key, val := range map[string]*int{
+		"public_key_ttl":                jwt.PublicKeyTTL,
+		"virtual_key_mapping_cache_ttl": jwt.VirtualKeyMappingCacheTTL,
+		"oidc_userinfo_cache_ttl":       jwt.OIDCUserInfoCacheTTL,
+	} {
+		if val != nil {
+			jwtauth[key] = *val
+		}
 	}
-	if jwt.OrgIDJWTField != "" {
-		jwtauth["org_id_jwt_field"] = jwt.OrgIDJWTField
-	}
-	if jwt.UserIDJWTField != "" {
-		jwtauth["user_id_jwt_field"] = jwt.UserIDJWTField
-	}
-	if jwt.UserEmailJWTField != "" {
-		jwtauth["user_email_jwt_field"] = jwt.UserEmailJWTField
-	}
-	if jwt.UserRoleJWTField != "" {
-		jwtauth["user_role_jwt_field"] = jwt.UserRoleJWTField
-	}
-	if jwt.UserRolesJWTField != "" {
-		jwtauth["user_roles_jwt_field"] = jwt.UserRolesJWTField
-	}
-	if len(jwt.UserAllowedRoles) > 0 {
-		jwtauth["user_allowed_roles"] = jwt.UserAllowedRoles
-	}
-	if jwt.EnforceRBAC != nil {
-		jwtauth["enforce_rbac"] = *jwt.EnforceRBAC
-	}
-	if jwt.ObjectIDJWTField != "" {
-		jwtauth["object_id_jwt_field"] = jwt.ObjectIDJWTField
-	}
-	if jwt.EndUserIDJWTField != "" {
-		jwtauth["end_user_id_jwt_field"] = jwt.EndUserIDJWTField
-	}
-	if jwt.PublicKeyTTL != nil {
-		jwtauth["public_key_ttl"] = *jwt.PublicKeyTTL
-	}
-	if len(jwt.ScopeModelMappings) > 0 {
-		jwtauth["scope_model_mappings"] = jwt.ScopeModelMappings
-	}
+
+	buildJWTMappings(jwt, jwtauth)
+
 	if len(jwtauth) > 0 {
 		gs["litellm_jwtauth"] = jwtauth
+	}
+}
+
+// buildJWTMappings renders the structured litellm_jwtauth list fields:
+// scope_mappings (merging the legacy scopeModelMappings map with the structured
+// scopeMappings), role_mappings, jwt_litellm_role_map, and routing_overrides.
+func buildJWTMappings(jwt *litellmv1alpha1.JWTAuthSpec, jwtauth map[string]interface{}) {
+	// scope_mappings — LiteLLM has no `scope_model_mappings` key (the map alone
+	// was a no-op). Merge both sources into the list LiteLLM reads; sort the map
+	// keys for deterministic output (stable ConfigMap hash).
+	var scopeMappings []map[string]interface{}
+	if len(jwt.ScopeModelMappings) > 0 {
+		scopes := make([]string, 0, len(jwt.ScopeModelMappings))
+		for s := range jwt.ScopeModelMappings {
+			scopes = append(scopes, s)
+		}
+		sort.Strings(scopes)
+		for _, s := range scopes {
+			scopeMappings = append(scopeMappings, map[string]interface{}{"scope": s, "models": jwt.ScopeModelMappings[s]})
+		}
+	}
+	for _, m := range jwt.ScopeMappings {
+		entry := map[string]interface{}{"scope": m.Scope}
+		if len(m.Models) > 0 {
+			entry["models"] = m.Models
+		}
+		if len(m.Routes) > 0 {
+			entry["routes"] = m.Routes
+		}
+		scopeMappings = append(scopeMappings, entry)
+	}
+	if len(scopeMappings) > 0 {
+		jwtauth["scope_mappings"] = scopeMappings
+	}
+
+	if len(jwt.RoleMappings) > 0 {
+		rm := make([]map[string]interface{}, 0, len(jwt.RoleMappings))
+		for _, m := range jwt.RoleMappings {
+			rm = append(rm, map[string]interface{}{"role": m.Role, "internal_role": m.InternalRole})
+		}
+		jwtauth["role_mappings"] = rm
+	}
+	if len(jwt.JWTLiteLLMRoleMap) > 0 {
+		rm := make([]map[string]interface{}, 0, len(jwt.JWTLiteLLMRoleMap))
+		for _, m := range jwt.JWTLiteLLMRoleMap {
+			rm = append(rm, map[string]interface{}{"jwt_role": m.JWTRole, "litellm_role": m.LiteLLMRole})
+		}
+		jwtauth["jwt_litellm_role_map"] = rm
+	}
+	if len(jwt.RoutingOverrides) > 0 {
+		ro := make([]map[string]interface{}, 0, len(jwt.RoutingOverrides))
+		for _, o := range jwt.RoutingOverrides {
+			entry := map[string]interface{}{"iss": o.Iss}
+			for k, v := range map[string]string{"client_id": o.ClientID, "scope": o.Scope, "aud": o.Aud, "path": o.Path} {
+				if v != "" {
+					entry[k] = v
+				}
+			}
+			ro = append(ro, entry)
+		}
+		jwtauth["routing_overrides"] = ro
 	}
 }
 
