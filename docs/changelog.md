@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-07-10
+
 ### Added
 
 - **Full `litellm_jwtauth` surface on `LiteLLMInstance.spec.jwtAuth`** (enterprise) — the operator now exposes essentially every JWT-auth knob LiteLLM supports:
