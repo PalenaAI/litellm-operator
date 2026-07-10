@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.1] - 2026-07-10
+
+### Fixed
+
+- **`general_settings.role_permissions` crashed the proxy on startup.** `spec.rbac.rolePermissions` was rendered as a map keyed by role name, but LiteLLM expects a **list** of objects each carrying its own `role` field (it iterates the list and calls `RoleBasedPermissions(**item)`). Iterating a map yielded string keys → `TypeError: argument after ** must be a mapping, not str` → CrashLoopBackOff (exit 3). It now renders a sorted list of `{role, models, routes}`. Affects every release since the field was introduced; anyone using `spec.rbac.rolePermissions` should upgrade.
+
 ## [0.18.0] - 2026-07-10
 
 ### Added
