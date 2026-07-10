@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-10
+
+### Fixed
+
+- **`LiteLLMCredential` reconcile crash-looped the proxy with `UniqueViolationError` on `credential_name`.** The controller decided create-vs-update from `status.configured`, a subresource that can be lost independently of the sync-hash annotation. When it was `false` but the credential already existed in LiteLLM's DB, the operator re-`POST`ed `/credentials` → Prisma unique-constraint violation (returned as HTTP 500, which the old 400-only fallback missed) → the proxy logged the error on every reconcile. Now the decision keys off the sync-hash annotation (the reliable "already pushed" marker), and a create that conflicts (400/409, or a 500 carrying the unique-constraint message) falls back to an idempotent `PATCH`. Existing stuck credentials self-heal on the next reconcile.
+
+### Added
+
+- **JWT token-validation env vars on `LiteLLMInstance.spec.jwtAuth`**: `publicKeyUrl`, `issuer`, `audience` → `JWT_PUBLIC_KEY_URL` / `JWT_ISSUER` / `JWT_AUDIENCE` on the proxy Deployment. LiteLLM reads these from the environment (not from `litellm_jwtauth`), so without `publicKeyUrl` the proxy can't fetch signing keys and JWT auth fails even when `litellm_jwtauth` is fully configured.
+
 ## [0.18.1] - 2026-07-10
 
 ### Fixed

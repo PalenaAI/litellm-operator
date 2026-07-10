@@ -52,6 +52,13 @@ general_settings:
 jwtAuth:
   enabled: true
 
+  # Token validation — the proxy needs the IdP's JWKS URL to fetch signing keys.
+  # Required: without publicKeyUrl no token can be validated. Rendered as the
+  # JWT_PUBLIC_KEY_URL / JWT_ISSUER / JWT_AUDIENCE env vars on the proxy pod.
+  publicKeyUrl: "https://login.microsoftonline.com/<tenant>/discovery/v2.0/keys"
+  issuer: "https://sts.windows.net/<tenant>/"
+  audience: "<application-or-client-id>"
+
   # Admin access — JWTs with this scope get admin routes
   adminJwtScope: "litellm_proxy_admin"
   adminAllowedRoutes:

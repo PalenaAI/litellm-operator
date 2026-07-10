@@ -780,6 +780,45 @@ func TestBuildDeployment_AdminUIAllEnvVars(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_JWTAuthEnvVars(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.JWTAuth = &litellmv1alpha1.JWTAuthSpec{
+		Enabled:      true,
+		PublicKeyURL: "https://login.microsoftonline.com/tenant/discovery/v2.0/keys",
+		Issuer:       "https://sts.windows.net/tenant/",
+		Audience:     "e1e96c7a-1b67-4072-a07d-afb8fb413a20",
+	}
+	labels := map[string]string{"app": "litellm"}
+
+	dep := BuildDeployment(instance, labels, "", nil)
+
+	envMap := map[string]string{}
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Value != "" {
+			envMap[env.Name] = env.Value
+		}
+	}
+	expected := map[string]string{
+		"JWT_PUBLIC_KEY_URL": "https://login.microsoftonline.com/tenant/discovery/v2.0/keys",
+		"JWT_ISSUER":         "https://sts.windows.net/tenant/",
+		"JWT_AUDIENCE":       "e1e96c7a-1b67-4072-a07d-afb8fb413a20",
+	}
+	for k, v := range expected {
+		if envMap[k] != v {
+			t.Errorf("expected %s=%s, got %q", k, v, envMap[k])
+		}
+	}
+
+	// Disabled JWT auth must not set the env vars.
+	instance.Spec.JWTAuth.Enabled = false
+	dep = BuildDeployment(instance, labels, "", nil)
+	for _, env := range dep.Spec.Template.Spec.Containers[0].Env {
+		if env.Name == "JWT_PUBLIC_KEY_URL" || env.Name == "JWT_ISSUER" || env.Name == "JWT_AUDIENCE" {
+			t.Errorf("JWT env var %s must not be set when jwtAuth is disabled", env.Name)
+		}
+	}
+}
+
 func TestBuildDeployment_AdminUIBranding(t *testing.T) {
 	instance := newTestInstance()
 	instance.Spec.AdminUI = &litellmv1alpha1.AdminUISpec{

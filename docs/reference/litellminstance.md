@@ -576,6 +576,9 @@ JWT-based authentication configuration (enterprise). When enabled, LiteLLM valid
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `enabled` | bool | `false` | Enable JWT-based authentication |
+| `publicKeyUrl` | string | — | **Required** — JWKS endpoint the proxy fetches signing keys from → `JWT_PUBLIC_KEY_URL` env var (comma-separate multiple). Without it, no token can be validated |
+| `issuer` | string | — | Expected `iss` claim → `JWT_ISSUER` env var |
+| `audience` | string | — | Expected `aud` claim → `JWT_AUDIENCE` env var |
 | `adminJwtScope` | string | — | JWT scope value that grants proxy admin access |
 | `adminAllowedRoutes` | []string | — | Routes accessible to admin JWT holders (e.g., `openai_routes`, `info_routes`) |
 | `teamIdJwtField` | string | — | JWT field containing the team ID |
