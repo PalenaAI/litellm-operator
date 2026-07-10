@@ -1695,6 +1695,21 @@ type JWTAuthSpec struct {
 	// Enable JWT-based authentication.
 	Enabled bool `json:"enabled"`
 
+	// PublicKeyURL is the JWKS endpoint the proxy fetches token-signing keys
+	// from (e.g. an Entra/Keycloak `.../discovery/v2.0/keys` URL). Rendered as
+	// the JWT_PUBLIC_KEY_URL env var (comma-separate multiple URLs). Without it
+	// the proxy cannot validate any token even when litellm_jwtauth is set.
+	// +optional
+	PublicKeyURL string `json:"publicKeyUrl,omitempty"`
+
+	// Issuer is the expected `iss` claim; rendered as the JWT_ISSUER env var.
+	// +optional
+	Issuer string `json:"issuer,omitempty"`
+
+	// Audience is the expected `aud` claim; rendered as the JWT_AUDIENCE env var.
+	// +optional
+	Audience string `json:"audience,omitempty"`
+
 	// JWT scope value that grants proxy admin access.
 	// +optional
 	AdminJWTScope string `json:"adminJwtScope,omitempty"`

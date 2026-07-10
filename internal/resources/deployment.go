@@ -454,6 +454,10 @@ func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName s
 	// Admin UI env vars
 	vars = append(vars, adminUIEnvVars(instance)...)
 
+	// JWT auth env vars (JWKS URL, issuer, audience) — LiteLLM reads these from
+	// the environment, not from litellm_jwtauth.
+	vars = append(vars, jwtAuthEnvVars(instance)...)
+
 	// TLS env vars (serve HTTPS, outbound CA trust, client cert)
 	vars = append(vars, tlsEnvVars(instance)...)
 
@@ -472,6 +476,29 @@ func buildEnvVars(instance *litellmv1alpha1.LiteLLMInstance, licenseSecretName s
 		})
 	}
 
+	return vars
+}
+
+// jwtAuthEnvVars returns the JWT-auth env vars LiteLLM reads from the
+// environment (NOT from litellm_jwtauth): the JWKS public-key URL, the expected
+// issuer, and the expected audience. Without these the proxy cannot fetch signing
+// keys or validate a caller's token, so JWT auth fails even when litellm_jwtauth
+// is fully configured.
+func jwtAuthEnvVars(instance *litellmv1alpha1.LiteLLMInstance) []corev1.EnvVar {
+	jwt := instance.Spec.JWTAuth
+	if jwt == nil || !jwt.Enabled {
+		return nil
+	}
+	var vars []corev1.EnvVar
+	if jwt.PublicKeyURL != "" {
+		vars = append(vars, corev1.EnvVar{Name: "JWT_PUBLIC_KEY_URL", Value: jwt.PublicKeyURL})
+	}
+	if jwt.Issuer != "" {
+		vars = append(vars, corev1.EnvVar{Name: "JWT_ISSUER", Value: jwt.Issuer})
+	}
+	if jwt.Audience != "" {
+		vars = append(vars, corev1.EnvVar{Name: "JWT_AUDIENCE", Value: jwt.Audience})
+	}
 	return vars
 }
 

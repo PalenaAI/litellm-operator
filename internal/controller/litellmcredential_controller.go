@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -118,10 +119,12 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	switch desiredAction {
 	case actionCreate:
 		if err := apiClient.Credentials().Create(ctx, payload); err != nil {
-			// Treat 4xx conflict (already exists) as an update — covers the
-			// case where we crashed after creating in LiteLLM but before
-			// persisting the sync-hash.
-			if apiErr, ok := litellm.IsAPIError(err); ok && apiErr.StatusCode == 400 {
+			// Treat "already exists" as an update — covers the case where the
+			// credential is already in LiteLLM's DB (we created it before but
+			// crashed prior to persisting the sync-hash, or the DB outlived the
+			// CR status). PATCH is idempotent. LiteLLM returns this as a
+			// 400/409, or a 500 with a Prisma unique-constraint message.
+			if isCredentialConflict(err) {
 				if uerr := apiClient.Credentials().Update(ctx, payload); uerr != nil {
 					return r.reportAPIError(ctx, &cred, "create credential (fallback to update)", uerr)
 				}
@@ -182,13 +185,36 @@ const (
 
 // planAction decides what to push to LiteLLM based on local state.
 func (r *LiteLLMCredentialReconciler) planAction(cred *litellmv1alpha1.LiteLLMCredential, currentHash string) credentialAction {
-	if !cred.Status.Configured {
+	// Key the create-vs-update decision off the sync-hash annotation, NOT
+	// Status.Configured. Status is a subresource that can be lost or reset
+	// independently of the annotation (e.g. a status write that never landed
+	// while the annotation did) — and keying off it makes the controller re-POST
+	// a credential that already exists in LiteLLM's DB, which fails with a
+	// unique-constraint violation. The annotation is the reliable "already
+	// pushed" marker, matching the model/team/user controllers.
+	if cred.Annotations[AnnotationSyncHash] == "" {
 		return actionCreate
 	}
 	if cred.Annotations[AnnotationSyncHash] != currentHash {
 		return actionUpdate
 	}
 	return actionNoop
+}
+
+// isCredentialConflict reports whether a create error means the credential
+// already exists. LiteLLM surfaces this as a 400/409, or — when the Prisma
+// unique constraint on credential_name trips — as a 500 whose body carries the
+// "Unique constraint" message. In all cases the right move is to PATCH.
+func isCredentialConflict(err error) bool {
+	apiErr, ok := litellm.IsAPIError(err)
+	if !ok {
+		return false
+	}
+	if apiErr.StatusCode == 400 || apiErr.StatusCode == 409 {
+		return true
+	}
+	msg := strings.ToLower(apiErr.Message)
+	return strings.Contains(msg, "unique constraint") || strings.Contains(msg, "already exists")
 }
 
 var errSecretKeyMissing = errors.New("key not found in Secret")
