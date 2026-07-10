@@ -704,16 +704,27 @@ func buildRBACConfig(rbac *litellmv1alpha1.RBACSpec, config map[string]interface
 		}
 	}
 	if len(rbac.RolePermissions) > 0 {
-		rp := map[string]interface{}{}
-		for role, perm := range rbac.RolePermissions {
-			entry := map[string]interface{}{}
+		// LiteLLM's general_settings.role_permissions is a LIST of objects, each
+		// with its own `role` field — it iterates the list and calls
+		// RoleBasedPermissions(**item). Rendering a map keyed by role name makes
+		// LiteLLM iterate the map's string keys and crash on startup. Hoist the
+		// role name into a `role` field and sort for deterministic output.
+		roles := make([]string, 0, len(rbac.RolePermissions))
+		for role := range rbac.RolePermissions {
+			roles = append(roles, role)
+		}
+		sort.Strings(roles)
+		rp := make([]interface{}, 0, len(roles))
+		for _, role := range roles {
+			perm := rbac.RolePermissions[role]
+			entry := map[string]interface{}{"role": role}
 			if len(perm.Routes) > 0 {
 				entry["routes"] = perm.Routes
 			}
 			if len(perm.Models) > 0 {
 				entry["models"] = perm.Models
 			}
-			rp[role] = entry
+			rp = append(rp, entry)
 		}
 		gs["role_permissions"] = rp
 	}

@@ -2168,13 +2168,18 @@ func TestGenerateProxyConfig_RBACRolePermissions(t *testing.T) {
 	config := GenerateProxyConfig(instance, nil)
 
 	gs := config["general_settings"].(map[string]interface{})
-	rp, ok := gs["role_permissions"].(map[string]interface{})
-	if !ok {
-		t.Fatal("expected role_permissions to be present")
+	// LiteLLM requires role_permissions to be a LIST of {role, models, routes};
+	// a map crashes proxy startup. Guard against regressing to the map form.
+	if _, isMap := gs["role_permissions"].(map[string]interface{}); isMap {
+		t.Fatal("role_permissions must be a list, not a map (map form crashes LiteLLM startup)")
 	}
-	iu, ok := rp["internal_user"].(map[string]interface{})
-	if !ok {
-		t.Fatal("expected internal_user entry in role_permissions")
+	rp, ok := gs["role_permissions"].([]interface{})
+	if !ok || len(rp) != 1 {
+		t.Fatalf("expected role_permissions to be a 1-entry list, got %T %v", gs["role_permissions"], gs["role_permissions"])
+	}
+	iu := rp[0].(map[string]interface{})
+	if iu["role"] != "internal_user" {
+		t.Errorf("expected entry role=internal_user, got %v", iu["role"])
 	}
 	routes, ok := iu["routes"].([]string)
 	if !ok {
@@ -2236,9 +2241,9 @@ func TestGenerateProxyConfig_RBACFull(t *testing.T) {
 		t.Error("expected team_key_generation in key_generation_settings")
 	}
 
-	rp := gs["role_permissions"].(map[string]interface{})
-	if _, ok := rp["internal_user"]; !ok {
-		t.Error("expected internal_user in role_permissions")
+	rp := gs["role_permissions"].([]interface{})
+	if len(rp) != 1 || rp[0].(map[string]interface{})["role"] != "internal_user" {
+		t.Errorf("expected a single internal_user entry in role_permissions list, got %v", rp)
 	}
 }
 
