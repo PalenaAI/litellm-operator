@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Full `litellm_jwtauth` surface on `LiteLLMInstance.spec.jwtAuth`** (enterprise) — the operator now exposes essentially every JWT-auth knob LiteLLM supports:
+  - **User/team/org:** `userIdUpsert`, `teamIdUpsert`, `teamIdDefault`, `teamAllowedRoutes`, `teamAliasJwtField`, `orgAliasJwtField`, `teamClaimFallback`, `userAllowedEmailDomain`, `rolesJwtField`.
+  - **Enforcement:** `enforceTeamBasedModelAccess`, `enforceScopeBasedAccess`, `syncUserRoleAndTeams`.
+  - **Structured mappings:** `scopeMappings` (`{scope, models, routes}`), `roleMappings` (`{role, internalRole}`), `jwtLitellmRoleMap` (`{jwtRole, litellmRole}`), and `routingOverrides` (`{iss, clientId, scope, aud, path}`).
+  - **OIDC UserInfo:** `oidcUserinfoEnabled` / `oidcUserinfoEndpoint` / `oidcUserinfoCacheTtl`.
+  - **Virtual-key mapping:** `virtualKeyClaimField` / `virtualKeyMappingCacheTtl`.
+  - **Custom validation:** `customValidate` (dotted path to a handler baked into the proxy image).
+
+### Fixed
+
+- **`spec.jwtAuth.scopeModelMappings` was a no-op and now works.** It rendered `general_settings.litellm_jwtauth.scope_model_mappings`, a key LiteLLM does not read. It's now rendered into `scope_mappings` (the list shape LiteLLM actually consumes), merged with the new structured `scopeMappings`. Existing `scopeModelMappings` values start taking effect on upgrade.
+
 ## [0.17.0] - 2026-07-09
 
 ### Added
