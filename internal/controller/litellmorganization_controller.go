@@ -92,7 +92,7 @@ func (r *LiteLLMOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.
 				ObservedGeneration: org.Generation,
 			})
 			_ = r.Status().Update(ctx, &org)
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: enterpriseLicenseRetryInterval}, nil
 		}
 		log.Error(err, "failed to reconcile organization")
 		emitEvent(r.Recorder, &org, corev1.EventTypeWarning, EventReasonReconcileFailed,

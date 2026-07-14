@@ -95,7 +95,7 @@ func (r *LiteLLMCustomerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				ObservedGeneration: customer.Generation,
 			})
 			_ = r.Status().Update(ctx, &customer)
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: enterpriseLicenseRetryInterval}, nil
 		}
 		log.Error(err, "failed to reconcile customer")
 		emitEvent(r.Recorder, &customer, corev1.EventTypeWarning, EventReasonReconcileFailed,

@@ -102,7 +102,7 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				ObservedGeneration: model.Generation,
 			})
 			_ = r.Status().Update(ctx, &model)
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: enterpriseLicenseRetryInterval}, nil
 		}
 		log.Error(err, "failed to reconcile model")
 		emitEvent(r.Recorder, &model, corev1.EventTypeWarning, EventReasonReconcileFailed,

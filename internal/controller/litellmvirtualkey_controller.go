@@ -94,7 +94,10 @@ func (r *LiteLLMVirtualKeyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 				ObservedGeneration: vk.Generation,
 			})
 			_ = r.Status().Update(ctx, &vk)
-			return ctrl.Result{}, nil
+			// Requeue so the key mints itself once the license lands (see the const
+			// doc); otherwise the VirtualKey — and anything waiting on its minted key
+			// Secret, e.g. an auto-wired ChatUI — stays stuck until it is recreated.
+			return ctrl.Result{RequeueAfter: enterpriseLicenseRetryInterval}, nil
 		}
 		log.Error(err, "failed to reconcile virtual key")
 		emitEvent(r.Recorder, &vk, corev1.EventTypeWarning, EventReasonReconcileFailed,

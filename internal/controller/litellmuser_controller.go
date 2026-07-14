@@ -92,7 +92,7 @@ func (r *LiteLLMUserReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				ObservedGeneration: user.Generation,
 			})
 			_ = r.Status().Update(ctx, &user)
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: enterpriseLicenseRetryInterval}, nil
 		}
 		log.Error(err, "failed to reconcile user")
 		emitEvent(r.Recorder, &user, corev1.EventTypeWarning, EventReasonReconcileFailed,

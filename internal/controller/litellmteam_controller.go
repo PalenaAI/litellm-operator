@@ -93,7 +93,7 @@ func (r *LiteLLMTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				ObservedGeneration: team.Generation,
 			})
 			_ = r.Status().Update(ctx, &team)
-			return ctrl.Result{}, nil
+			return ctrl.Result{RequeueAfter: enterpriseLicenseRetryInterval}, nil
 		}
 		log.Error(err, "failed to reconcile team")
 		emitEvent(r.Recorder, &team, corev1.EventTypeWarning, EventReasonReconcileFailed,

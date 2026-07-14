@@ -23,6 +23,7 @@ import (
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -174,5 +175,39 @@ var _ = Describe("Blocked + team-member-budget passthrough", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "blk-key", Namespace: ns}})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(captured.Blocked).To(Equal(boolptr(true)))
+	})
+
+	// Regression: a VirtualKey that the proxy rejects for lack of a LiteLLM
+	// Enterprise license must REQUEUE (self-heal once the license lands), not give
+	// up. Re-applying an unchanged spec produces no reconcile event, so a no-requeue
+	// return would leave the key — and anything waiting on its minted Secret, e.g.
+	// an auto-wired ChatUI — stuck until the CR is manually recreated.
+	It("VirtualKey: requeues when the Enterprise license is missing (no permanent give-up)", func() {
+		Expect(k8sClient.Create(ctx, &litellmv1alpha1.LiteLLMVirtualKey{
+			ObjectMeta: metav1.ObjectMeta{Name: "blk-key", Namespace: ns},
+			Spec: litellmv1alpha1.LiteLLMVirtualKeySpec{
+				InstanceRef: litellmv1alpha1.InstanceRef{Name: instanceName},
+				KeyAlias:    "blk-key",
+			},
+		})).To(Succeed())
+
+		mock := litellm.NewMockClient()
+		mock.MockKeys.GenerateFunc = func(_ context.Context, _ litellm.KeyGenerateRequest) (*litellm.KeyGenerateResponse, error) {
+			// The proxy rejects the mint with a 403 because no Enterprise license is
+			// installed (isEnterpriseLicenseError matches 403 + "enterprise").
+			return nil, &litellm.APIError{StatusCode: 403, Message: "Virtual Keys is an enterprise feature", Path: "/key/generate"}
+		}
+		r := &LiteLLMVirtualKeyReconciler{Client: k8sClient, Scheme: k8sClient.Scheme(),
+			LiteLLMClientFactory: func(string, string, ...litellm.ClientOption) litellm.Client { return mock }}
+
+		res, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "blk-key", Namespace: ns}})
+		Expect(err).NotTo(HaveOccurred())                                  // no error → no backoff churn…
+		Expect(res.RequeueAfter).To(Equal(enterpriseLicenseRetryInterval)) // …but a positive requeue so it retries
+
+		var got litellmv1alpha1.LiteLLMVirtualKey
+		Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "blk-key", Namespace: ns}, &got)).To(Succeed())
+		cond := meta.FindStatusCondition(got.Status.Conditions, ConditionSynced)
+		Expect(cond).NotTo(BeNil())
+		Expect(cond.Reason).To(Equal("EnterpriseLicenseRequired"))
 	})
 })

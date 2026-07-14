@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -38,6 +39,17 @@ import (
 const (
 	// FinalizerName is the finalizer used by all controllers.
 	FinalizerName = "litellm.palena.ai/finalizer"
+
+	// enterpriseLicenseRetryInterval is how often a resource that needs a LiteLLM
+	// Enterprise license retries after the proxy rejects it (403 "enterprise")
+	// while the license is absent. The license is frequently installed AFTER the
+	// resource is first requested (e.g. a platform activates SSO + virtual keys
+	// once the license Secret lands), so these reconcilers MUST requeue rather than
+	// give up: re-applying an unchanged spec produces no reconcile event, so a
+	// resource that returned without a requeue would stay stuck until it is
+	// manually deleted and recreated. With a requeue it mints itself once the
+	// license is present.
+	enterpriseLicenseRetryInterval = 2 * time.Minute
 
 	// caCrtKey is the conventional Secret key holding a CA certificate bundle
 	// (cert-manager populates it for CA/intermediate issuers).
