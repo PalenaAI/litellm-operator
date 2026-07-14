@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-07-14
+
+### Fixed
+
+- **Enterprise-gated resources gave up permanently instead of retrying, leaving them stuck until manually recreated.** When the proxy rejected a `LiteLLMVirtualKey`, `LiteLLMModel`, `LiteLLMOrganization`, `LiteLLMUser`, `LiteLLMCustomer`, or `LiteLLMTeam` with a `403` "enterprise" error (no LiteLLM Enterprise license installed yet), the controller set an `EnterpriseLicenseRequired` condition and returned **without a requeue**. Because the license is typically installed *after* the resource is first requested (e.g. a platform activates SSO + virtual keys once the license Secret lands), and re-applying an unchanged spec produces no reconcile event, the resource never synced on its own — the only fix was deleting and recreating the CR. Most visibly, an auto-wired `LiteLLMVirtualKey` never minted its key Secret, so a consumer waiting on it (e.g. a ChatUI) stayed stuck. All six reconcilers now **requeue** (every 2m) on the enterprise gate, so the resource syncs itself once the license is present.
+
 ## [0.19.0] - 2026-07-10
 
 ### Fixed
