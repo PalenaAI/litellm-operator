@@ -2005,9 +2005,42 @@ type LiteLLMInstanceStatus struct {
 	// +optional
 	LastSuccessfulRevision string `json:"lastSuccessfulRevision,omitempty"`
 
+	// UnhealthyPods explains why proxy pods are not running — crash loops, image
+	// pull failures, OOM kills, unschedulable pods — so the cause is visible from
+	// the instance itself instead of requiring a dig through pod logs. Populated
+	// only while the instance is not ready, and capped to keep the object small.
+	// +optional
+	// +kubebuilder:validation:MaxItems=3
+	// +operator-sdk:csv:customresourcedefinitions:type=status,displayName="Unhealthy Pods"
+	UnhealthyPods []UnhealthyPod `json:"unhealthyPods,omitempty"`
+
 	// Standard Kubernetes conditions.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// UnhealthyPod summarizes why a single proxy pod is not healthy.
+type UnhealthyPod struct {
+	// Pod name.
+	Name string `json:"name"`
+
+	// Pod phase (Pending, Running, Failed, ...).
+	// +optional
+	Phase string `json:"phase,omitempty"`
+
+	// Machine-readable cause, e.g. CrashLoopBackOff, ImagePullBackOff,
+	// OOMKilled, CreateContainerConfigError, Unschedulable.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+
+	// Human-readable detail (truncated).
+	// +optional
+	// +kubebuilder:validation:MaxLength=512
+	Message string `json:"message,omitempty"`
+
+	// Container restart count — a climbing value is the signature of a crash loop.
+	// +optional
+	RestartCount int32 `json:"restartCount,omitempty"`
 }
 
 // SecretManagerStatus defines the observed state of the secret manager integration.

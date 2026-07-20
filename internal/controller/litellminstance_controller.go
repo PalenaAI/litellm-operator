@@ -69,6 +69,7 @@ type LiteLLMInstanceReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get
 // +kubebuilder:rbac:groups=core,resources=configmaps;services;secrets;serviceaccounts,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses;networkpolicies,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling,resources=horizontalpodautoscalers,verbs=get;list;watch;create;update;patch;delete
@@ -838,6 +839,149 @@ func (r *LiteLLMInstanceReconciler) reconcileAutoRollback(ctx context.Context, i
 	}
 }
 
+// podHealthMaxReported caps how many unhealthy pods are copied into status so
+// the object stays small regardless of replica count.
+const podHealthMaxReported = 3
+
+// statusMessageMaxLen bounds messages copied into status; container termination
+// messages can be arbitrarily long and would otherwise bloat the stored object.
+const statusMessageMaxLen = 512
+
+func truncateStatusMessage(msg string) string {
+	msg = strings.TrimSpace(msg)
+	if len(msg) <= statusMessageMaxLen {
+		return msg
+	}
+	return msg[:statusMessageMaxLen-3] + "..."
+}
+
+// inspectPodHealth summarizes the instance's proxy pods that are not healthy.
+// Returns nil when they are all fine. Callers only invoke this while the
+// instance is not ready, so a healthy instance costs no extra API reads.
+func (r *LiteLLMInstanceReconciler) inspectPodHealth(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) []litellmv1alpha1.UnhealthyPod {
+	var pods corev1.PodList
+	if err := r.List(ctx, &pods,
+		client.InNamespace(instance.Namespace),
+		client.MatchingLabels(labelsForInstance(instance.Name)),
+	); err != nil {
+		logf.FromContext(ctx).V(1).Info("pod health inspection failed", "error", err)
+		return nil
+	}
+
+	var unhealthy []litellmv1alpha1.UnhealthyPod
+	for i := range pods.Items {
+		if u, bad := summarizePodHealth(&pods.Items[i]); bad {
+			unhealthy = append(unhealthy, u)
+			if len(unhealthy) >= podHealthMaxReported {
+				break
+			}
+		}
+	}
+	return unhealthy
+}
+
+// summarizePodHealth reports whether a pod is unhealthy and why, preferring the
+// most actionable signal: a waiting/terminated container reason
+// (CrashLoopBackOff, ImagePullBackOff, OOMKilled, CreateContainerConfigError)
+// over the coarse pod phase.
+func summarizePodHealth(pod *corev1.Pod) (litellmv1alpha1.UnhealthyPod, bool) {
+	out := litellmv1alpha1.UnhealthyPod{Name: pod.Name, Phase: string(pod.Status.Phase)}
+
+	for _, cs := range pod.Status.ContainerStatuses {
+		out.RestartCount = cs.RestartCount
+
+		// Transient startup states are not faults — don't report them.
+		if w := cs.State.Waiting; w != nil && w.Reason != "" &&
+			w.Reason != "ContainerCreating" && w.Reason != "PodInitializing" {
+			out.Reason = w.Reason
+			out.Message = truncateStatusMessage(w.Message)
+			// For a crash loop the useful detail is the PREVIOUS termination —
+			// the waiting message is just back-off timing.
+			if lt := cs.LastTerminationState.Terminated; lt != nil {
+				out.Message = truncateStatusMessage(fmt.Sprintf("last exit code %d (%s) %s",
+					lt.ExitCode, lt.Reason, lt.Message))
+			}
+			return out, true
+		}
+		if t := cs.State.Terminated; t != nil && t.ExitCode != 0 {
+			out.Reason = t.Reason
+			if out.Reason == "" {
+				out.Reason = "ContainerTerminated"
+			}
+			out.Message = truncateStatusMessage(fmt.Sprintf("exit code %d %s", t.ExitCode, t.Message))
+			return out, true
+		}
+	}
+
+	switch pod.Status.Phase {
+	case corev1.PodFailed:
+		out.Reason = pod.Status.Reason
+		if out.Reason == "" {
+			out.Reason = "PodFailed"
+		}
+		out.Message = truncateStatusMessage(pod.Status.Message)
+		return out, true
+	case corev1.PodPending:
+		// Unschedulable is the usual pending cause (resources, taints, PVCs).
+		for _, c := range pod.Status.Conditions {
+			if c.Type == corev1.PodScheduled && c.Status == corev1.ConditionFalse {
+				out.Reason = c.Reason
+				out.Message = truncateStatusMessage(c.Message)
+				return out, true
+			}
+		}
+		out.Reason = "Pending"
+		return out, true
+	}
+	return out, false
+}
+
+// setPodsHealthyCondition surfaces pod-level faults on the instance so the cause
+// of an unready gateway (crash loop, bad image, OOM, unschedulable) is visible
+// from the CR instead of requiring a dig through pod logs. Independent of Ready.
+func (r *LiteLLMInstanceReconciler) setPodsHealthyCondition(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) {
+	if instance.Status.Ready {
+		instance.Status.UnhealthyPods = nil
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type: ConditionPodsHealthy, Status: metav1.ConditionTrue,
+			Reason: "AllPodsHealthy", Message: "Proxy pods are running",
+			ObservedGeneration: instance.Generation,
+		})
+		return
+	}
+
+	prev := meta.FindStatusCondition(instance.Status.Conditions, ConditionPodsHealthy)
+	unhealthy := r.inspectPodHealth(ctx, instance)
+	instance.Status.UnhealthyPods = unhealthy
+
+	if len(unhealthy) == 0 {
+		// Not ready, but no pod-level fault — normally still rolling out.
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type: ConditionPodsHealthy, Status: metav1.ConditionFalse,
+			Reason: "PodsNotReady", Message: "Waiting for proxy pods to become ready",
+			ObservedGeneration: instance.Generation,
+		})
+		return
+	}
+
+	first := unhealthy[0]
+	msg := fmt.Sprintf("%d unhealthy pod(s); %s: %s", len(unhealthy), first.Name, first.Reason)
+	if first.Message != "" {
+		msg = truncateStatusMessage(msg + " — " + first.Message)
+	}
+	meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+		Type: ConditionPodsHealthy, Status: metav1.ConditionFalse,
+		Reason: first.Reason, Message: msg, ObservedGeneration: instance.Generation,
+	})
+
+	// Only event on a CHANGE of cause — a crash loop reconciles repeatedly and
+	// would otherwise spam the event stream.
+	if prev == nil || prev.Reason != first.Reason {
+		emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonHealthDegraded,
+			"Proxy pod %s: %s %s", first.Name, first.Reason, first.Message)
+	}
+}
+
 func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, reconcileErr error) {
 	// Fetch deployment status
 	var dep appsv1.Deployment
@@ -846,6 +990,9 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 		instance.Status.ReadyReplicas = dep.Status.ReadyReplicas
 		instance.Status.Ready = dep.Status.ReadyReplicas > 0
 	}
+
+	// Explain pod-level faults behind an unready workload.
+	r.setPodsHealthyCondition(ctx, instance)
 
 	// Set endpoint. When the proxy serves TLS the scheme is https — this is
 	// the single source of the URL every controller (and the health probes)

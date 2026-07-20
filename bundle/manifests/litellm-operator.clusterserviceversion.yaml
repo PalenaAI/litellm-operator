@@ -521,7 +521,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.19.1
-    createdAt: "2026-07-14T21:33:58Z"
+    createdAt: "2026-07-20T21:23:42Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -872,6 +872,14 @@ spec:
       - description: Upgrade strategy configuration.
         displayName: Upgrade
         path: upgrade
+      statusDescriptors:
+      - description: |-
+          UnhealthyPods explains why proxy pods are not running — crash loops, image
+          pull failures, OOM kills, unschedulable pods — so the cause is visible from
+          the instance itself instead of requiring a dig through pod logs. Populated
+          only while the instance is not ready, and capped to keep the object small.
+        displayName: Unhealthy Pods
+        path: unhealthyPods
       version: v1alpha1
     - description: LiteLLMModel is the Schema for the litellmmodels API.
       displayName: LiteLLM Model
@@ -1240,6 +1248,14 @@ spec:
           - list
           - patch
           - update
+          - watch
+        - apiGroups:
+          - ""
+          resources:
+          - pods
+          verbs:
+          - get
+          - list
           - watch
         - apiGroups:
           - apps

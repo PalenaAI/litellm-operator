@@ -4676,6 +4676,41 @@ spec:
                     description: SSO provider type.
                     type: string
                 type: object
+              unhealthyPods:
+                description: |-
+                  UnhealthyPods explains why proxy pods are not running — crash loops, image
+                  pull failures, OOM kills, unschedulable pods — so the cause is visible from
+                  the instance itself instead of requiring a dig through pod logs. Populated
+                  only while the instance is not ready, and capped to keep the object small.
+                items:
+                  description: UnhealthyPod summarizes why a single proxy pod is not
+                    healthy.
+                  properties:
+                    message:
+                      description: Human-readable detail (truncated).
+                      maxLength: 512
+                      type: string
+                    name:
+                      description: Pod name.
+                      type: string
+                    phase:
+                      description: Pod phase (Pending, Running, Failed, ...).
+                      type: string
+                    reason:
+                      description: |-
+                        Machine-readable cause, e.g. CrashLoopBackOff, ImagePullBackOff,
+                        OOMKilled, CreateContainerConfigError, Unschedulable.
+                      type: string
+                    restartCount:
+                      description: Container restart count — a climbing value is the
+                        signature of a crash loop.
+                      format: int32
+                      type: integer
+                  required:
+                  - name
+                  type: object
+                maxItems: 3
+                type: array
               version:
                 description: Current LiteLLM version.
                 type: string

@@ -86,6 +86,10 @@ const (
 	ConditionRedisReady    = "RedisReady"
 	ConditionConfigSynced  = "ConfigSynced"
 	ConditionSynced        = "Synced"
+	// ConditionPodsHealthy reports pod-level faults (crash loops, image pull
+	// failures, OOM kills, unschedulable pods). It is independent of Ready —
+	// Ready keeps meaning "at least one replica is serving".
+	ConditionPodsHealthy = "PodsHealthy"
 
 	// Event reasons — kept in one place so operators and alerting tooling
 	// can filter on them reliably.

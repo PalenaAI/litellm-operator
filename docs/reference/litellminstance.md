@@ -778,7 +778,33 @@ Admin UI configuration. Controls UI availability, access restrictions, model per
 | `license` | *LicenseStatus | License activation status (`active`, `secretName`) |
 | `sso` | *SSOStatus | SSO configuration status |
 | `scim` | *SCIMStatus | SCIM configuration status |
+| `unhealthyPods` | []UnhealthyPod | Why proxy pods aren't running (crash loops, image pull failures, OOM kills, unschedulable). Populated only while not ready; capped at 3 |
 | `conditions` | []Condition | Standard Kubernetes conditions |
+
+### `unhealthyPods`
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | Pod name |
+| `phase` | string | Pod phase (`Pending`, `Running`, `Failed`, …) |
+| `reason` | string | Machine-readable cause: `CrashLoopBackOff`, `ImagePullBackOff`, `OOMKilled`, `CreateContainerConfigError`, `Unschedulable`, … |
+| `message` | string | Human-readable detail (truncated to 512 chars). For a crash loop this is the **previous** container termination — e.g. `last exit code 3 (Error) …` — not the back-off timing |
+| `restartCount` | int32 | Container restart count; a climbing value is the signature of a crash loop |
+
+### Diagnosing an unready gateway
+
+Pod faults surface as a **`PodsHealthy`** condition, independent of `Ready` (which keeps meaning "at least one replica is serving"):
+
+```bash
+kubectl get litellminstance my-gateway -o jsonpath='{.status.unhealthyPods[0].reason}{"\n"}'
+# CrashLoopBackOff
+
+kubectl describe litellminstance my-gateway | grep -A3 PodsHealthy
+# PodsHealthy   False   CrashLoopBackOff
+#   1 unhealthy pod(s); my-gateway-5fdb-4rrvz: CrashLoopBackOff — last exit code 3 (Error) ...
+```
+
+A Warning event is also emitted when the cause changes (not on every reconcile, so a crash loop won't spam the event stream).
 
 ## Print Columns
 

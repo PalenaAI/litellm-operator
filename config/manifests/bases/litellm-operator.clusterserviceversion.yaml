@@ -383,6 +383,14 @@ spec:
       - description: Upgrade strategy configuration.
         displayName: Upgrade
         path: upgrade
+      statusDescriptors:
+      - description: |-
+          UnhealthyPods explains why proxy pods are not running — crash loops, image
+          pull failures, OOM kills, unschedulable pods — so the cause is visible from
+          the instance itself instead of requiring a dig through pod logs. Populated
+          only while the instance is not ready, and capped to keep the object small.
+        displayName: Unhealthy Pods
+        path: unhealthyPods
       version: v1alpha1
     - description: LiteLLMModel is the Schema for the litellmmodels API.
       displayName: LiteLLM Model
