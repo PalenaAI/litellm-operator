@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Pod-level faults now surface on `LiteLLMInstance.status`** — when the gateway is unready, the cause is visible from the CR instead of requiring a dig through pod logs. Adds a **`PodsHealthy`** condition (independent of `Ready`, which keeps meaning "at least one replica is serving") and `.status.unhealthyPods[]` with `name`, `phase`, `reason`, a truncated `message`, and `restartCount`. Recognizes `CrashLoopBackOff` (reporting the *previous* container termination — e.g. `last exit code 3` — rather than the useless back-off timing), `ImagePullBackOff`, `OOMKilled`, `CreateContainerConfigError` (a missing Secret/ConfigMap key), and `Unschedulable`. Kept cheap and quiet: pods are listed only while not ready (no extra reads when healthy, no pod watch), the list is capped at 3 with 512-char messages to bound the object, and a Warning event fires only when the cause *changes* so a crash loop can't spam the event stream. Requires new pod `get;list;watch` RBAC.
+
 ## [0.19.1] - 2026-07-14
 
 ### Fixed
