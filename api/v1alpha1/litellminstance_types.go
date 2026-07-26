@@ -1294,6 +1294,38 @@ type ServiceMonitorSpec struct {
 	// Additional labels for the ServiceMonitor.
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+
+	// Path is the HTTP path to scrape metrics from.
+	// Defaults to "/metrics".
+	// +optional
+	Path string `json:"path,omitempty"`
+
+	// Authorization configures the Authorization header Prometheus sends when
+	// scraping the metrics endpoint. This is required when the LiteLLM proxy is
+	// protected with a master key: the /metrics endpoint then rejects
+	// unauthenticated scrapes with "Malformed API Key passed in. Ensure Key has
+	// `Bearer ` prefix." When Authorization is set but Credentials is omitted,
+	// the operator defaults to the instance's master key Secret.
+	// +optional
+	Authorization *ServiceMonitorAuthorization `json:"authorization,omitempty"`
+}
+
+// ServiceMonitorAuthorization configures endpoint authorization for the
+// generated ServiceMonitor, mirroring the Prometheus Operator's native
+// `endpoints[].authorization` block.
+type ServiceMonitorAuthorization struct {
+	// Type is the authorization type, e.g. "Bearer".
+	// +kubebuilder:default="Bearer"
+	// +optional
+	Type string `json:"type,omitempty"`
+
+	// Credentials selects the key of a Secret holding the credentials Prometheus
+	// sends in the Authorization header. When omitted, the operator defaults to
+	// the instance's master key Secret (the referenced Secret for a
+	// user-supplied master key, or the auto-generated "<instance>-master-key"
+	// Secret otherwise).
+	// +optional
+	Credentials *SecretKeyRef `json:"credentials,omitempty"`
 }
 
 // PrometheusRuleSpec defines PrometheusRule configuration for alerting.

@@ -42,6 +42,20 @@ func BuildServiceMonitor(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 		smLabels[k] = v
 	}
 
+	path := sm.Path
+	if path == "" {
+		path = "/metrics"
+	}
+
+	endpoint := map[string]interface{}{
+		"port":     "http",
+		"interval": interval,
+		"path":     path,
+	}
+	if auth := buildServiceMonitorAuthorization(instance, sm.Authorization); auth != nil {
+		endpoint["authorization"] = auth
+	}
+
 	obj := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "monitoring.coreos.com/v1",
@@ -58,18 +72,55 @@ func BuildServiceMonitor(instance *litellmv1alpha1.LiteLLMInstance, labels map[s
 				"namespaceSelector": map[string]interface{}{
 					"matchNames": []interface{}{instance.Namespace},
 				},
-				"endpoints": []interface{}{
-					map[string]interface{}{
-						"port":     "http",
-						"interval": interval,
-						"path":     "/metrics",
-					},
-				},
+				"endpoints": []interface{}{endpoint},
 			},
 		},
 	}
 
 	return obj
+}
+
+// buildServiceMonitorAuthorization renders the endpoint `authorization` block.
+// When credentials are not explicitly set, it falls back to the instance's
+// master key Secret so an authenticated /metrics endpoint can be scraped
+// without the user having to restate the master key location. Returns nil when
+// no authorization is requested or no credentials can be resolved.
+func buildServiceMonitorAuthorization(instance *litellmv1alpha1.LiteLLMInstance, auth *litellmv1alpha1.ServiceMonitorAuthorization) map[string]interface{} {
+	if auth == nil {
+		return nil
+	}
+
+	name, key := resolveMasterKeyCredentials(instance, auth.Credentials)
+	if name == "" || key == "" {
+		return nil
+	}
+
+	authType := auth.Type
+	if authType == "" {
+		authType = "Bearer"
+	}
+
+	return map[string]interface{}{
+		"type": authType,
+		"credentials": map[string]interface{}{
+			"name": name,
+			"key":  key,
+		},
+	}
+}
+
+// resolveMasterKeyCredentials returns the Secret name and key holding the
+// bearer credentials. An explicit override wins; otherwise it derives the
+// instance's master key Secret — the user-supplied secretRef, or the
+// auto-generated "<instance>-master-key" Secret.
+func resolveMasterKeyCredentials(instance *litellmv1alpha1.LiteLLMInstance, override *litellmv1alpha1.SecretKeyRef) (string, string) {
+	if override != nil && override.Name != "" && override.Key != "" {
+		return override.Name, override.Key
+	}
+	if ref := instance.Spec.MasterKey.SecretRef; ref != nil && ref.Name != "" && ref.Key != "" {
+		return ref.Name, ref.Key
+	}
+	return instance.Name + "-master-key", "master-key"
 }
 
 func toStringMap(m map[string]string) map[string]interface{} {

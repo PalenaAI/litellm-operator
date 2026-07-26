@@ -402,6 +402,11 @@ spec:
     serviceMonitor:
       enabled: true
       interval: "30s"
+      # When the proxy is protected with a master key, /metrics requires a
+      # Bearer token. `authorization: {}` scrapes it using the instance's
+      # master key Secret automatically; override `credentials` to point at a
+      # different Secret name/key.
+      authorization: {}
     prometheusRule:
       enabled: true
       # disabledAlerts: ["LiteLLMHighCPUUsage"]  # optionally disable specific alerts
