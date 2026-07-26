@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-07-26
+
 ### Added
 
 - **`LiteLLMInstance.spec.observability.serviceMonitor` now supports endpoint authorization** ([#20](https://github.com/PalenaAI/litellm-operator/issues/20)) — when the proxy is protected with a master key, the `/metrics` endpoint rejects unauthenticated scrapes ("Malformed API Key passed in. Ensure Key has a Bearer prefix."), so the operator-managed `ServiceMonitor` could not scrape an authenticated deployment. Added `serviceMonitor.authorization` (mirroring the Prometheus Operator's native `endpoints[].authorization` block) with `type` (default `Bearer`) and `credentials` (a Secret name/key). **Credentials default to the instance's master key Secret** when omitted — the referenced Secret for a user-supplied master key, or the auto-generated `<instance>-master-key` Secret otherwise — so the common case needs only `authorization: {}`. Also added `serviceMonitor.path` to override the scrape path (default `/metrics`).
