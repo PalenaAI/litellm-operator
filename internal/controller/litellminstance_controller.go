@@ -30,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -560,11 +561,16 @@ func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, ins
 		return err
 	}
 
-	// Update deployment spec
-	existing.Spec.Replicas = desired.Spec.Replicas
-	existing.Spec.Template = desired.Spec.Template
-	existing.Spec.Strategy = desired.Spec.Strategy
-	return r.Update(ctx, &existing)
+	// Only update fields owned by this controller. Updating an unchanged
+	// Deployment triggers its Owns watch and creates an infinite reconcile loop.
+	updated := existing.DeepCopy()
+	updated.Spec.Replicas = desired.Spec.Replicas
+	updated.Spec.Template = desired.Spec.Template
+	updated.Spec.Strategy = desired.Spec.Strategy
+	if equality.Semantic.DeepEqual(existing.Spec, updated.Spec) {
+		return nil
+	}
+	return r.Update(ctx, updated)
 }
 
 func (r *LiteLLMInstanceReconciler) reconcileService(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
@@ -572,7 +578,45 @@ func (r *LiteLLMInstanceReconciler) reconcileService(ctx context.Context, instan
 	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
 		return err
 	}
-	return r.createOrUpdate(ctx, desired, &corev1.Service{})
+
+	var existing corev1.Service
+	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
+	if apierrors.IsNotFound(err) {
+		return r.Create(ctx, desired)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Preserve Service annotations and allocated fields (ClusterIP, NodePort,
+	// NEG state) managed by Kubernetes and cloud controllers. Replacing the
+	// complete Service drops those fields, which causes GKE to update it and
+	// triggers this controller again through Owns(Service).
+	updated := existing.DeepCopy()
+	if updated.Labels == nil {
+		updated.Labels = make(map[string]string, len(desired.Labels))
+	}
+	for key, value := range desired.Labels {
+		updated.Labels[key] = value
+	}
+	updated.Spec.Type = desired.Spec.Type
+	updated.Spec.Selector = desired.Spec.Selector
+	updated.Spec.Ports = desired.Spec.Ports
+	for desiredIndex := range updated.Spec.Ports {
+		for _, existingPort := range existing.Spec.Ports {
+			if updated.Spec.Ports[desiredIndex].Name == existingPort.Name &&
+				updated.Spec.Ports[desiredIndex].Port == existingPort.Port &&
+				updated.Spec.Ports[desiredIndex].Protocol == existingPort.Protocol {
+				updated.Spec.Ports[desiredIndex].NodePort = existingPort.NodePort
+				break
+			}
+		}
+	}
+	if equality.Semantic.DeepEqual(existing.Labels, updated.Labels) &&
+		equality.Semantic.DeepEqual(existing.Spec, updated.Spec) {
+		return nil
+	}
+	return r.Update(ctx, updated)
 }
 
 func (r *LiteLLMInstanceReconciler) reconcileIngress(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
