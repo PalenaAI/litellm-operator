@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`LiteLLMInstance.spec.observability.serviceMonitor` now supports endpoint authorization** ([#20](https://github.com/PalenaAI/litellm-operator/issues/20)) — when the proxy is protected with a master key, the `/metrics` endpoint rejects unauthenticated scrapes ("Malformed API Key passed in. Ensure Key has a Bearer prefix."), so the operator-managed `ServiceMonitor` could not scrape an authenticated deployment. Added `serviceMonitor.authorization` (mirroring the Prometheus Operator's native `endpoints[].authorization` block) with `type` (default `Bearer`) and `credentials` (a Secret name/key). **Credentials default to the instance's master key Secret** when omitted — the referenced Secret for a user-supplied master key, or the auto-generated `<instance>-master-key` Secret otherwise — so the common case needs only `authorization: {}`. Also added `serviceMonitor.path` to override the scrape path (default `/metrics`).
 
+### Security
+
+- **Bumped `google.golang.org/grpc` to v1.82.1** (from v1.80.0) to clear GHSA-hrxh-6v49-42gf — xDS RBAC and HTTP/2 vulnerabilities in gRPC-Go. Transitive dependency (via `k8s.io/apiserver` / controller-runtime metrics filters); no operator code changes.
+- **Bumped the docs site's `vite` to 6.4.3** (from 6.4.2) to clear CVE-2026-53571 (`server.fs.deny` bypass on Windows alternate paths) and CVE-2026-53632 (NTLMv2 hash disclosure via UNC path handling), and pinned `postcss` to ≥8.5.18 to clear GHSA-6g55-p6wh-862q / GHSA-r28c-9q8g-f849 (arbitrary `.map` file disclosure via attacker-controlled `sourceMappingURL`). Build-time dependencies of the VitePress docs only — not shipped in the operator image.
+
 ## [0.20.0] - 2026-07-21
 
 ### Added
