@@ -4053,6 +4053,21 @@ spec:
                     description: Service type.
                     type: string
                 type: object
+              serviceAccount:
+                description: ServiceAccount configures metadata on the ServiceAccount
+                  used by LiteLLM pods.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: Annotations to apply to the ServiceAccount.
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: Labels to apply to the ServiceAccount.
+                    type: object
+                type: object
               sso:
                 description: SSO configuration.
                 properties:

@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -514,7 +515,28 @@ func (r *LiteLLMInstanceReconciler) reconcileServiceAccount(ctx context.Context,
 	if apierrors.IsNotFound(err) {
 		return r.Create(ctx, desired)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	mergedLabels := mergeStringMaps(existing.Labels, desired.Labels)
+	mergedAnnotations := mergeStringMaps(existing.Annotations, desired.Annotations)
+	if maps.Equal(existing.Labels, mergedLabels) && maps.Equal(existing.Annotations, mergedAnnotations) {
+		return nil
+	}
+
+	existing.Labels = mergedLabels
+	existing.Annotations = mergedAnnotations
+	return r.Update(ctx, &existing)
+}
+
+func mergeStringMaps(existing, desired map[string]string) map[string]string {
+	merged := maps.Clone(existing)
+	if merged == nil && len(desired) > 0 {
+		merged = make(map[string]string, len(desired))
+	}
+	maps.Copy(merged, desired)
+	return merged
 }
 
 // reconcileMigrationJob ensures the migration Job exists and reports its status.

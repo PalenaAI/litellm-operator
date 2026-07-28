@@ -73,6 +73,12 @@ spec:
     type: ClusterIP
     port: 4000
 
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/litellm
+    labels:
+      example.com/identity: irsa
+
   ingress:
     enabled: true
     host: litellm.example.com
