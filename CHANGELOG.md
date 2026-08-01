@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-08-01
+
 ### Added
 
 - **ServiceAccount annotations and labels on `LiteLLMInstance.spec.serviceAccount`** ([#22](https://github.com/PalenaAI/litellm-operator/issues/22)) — enables integrations such as AWS IAM Roles for Service Accounts (IRSA) without an external mutation policy. Configured metadata is reconciled while unrelated labels and annotations added by Kubernetes or other controllers are preserved.
