@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **ServiceAccount annotations and labels on `LiteLLMInstance.spec.serviceAccount`** ([#22](https://github.com/PalenaAI/litellm-operator/issues/22)) — enables integrations such as AWS IAM Roles for Service Accounts (IRSA) without an external mutation policy. Configured metadata is reconciled while unrelated labels and annotations added by Kubernetes or other controllers are preserved.
 
+### Fixed
+
+- **Redundant Deployment/Service updates that triggered a reconcile loop** ([#21](https://github.com/PalenaAI/litellm-operator/pull/21)) — the instance controller now skips updates when the managed spec is already converged and preserves cloud-managed Service fields (`ClusterIP`, `NodePort`, and annotations such as GKE's `cloud.google.com/neg-status`) instead of replacing the whole object.
+- **External pod-template annotations dropped on reconcile** ([#25](https://github.com/PalenaAI/litellm-operator/pull/25), closes [#23](https://github.com/PalenaAI/litellm-operator/issues/23)) — annotations added by other tools (e.g. `kubectl.kubernetes.io/restartedAt` from `kubectl rollout restart`) are now carried into the desired pod template, so they survive reconciliation and no longer read as drift.
+
+### Security
+
+- **Bumped `golang.org/x/text` to v0.39.0** (from v0.37.0) to clear GO-2026-5970 / CVE-2026-56852 — an infinite loop in `norm.Iter` on malformed input, flagged by both govulncheck and the Trivy image scan.
+- **Bumped `github.com/google/cel-go` to v0.29.0** (from v0.23.2) to clear GHSA-gcjh-h69q-9w9g. Both are transitive dependencies (via `k8s.io/apiserver`); no operator code changes.
+
 ## [0.21.0] - 2026-07-26
 
 ### Added
