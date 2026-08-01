@@ -368,6 +368,10 @@ spec:
       - description: Service configuration.
         displayName: Service
         path: service
+      - description: ServiceAccount configures metadata on the ServiceAccount used
+          by LiteLLM pods.
+        displayName: Service Account
+        path: serviceAccount
       - description: SSO configuration.
         displayName: SSO
         path: sso

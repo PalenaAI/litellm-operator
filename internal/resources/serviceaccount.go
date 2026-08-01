@@ -17,6 +17,8 @@ limitations under the License.
 package resources
 
 import (
+	"maps"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -25,11 +27,22 @@ import (
 
 // BuildServiceAccount creates the ServiceAccount for the LiteLLM pods.
 func BuildServiceAccount(instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) *corev1.ServiceAccount {
+	serviceAccountLabels := maps.Clone(labels)
+	var annotations map[string]string
+	if instance.Spec.ServiceAccount != nil {
+		if serviceAccountLabels == nil {
+			serviceAccountLabels = make(map[string]string)
+		}
+		maps.Copy(serviceAccountLabels, instance.Spec.ServiceAccount.Labels)
+		annotations = maps.Clone(instance.Spec.ServiceAccount.Annotations)
+	}
+
 	return &corev1.ServiceAccount{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Name,
-			Namespace: instance.Namespace,
-			Labels:    labels,
+			Name:        instance.Name,
+			Namespace:   instance.Namespace,
+			Labels:      serviceAccountLabels,
+			Annotations: annotations,
 		},
 	}
 }

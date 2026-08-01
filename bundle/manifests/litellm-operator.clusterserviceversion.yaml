@@ -284,6 +284,14 @@ metadata:
             "service": {
               "port": 4000,
               "type": "ClusterIP"
+            },
+            "serviceAccount": {
+              "annotations": {
+                "eks.amazonaws.com/role-arn": "arn:aws:iam::123456789012:role/litellm"
+              },
+              "labels": {
+                "example.com/identity": "irsa"
+              }
             }
           }
         },
@@ -521,7 +529,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.21.0
-    createdAt: "2026-07-26T12:51:41Z"
+    createdAt: "2026-08-01T11:16:00Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -857,6 +865,10 @@ spec:
       - description: Service configuration.
         displayName: Service
         path: service
+      - description: ServiceAccount configures metadata on the ServiceAccount used
+          by LiteLLM pods.
+        displayName: Service Account
+        path: serviceAccount
       - description: SSO configuration.
         displayName: SSO
         path: sso

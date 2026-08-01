@@ -145,6 +145,11 @@ spec:
   service:
     type: ClusterIP
     port: 4000
+  serviceAccount:
+    annotations:
+      eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/e2e-litellm
+    labels:
+      example.com/identity: irsa
 `
 
 const organizationYAML = `
@@ -648,6 +653,41 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 			cmd = exec.Command("kubectl", "get", "secret", instanceName+"-master-key", "-n", testNamespace)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying configured ServiceAccount metadata")
+			cmd = exec.Command("kubectl", "get", "serviceaccount", instanceName, "-n", testNamespace,
+				"-o", `jsonpath={.metadata.annotations.eks\.amazonaws\.com/role-arn}{"|"}{.metadata.labels.example\.com/identity}`)
+			output, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(strings.TrimSpace(output)).To(Equal("arn:aws:iam::123456789012:role/e2e-litellm|irsa"))
+		})
+
+		It("should reconcile configured ServiceAccount metadata and preserve external metadata", func() {
+			By("adding an annotation owned by an external controller")
+			cmd := exec.Command("kubectl", "annotate", "serviceaccount", instanceName, "-n", testNamespace,
+				"external.example.com/managed=true")
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("updating the configured IRSA role annotation")
+			rolePatch := `{"spec":{"serviceAccount":{"annotations":` +
+				`{"eks.amazonaws.com/role-arn":"arn:aws:iam::123456789012:role/e2e-litellm-updated"}}}}`
+			cmd = exec.Command("kubectl", "patch", "litellminstance", instanceName, "-n", testNamespace,
+				"--type=merge", "-p", rolePatch)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("verifying configured metadata is updated and external metadata is preserved")
+			verifyServiceAccountMetadata := func(g Gomega) {
+				jsonPath := `jsonpath={.metadata.annotations.eks\.amazonaws\.com/role-arn}` +
+					`{"|"}{.metadata.annotations.external\.example\.com/managed}`
+				cmd := exec.Command("kubectl", "get", "serviceaccount", instanceName, "-n", testNamespace,
+					"-o", jsonPath)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.TrimSpace(output)).To(Equal("arn:aws:iam::123456789012:role/e2e-litellm-updated|true"))
+			}
+			Eventually(verifyServiceAccountMetadata, 2*time.Minute, time.Second).Should(Succeed())
 		})
 
 		It("should create a LiteLLMModel and wait for Synced", func() {

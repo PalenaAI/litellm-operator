@@ -84,6 +84,11 @@ type LiteLLMInstanceSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Service"
 	Service ServiceSpec `json:"service,omitempty"`
 
+	// ServiceAccount configures metadata on the ServiceAccount used by LiteLLM pods.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Service Account"
+	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
+
 	// Ingress configuration.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Ingress"
@@ -1093,6 +1098,17 @@ type ServiceSpec struct {
 	// Service port.
 	// +kubebuilder:default=4000
 	Port int32 `json:"port,omitempty"`
+}
+
+// ServiceAccountSpec defines metadata for the operator-managed ServiceAccount.
+type ServiceAccountSpec struct {
+	// Annotations to apply to the ServiceAccount.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Labels to apply to the ServiceAccount.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // IngressSpec defines Ingress configuration.
