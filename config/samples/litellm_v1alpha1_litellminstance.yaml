@@ -44,6 +44,11 @@ spec:
     labels:
       example.com/identity: irsa
 
+  # Metadata for the operator-managed Deployment (e.g. Stakater Reloader)
+  deployment:
+    annotations:
+      reloader.stakater.com/auto: "true"
+
   # Resource limits
   resources:
     requests:

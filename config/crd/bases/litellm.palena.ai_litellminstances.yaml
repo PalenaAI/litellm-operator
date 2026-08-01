@@ -655,6 +655,20 @@ spec:
                       Written to litellm_settings.max_end_user_budget.
                     type: number
                 type: object
+              deployment:
+                description: Deployment configures metadata on the operator-managed
+                  Deployment.
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations to apply to the Deployment metadata (e.g.
+                      reloader.stakater.com/auto: "true"). Configured annotations are applied
+                      and their values reconciled; annotations added by other controllers are
+                      preserved.
+                    type: object
+                type: object
               extraEnvFrom:
                 description: Extra environment variable sources.
                 items:

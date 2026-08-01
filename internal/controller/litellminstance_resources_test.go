@@ -111,3 +111,46 @@ func TestReconcileServiceSkipsUpdateAndPreservesExternalAnnotations(t *testing.T
 		t.Fatal("expected GKE-managed Service annotation to be preserved")
 	}
 }
+
+func TestReconcileDeploymentAppliesAnnotationsAndPreservesExternal(t *testing.T) {
+	ctx := context.Background()
+	instance := instanceForResourceTest()
+	labels := labelsForInstance(instance.Name)
+
+	// Existing Deployment carries an annotation added by another controller.
+	existing := resources.BuildDeployment(instance, labels, "", nil)
+	existing.Annotations = map[string]string{"external.example.com/managed": "keep"}
+	scheme := instanceResourceTestScheme(t)
+	countingClient := &updateCountingClient{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(existing).Build()}
+	reconciler := &LiteLLMInstanceReconciler{Client: countingClient, Scheme: scheme}
+
+	// Now the CR declares a Deployment annotation.
+	instance.Spec.Deployment = &litellmv1alpha1.DeploymentSpec{
+		Annotations: map[string]string{"reloader.stakater.com/auto": "true"},
+	}
+	if err := reconciler.reconcileDeployment(ctx, instance, labels, "", nil); err != nil {
+		t.Fatalf("reconcile deployment: %v", err)
+	}
+	if countingClient.updates != 1 {
+		t.Fatalf("expected one Update to apply the new annotation, got %d", countingClient.updates)
+	}
+
+	var got appsv1.Deployment
+	if err := countingClient.Get(ctx, client.ObjectKeyFromObject(existing), &got); err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if got.Annotations["reloader.stakater.com/auto"] != "true" {
+		t.Errorf("expected declared annotation to be applied, got %#v", got.Annotations)
+	}
+	if got.Annotations["external.example.com/managed"] != "keep" {
+		t.Error("expected external Deployment annotation to be preserved")
+	}
+
+	// A second reconcile with no changes must not update again (idempotent).
+	if err := reconciler.reconcileDeployment(ctx, instance, labels, "", nil); err != nil {
+		t.Fatalf("second reconcile deployment: %v", err)
+	}
+	if countingClient.updates != 1 {
+		t.Fatalf("expected no further Update on converged Deployment, got %d total", countingClient.updates)
+	}
+}

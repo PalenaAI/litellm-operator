@@ -18,6 +18,7 @@ package resources
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -241,11 +242,17 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 		strategy.RollingUpdate = ru
 	}
 
+	var deploymentAnnotations map[string]string
+	if instance.Spec.Deployment != nil && len(instance.Spec.Deployment.Annotations) > 0 {
+		deploymentAnnotations = maps.Clone(instance.Spec.Deployment.Annotations)
+	}
+
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Name,
-			Namespace: instance.Namespace,
-			Labels:    labels,
+			Name:        instance.Name,
+			Namespace:   instance.Namespace,
+			Labels:      labels,
+			Annotations: deploymentAnnotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,

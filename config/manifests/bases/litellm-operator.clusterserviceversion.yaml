@@ -262,6 +262,9 @@ spec:
           Written to litellm_settings.max_end_user_budget / max_end_user_budget_id.
         displayName: Default Customer Budget
         path: defaultCustomerBudget
+      - description: Deployment configures metadata on the operator-managed Deployment.
+        displayName: Deployment
+        path: deployment
       - description: Extra environment variable sources.
         displayName: Extra Env From
         path: extraEnvFrom

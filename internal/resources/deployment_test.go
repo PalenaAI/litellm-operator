@@ -94,6 +94,25 @@ func TestBuildDeployment_WithoutLicenseSecret(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_DeploymentAnnotations(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Deployment = &litellmv1alpha1.DeploymentSpec{
+		Annotations: map[string]string{"reloader.stakater.com/auto": "true"},
+	}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
+	if got := dep.Annotations["reloader.stakater.com/auto"]; got != "true" {
+		t.Errorf("expected Deployment annotation reloader.stakater.com/auto=true, got %q", got)
+	}
+}
+
+func TestBuildDeployment_NoDeploymentAnnotationsByDefault(t *testing.T) {
+	dep := BuildDeployment(newTestInstance(), map[string]string{"app": "litellm"}, "", nil)
+	if dep.Annotations != nil {
+		t.Errorf("expected no Deployment annotations by default, got %#v", dep.Annotations)
+	}
+}
+
 func TestBuildDeployment_LicenseSecretChangesTemplate(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}

@@ -79,6 +79,10 @@ spec:
     labels:
       example.com/identity: irsa
 
+  deployment:
+    annotations:
+      reloader.stakater.com/auto: "true"
+
   ingress:
     enabled: true
     host: litellm.example.com

@@ -248,6 +248,11 @@ metadata:
                 }
               }
             },
+            "deployment": {
+              "annotations": {
+                "reloader.stakater.com/auto": "true"
+              }
+            },
             "generalSettings": {
               "alerting": [
                 "slack"
@@ -529,7 +534,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.21.0
-    createdAt: "2026-08-01T11:16:00Z"
+    createdAt: "2026-08-01T11:44:19Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -759,6 +764,9 @@ spec:
           Written to litellm_settings.max_end_user_budget / max_end_user_budget_id.
         displayName: Default Customer Budget
         path: defaultCustomerBudget
+      - description: Deployment configures metadata on the operator-managed Deployment.
+        displayName: Deployment
+        path: deployment
       - description: Extra environment variable sources.
         displayName: Extra Env From
         path: extraEnvFrom

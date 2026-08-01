@@ -597,7 +597,12 @@ func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, ins
 	)
 	updated.Spec.Template = desired.Spec.Template
 	updated.Spec.Strategy = desired.Spec.Strategy
-	if equality.Semantic.DeepEqual(existing.Spec, updated.Spec) {
+	// Reconcile Deployment-level annotations (e.g. reloader.stakater.com/auto)
+	// declared in spec.deployment.annotations, merging desired over existing so
+	// annotations added by other controllers are preserved.
+	updated.Annotations = mergeStringMaps(existing.Annotations, desired.Annotations)
+	if equality.Semantic.DeepEqual(existing.Spec, updated.Spec) &&
+		equality.Semantic.DeepEqual(existing.Annotations, updated.Annotations) {
 		return nil
 	}
 	return r.Update(ctx, updated)

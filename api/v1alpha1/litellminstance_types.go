@@ -89,6 +89,11 @@ type LiteLLMInstanceSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Service Account"
 	ServiceAccount *ServiceAccountSpec `json:"serviceAccount,omitempty"`
 
+	// Deployment configures metadata on the operator-managed Deployment.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Deployment"
+	Deployment *DeploymentSpec `json:"deployment,omitempty"`
+
 	// Ingress configuration.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Ingress"
@@ -1109,6 +1114,16 @@ type ServiceAccountSpec struct {
 	// Labels to apply to the ServiceAccount.
 	// +optional
 	Labels map[string]string `json:"labels,omitempty"`
+}
+
+// DeploymentSpec defines metadata for the operator-managed Deployment.
+type DeploymentSpec struct {
+	// Annotations to apply to the Deployment metadata (e.g.
+	// reloader.stakater.com/auto: "true"). Configured annotations are applied
+	// and their values reconciled; annotations added by other controllers are
+	// preserved.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // IngressSpec defines Ingress configuration.
