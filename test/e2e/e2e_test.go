@@ -61,6 +61,41 @@ const (
 	litellmTestImage = "ghcr.io/berriai/litellm:main-latest"
 )
 
+const (
+	rolloutTestNamespace = "e2e-rollout-restart"
+	rolloutInstanceName  = "e2e-rollout-litellm"
+)
+
+const rolloutInstanceYAML = `
+apiVersion: v1
+kind: Secret
+metadata:
+  name: e2e-rollout-db
+  namespace: e2e-rollout-restart
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://litellm:litellm@unused:5432/litellm"
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  name: e2e-rollout-litellm
+  namespace: e2e-rollout-restart
+spec:
+  image:
+    repository: registry.k8s.io/pause
+    tag: "3.10"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  masterKey:
+    autoGenerate: true
+  database:
+    external:
+      connectionSecretRef:
+        name: e2e-rollout-db
+        key: DATABASE_URL
+`
+
 const postgresYAML = `
 apiVersion: v1
 kind: Pod
@@ -537,6 +572,84 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks
+	})
+
+	Context("Deployment rollout restart", Ordered, func() {
+		BeforeAll(func() {
+			By("creating the rollout restart test namespace")
+			cmd := exec.Command("kubectl", "create", "namespace", rolloutTestNamespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("creating a LiteLLMInstance for the rollout restart test")
+			applyYAML(rolloutInstanceYAML)
+
+			By("waiting for the operator to create the Deployment")
+			verifyDeploymentExists := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", rolloutInstanceName,
+					"-n", rolloutTestNamespace)
+				_, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+			}
+			Eventually(verifyDeploymentExists, 2*time.Minute, time.Second).Should(Succeed())
+		})
+
+		AfterAll(func() {
+			By("deleting the rollout restart test namespace")
+			cmd := exec.Command("kubectl", "delete", "namespace", rolloutTestNamespace,
+				"--ignore-not-found", "--timeout=120s")
+			_, _ = utils.Run(cmd)
+		})
+
+		It("should preserve the kubectl restart annotation after reconciliation", func() {
+			By("restarting the managed Deployment")
+			cmd := exec.Command("kubectl", "rollout", "restart",
+				"deployment/"+rolloutInstanceName, "-n", rolloutTestNamespace)
+			_, err := utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("reading the restart annotation added by kubectl")
+			var restartedAt string
+			readRestartAnnotation := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", rolloutInstanceName,
+					"-n", rolloutTestNamespace,
+					"-o", `jsonpath={.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}`)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				restartedAt = strings.TrimSpace(output)
+				g.Expect(restartedAt).NotTo(BeEmpty())
+			}
+			Eventually(readRestartAnnotation, 30*time.Second, time.Second).Should(Succeed())
+
+			By("changing the instance replica count to force another operator reconciliation")
+			cmd = exec.Command("kubectl", "patch", "litellminstance", rolloutInstanceName,
+				"-n", rolloutTestNamespace, "--type=merge",
+				"-p", `{"spec":{"replicas":2}}`)
+			_, err = utils.Run(cmd)
+			Expect(err).NotTo(HaveOccurred())
+
+			By("waiting for the reconciled Deployment while verifying the annotation survives")
+			verifyReconciledDeployment := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", rolloutInstanceName,
+					"-n", rolloutTestNamespace,
+					"-o", `jsonpath={.spec.replicas}{"|"}{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}`)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.TrimSpace(output)).To(Equal("2|" + restartedAt))
+			}
+			Eventually(verifyReconciledDeployment, 2*time.Minute, time.Second).Should(Succeed())
+
+			By("ensuring subsequent reconciliations do not remove the annotation")
+			verifyRestartAnnotation := func(g Gomega) {
+				cmd := exec.Command("kubectl", "get", "deployment", rolloutInstanceName,
+					"-n", rolloutTestNamespace,
+					"-o", `jsonpath={.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}`)
+				output, err := utils.Run(cmd)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(strings.TrimSpace(output)).To(Equal(restartedAt))
+			}
+			Consistently(verifyRestartAnnotation, 10*time.Second, time.Second).Should(Succeed())
+		})
 	})
 
 	Context("Full Stack", Ordered, func() {

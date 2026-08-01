@@ -587,12 +587,41 @@ func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, ins
 	// Deployment triggers its Owns watch and creates an infinite reconcile loop.
 	updated := existing.DeepCopy()
 	updated.Spec.Replicas = desired.Spec.Replicas
+	// Carry externally managed pod template annotations (e.g. a
+	// kubectl.kubernetes.io/restartedAt set by `kubectl rollout restart`) into
+	// the desired template so replacing it below does not drop them — and so the
+	// idempotency check does not see them as drift and update on every loop.
+	desired.Spec.Template.Annotations = preserveExternalPodTemplateAnnotations(
+		existing.Spec.Template.Annotations,
+		desired.Spec.Template.Annotations,
+	)
 	updated.Spec.Template = desired.Spec.Template
 	updated.Spec.Strategy = desired.Spec.Strategy
 	if equality.Semantic.DeepEqual(existing.Spec, updated.Spec) {
 		return nil
 	}
 	return r.Update(ctx, updated)
+}
+
+const autoRollbackPodTemplateAnnotation = "litellm.palena.ai/auto-rollback"
+
+// preserveExternalPodTemplateAnnotations carries annotations owned by other
+// clients and controllers into the desired template. Annotations explicitly
+// managed by this controller are only retained when present in the desired
+// template.
+func preserveExternalPodTemplateAnnotations(existing, desired map[string]string) map[string]string {
+	for key, value := range existing {
+		if key == autoRollbackPodTemplateAnnotation {
+			continue
+		}
+		if desired == nil {
+			desired = make(map[string]string)
+		}
+		if _, managed := desired[key]; !managed {
+			desired[key] = value
+		}
+	}
+	return desired
 }
 
 func (r *LiteLLMInstanceReconciler) reconcileService(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) error {
@@ -886,7 +915,7 @@ func (r *LiteLLMInstanceReconciler) reconcileAutoRollback(ctx context.Context, i
 			if dep.Spec.Template.Annotations == nil {
 				dep.Spec.Template.Annotations = make(map[string]string)
 			}
-			dep.Spec.Template.Annotations["litellm.palena.ai/auto-rollback"] = time.Now().Format(time.RFC3339)
+			dep.Spec.Template.Annotations[autoRollbackPodTemplateAnnotation] = time.Now().Format(time.RFC3339)
 
 			if err := r.Update(ctx, &dep); err != nil {
 				log.Error(err, "failed to trigger auto-rollback")
