@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **ServiceAccount annotations and labels on `LiteLLMInstance.spec.serviceAccount`** ([#22](https://github.com/PalenaAI/litellm-operator/issues/22)) — enables integrations such as AWS IAM Roles for Service Accounts (IRSA) without an external mutation policy. Configured metadata is reconciled while unrelated labels and annotations added by Kubernetes or other controllers are preserved.
+- **Deployment annotations on `LiteLLMInstance.spec.deployment.annotations`** ([#24](https://github.com/PalenaAI/litellm-operator/issues/24)) — sets annotations on the operator-managed Deployment's metadata (e.g. `reloader.stakater.com/auto: "true"` for Stakater Reloader) without an external mutating admission policy. Declared annotations are applied and their values reconciled, while annotations added by other controllers are preserved. Distinct from pod-template annotations.
 
 ### Fixed
 
