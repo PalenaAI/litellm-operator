@@ -670,16 +670,19 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("updating the configured IRSA role annotation")
+			rolePatch := `{"spec":{"serviceAccount":{"annotations":` +
+				`{"eks.amazonaws.com/role-arn":"arn:aws:iam::123456789012:role/e2e-litellm-updated"}}}}`
 			cmd = exec.Command("kubectl", "patch", "litellminstance", instanceName, "-n", testNamespace,
-				"--type=merge", "-p",
-				`{"spec":{"serviceAccount":{"annotations":{"eks.amazonaws.com/role-arn":"arn:aws:iam::123456789012:role/e2e-litellm-updated"}}}}`)
+				"--type=merge", "-p", rolePatch)
 			_, err = utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("verifying configured metadata is updated and external metadata is preserved")
 			verifyServiceAccountMetadata := func(g Gomega) {
+				jsonPath := `jsonpath={.metadata.annotations.eks\.amazonaws\.com/role-arn}` +
+					`{"|"}{.metadata.annotations.external\.example\.com/managed}`
 				cmd := exec.Command("kubectl", "get", "serviceaccount", instanceName, "-n", testNamespace,
-					"-o", `jsonpath={.metadata.annotations.eks\.amazonaws\.com/role-arn}{"|"}{.metadata.annotations.external\.example\.com/managed}`)
+					"-o", jsonPath)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
 				g.Expect(strings.TrimSpace(output)).To(Equal("arn:aws:iam::123456789012:role/e2e-litellm-updated|true"))

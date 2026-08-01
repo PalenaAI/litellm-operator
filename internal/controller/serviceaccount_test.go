@@ -28,6 +28,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
+// preservedMetadataValue marks external ServiceAccount metadata that the
+// reconciler must leave untouched.
+const preservedMetadataValue = "preserve"
+
 func TestReconcileServiceAccountMetadata(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -59,10 +63,10 @@ func TestReconcileServiceAccountMetadata(t *testing.T) {
 			Name:      instance.Name,
 			Namespace: instance.Namespace,
 			Labels: map[string]string{
-				"external.example.com/label": "preserve",
+				"external.example.com/label": preservedMetadataValue,
 			},
 			Annotations: map[string]string{
-				"external.example.com/annotation": "preserve",
+				"external.example.com/annotation": preservedMetadataValue,
 			},
 		},
 	}
@@ -97,13 +101,13 @@ func assertServiceAccountMetadata(t *testing.T, serviceAccount *corev1.ServiceAc
 	if got := serviceAccount.Annotations["eks.amazonaws.com/role-arn"]; got != roleARN {
 		t.Errorf("role annotation = %q, want %q", got, roleARN)
 	}
-	if got := serviceAccount.Annotations["external.example.com/annotation"]; got != "preserve" {
+	if got := serviceAccount.Annotations["external.example.com/annotation"]; got != preservedMetadataValue {
 		t.Errorf("external annotation was not preserved: %q", got)
 	}
 	if got := serviceAccount.Labels["example.com/identity"]; got != "irsa" {
 		t.Errorf("configured label = %q, want irsa", got)
 	}
-	if got := serviceAccount.Labels["external.example.com/label"]; got != "preserve" {
+	if got := serviceAccount.Labels["external.example.com/label"]; got != preservedMetadataValue {
 		t.Errorf("external label was not preserved: %q", got)
 	}
 }
