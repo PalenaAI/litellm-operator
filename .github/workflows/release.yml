@@ -222,7 +222,15 @@ jobs:
 
       - name: Install scancode-toolkit
         run: |
-          python3 -m pip install --user scancode-toolkit==32.3.0
+          # click is bounded deliberately. scancode's option-dependency check
+          # (commoncode's PluggableCommandLineOption) misreads unset boolean
+          # flags as set on click 8.5.0, so every scancode invocation aborts with
+          # "--strip-root cannot be used together with --full-root". That broke
+          # the v0.23.0 release: scancode is pinned but its deps were not, and
+          # click 8.4.2 -> 8.5.0 was the only change between two identical runs.
+          # 32.5.0 fixes the incompatibility; the bound stops click 9.x doing it
+          # again, since scancode itself declares no upper bound.
+          python3 -m pip install --user scancode-toolkit==32.5.0 'click<9'
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run scancode-toolkit
