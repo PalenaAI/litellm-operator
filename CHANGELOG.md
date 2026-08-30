@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Bumped the Go toolchain to 1.26.7** (from 1.25.12) in `go.mod` and the `Dockerfile` builder image, clearing 7 HIGH stdlib CVEs reported by the weekly Trivy scan of the published image: CVE-2026-56862 (`crypto/tls`), CVE-2026-56860 (`net/url`), CVE-2026-56859 (`encoding/xml`), CVE-2026-56858 (`html/template`), CVE-2026-56853 (`net/http`), CVE-2026-39821 (vendored `golang.org/x/net/idna`) and CVE-2026-33818 (`encoding/asn1`). All are fixed in Go 1.25.13+/1.26.6+; the 1.25 series is end-of-life now that Go 1.27 has shipped, so the operator moves to the supported 1.26 branch rather than taking another 1.25 patch.
+
 ## [0.22.0] - 2026-08-01
 
 ### Added
