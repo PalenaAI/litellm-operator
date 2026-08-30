@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-08-30
+
 ### Added
 
 - **`LiteLLMInstance.spec.litellmSettings.checkProviderEndpoint`** ([#31](https://github.com/PalenaAI/litellm-operator/issues/31)) — writes `litellm_settings.check_provider_endpoint`, so a wildcard deployment is listed in `GET /v1/models` as the upstream's live model names instead of the literal pattern (or LiteLLM's static built-in list for that provider). Verified end to end on a Kind cluster: it applies to models registered through the API by `LiteLLMModel`, not only to models declared in the config file. Two caveats are documented: it is a global switch that makes every wildcard deployment call its upstream, and it only works for providers in LiteLLM's `models_by_provider` map — a wildcard backed by `litellm_proxy/*` never expands, so front another LiteLLM proxy with `openai/*` and its `/v1` base URL instead.
