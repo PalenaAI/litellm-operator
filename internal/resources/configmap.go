@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
@@ -72,6 +73,26 @@ func BuildConfigMap(instance *litellmv1alpha1.LiteLLMInstance, labels map[string
 // GenerateProxyConfig generates the proxy_server_config structure from the instance spec.
 // guardrails, when non-empty, are serialized into the top-level `guardrails` section.
 func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, guardrails []litellmv1alpha1.LiteLLMGuardrail) map[string]interface{} {
+	config, _ := GenerateProxyConfigWithConflicts(instance, guardrails)
+	return config
+}
+
+// ExtraSettingsConflicts returns the spec.generalSettings.extra and
+// spec.litellmSettings.extra keys that were ignored because the operator derives
+// them from elsewhere in the spec. Sorted, and prefixed with their config
+// section so the message names the exact key the user wrote.
+func ExtraSettingsConflicts(instance *litellmv1alpha1.LiteLLMInstance, guardrails []litellmv1alpha1.LiteLLMGuardrail) []string {
+	_, conflicts := GenerateProxyConfigWithConflicts(instance, guardrails)
+	return conflicts
+}
+
+// GenerateProxyConfigWithConflicts builds the proxy config and additionally
+// reports which raw `extra` keys were dropped in favour of an operator-computed
+// value. See GenerateProxyConfig.
+func GenerateProxyConfigWithConflicts(
+	instance *litellmv1alpha1.LiteLLMInstance,
+	guardrails []litellmv1alpha1.LiteLLMGuardrail,
+) (map[string]interface{}, []string) {
 	config := map[string]interface{}{
 		"model_list": []interface{}{},
 	}
@@ -90,11 +111,7 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 		ensureGeneralSettings(config)["database_connection_pool_limit"] = pool.MaxConnections
 	}
 
-	if ll := instance.Spec.LiteLLMSettings; ll != nil {
-		if ll.JSONLogs != nil {
-			ensureLiteLLMSettings(config)["json_logs"] = *ll.JSONLogs
-		}
-	}
+	buildLiteLLMSettings(instance.Spec.LiteLLMSettings, config)
 
 	if instance.Spec.Fallbacks != nil {
 		buildFallbackConfig(instance.Spec.Fallbacks, config)
@@ -152,7 +169,79 @@ func GenerateProxyConfig(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 
 	buildGuardrailsList(instance, guardrails, config)
 
-	return config
+	// Raw pass-through goes last so that anything the operator derived above
+	// wins. A colliding key is dropped rather than silently changing behaviour
+	// the rest of the spec already describes.
+	return config, applyAllExtraSettings(instance, config)
+}
+
+// applyAllExtraSettings merges spec.generalSettings.extra and
+// spec.litellmSettings.extra into their config sections, returning the keys that
+// were dropped because the operator computes them itself.
+func applyAllExtraSettings(instance *litellmv1alpha1.LiteLLMInstance, config map[string]interface{}) []string {
+	var conflicts []string
+	if gs := instance.Spec.GeneralSettings; gs != nil && len(gs.Extra) > 0 {
+		conflicts = append(conflicts,
+			prefixKeys("general_settings", applyExtraSettings(ensureGeneralSettings(config), gs.Extra))...)
+	}
+	if ll := instance.Spec.LiteLLMSettings; ll != nil && len(ll.Extra) > 0 {
+		conflicts = append(conflicts,
+			prefixKeys("litellm_settings", applyExtraSettings(ensureLiteLLMSettings(config), ll.Extra))...)
+	}
+	return conflicts
+}
+
+// buildLiteLLMSettings writes the directly-mapped litellm_settings toggles.
+// Each is written only when set: LiteLLM's own defaults apply otherwise, and
+// writing them unconditionally would churn the ConfigMap for every instance.
+func buildLiteLLMSettings(ll *litellmv1alpha1.LiteLLMSettingsSpec, config map[string]interface{}) {
+	if ll == nil {
+		return
+	}
+	if ll.JSONLogs != nil {
+		ensureLiteLLMSettings(config)["json_logs"] = *ll.JSONLogs
+	}
+	if ll.CheckProviderEndpoint != nil {
+		ensureLiteLLMSettings(config)["check_provider_endpoint"] = *ll.CheckProviderEndpoint
+	}
+}
+
+// applyExtraSettings merges raw user-supplied settings into a config section
+// without overwriting anything already there. Returns the sorted keys it
+// skipped, so the caller can tell the user which of their entries were ignored
+// instead of dropping them silently.
+func applyExtraSettings(section map[string]interface{}, extra map[string]apiextensionsv1.JSON) []string {
+	decoded := litellmv1alpha1.DecodeJSONParams(extra)
+	if len(decoded) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(decoded))
+	for k := range decoded {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var skipped []string
+	for _, k := range keys {
+		if _, taken := section[k]; taken {
+			skipped = append(skipped, k)
+			continue
+		}
+		section[k] = decoded[k]
+	}
+	return skipped
+}
+
+// prefixKeys qualifies bare setting keys with their config section.
+func prefixKeys(section string, keys []string) []string {
+	if len(keys) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, section+"."+k)
+	}
+	return out
 }
 
 // ensureLiteLLMSettings returns the litellm_settings map from config,

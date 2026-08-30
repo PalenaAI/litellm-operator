@@ -402,6 +402,7 @@ spec:
 | `globalMaxParallelRequests` | *int | Maximum parallel requests across the entire proxy |
 | `budgetReschedulerMinTime` | *int | Minimum interval (seconds) between budget reset checks |
 | `budgetReschedulerMaxTime` | *int | Maximum interval (seconds) between budget reset checks |
+| `extra` | map[string]JSON | Arbitrary keys passed straight through to `general_settings` (see [Raw settings passthrough](#raw-settings-passthrough)) |
 
 ### `routerSettings`
 
@@ -436,6 +437,64 @@ Settings rendered under `litellm_settings` in `proxy_server_config.yaml`.
 | Field | Type | Description |
 | --- | --- | --- |
 | `jsonLogs` | *bool | Emit structured JSON logs instead of plaintext (recommended for log aggregation) |
+| `checkProviderEndpoint` | *bool | Query each provider's own `/models` endpoint when serving `GET /v1/models`, so a wildcard deployment lists the upstream's real model names instead of the literal pattern |
+| `extra` | map[string]JSON | Arbitrary keys passed straight through to `litellm_settings` (see [Raw settings passthrough](#raw-settings-passthrough)) |
+
+#### Wildcard model discovery
+
+`checkProviderEndpoint` maps to `litellm_settings.check_provider_endpoint`. Without
+it, a wildcard deployment such as `up/*` is listed either as the literal pattern or
+expanded from LiteLLM's *static* built-in model list for that provider. With it, the
+proxy calls the upstream's `/models` endpoint and lists what is actually there:
+
+```yaml
+spec:
+  litellmSettings:
+    checkProviderEndpoint: true
+```
+
+```yaml
+# LiteLLMModel
+spec:
+  modelName: "up/*"
+  litellmParams:
+    model: "openai/*"
+    apiBase: https://upstream.example.com/v1
+    apiKeySecretRef: {name: upstream-key, key: api_key}
+```
+
+It applies to models registered through the API by `LiteLLMModel` as well as to any
+declared in the config file.
+
+Two caveats:
+
+- It is a **global switch**. Every wildcard deployment on the proxy is discovered
+  this way, and each discovery reaches out to the upstream (LiteLLM caches results).
+- It only works for providers in LiteLLM's `models_by_provider` map. Notably
+  **`litellm_proxy/*` is not one of them** — a wildcard backed by `litellm_proxy/*`
+  stays unexpanded no matter what this flag is set to. To front another LiteLLM
+  proxy, use `openai/*` with the upstream's `/v1` base URL, as above; a LiteLLM
+  proxy is OpenAI-compatible.
+
+### Raw settings passthrough
+
+`generalSettings.extra` and `litellmSettings.extra` pass arbitrary keys straight
+into their config sections, as an escape hatch for LiteLLM settings this CRD does
+not model yet:
+
+```yaml
+spec:
+  litellmSettings:
+    extra:
+      some_new_upstream_setting: true
+      nested_value: {a: [1, 2]}
+```
+
+Anything the operator derives from the rest of the spec always wins: a colliding
+key here is **ignored**, and the instance emits an `ExtraSettingsIgnored` warning
+event naming it. Prefer a typed field where one exists — settings placed here are
+neither validated nor documented by the operator, and a later release may add a
+typed field that starts taking precedence over your entry.
 
 ### `fallbacks`
 

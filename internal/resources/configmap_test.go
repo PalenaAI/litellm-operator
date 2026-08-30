@@ -18,6 +18,7 @@ package resources
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
@@ -2644,5 +2645,110 @@ func TestGenerateProxyConfig_SSODefaultUserParamsTeams(t *testing.T) {
 	}
 	if _, has := teams[0]["max_budget_in_team"]; has {
 		t.Error("team without budget should not have max_budget_in_team")
+	}
+}
+
+func TestGenerateProxyConfig_CheckProviderEndpoint(t *testing.T) {
+	on := true
+	instance := &litellmv1alpha1.LiteLLMInstance{
+		Spec: litellmv1alpha1.LiteLLMInstanceSpec{
+			LiteLLMSettings: &litellmv1alpha1.LiteLLMSettingsSpec{CheckProviderEndpoint: &on},
+		},
+	}
+	ls, ok := GenerateProxyConfig(instance, nil)["litellm_settings"].(map[string]interface{})
+	if !ok {
+		t.Fatal("litellm_settings missing")
+	}
+	if ls["check_provider_endpoint"] != true {
+		t.Errorf("check_provider_endpoint = %v, want true", ls["check_provider_endpoint"])
+	}
+
+	// Absent by default — the LiteLLM default is false, and writing it
+	// unconditionally would churn the ConfigMap hash for every existing instance.
+	empty := &litellmv1alpha1.LiteLLMInstance{}
+	if ls, ok := GenerateProxyConfig(empty, nil)["litellm_settings"].(map[string]interface{}); ok {
+		if _, present := ls["check_provider_endpoint"]; present {
+			t.Error("check_provider_endpoint written when unset")
+		}
+	}
+}
+
+func TestGenerateProxyConfig_ExtraPassthrough(t *testing.T) {
+	raw := func(s string) apiextensionsv1.JSON { return apiextensionsv1.JSON{Raw: []byte(s)} }
+	instance := &litellmv1alpha1.LiteLLMInstance{
+		Spec: litellmv1alpha1.LiteLLMInstanceSpec{
+			GeneralSettings: &litellmv1alpha1.GeneralSettingsSpec{
+				Extra: map[string]apiextensionsv1.JSON{"some_new_flag": raw(`"on"`)},
+			},
+			LiteLLMSettings: &litellmv1alpha1.LiteLLMSettingsSpec{
+				Extra: map[string]apiextensionsv1.JSON{
+					"modify_params":      raw(`true`),
+					"custom_nested":      raw(`{"a":[1,2]}`),
+					"request_timeout_ms": raw(`6000`),
+				},
+			},
+		},
+	}
+	config, conflicts := GenerateProxyConfigWithConflicts(instance, nil)
+	if len(conflicts) != 0 {
+		t.Fatalf("unexpected conflicts: %v", conflicts)
+	}
+
+	gs := config["general_settings"].(map[string]interface{})
+	if gs["some_new_flag"] != "on" {
+		t.Errorf("general_settings.some_new_flag = %v", gs["some_new_flag"])
+	}
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["modify_params"] != true {
+		t.Errorf("litellm_settings.modify_params = %v", ls["modify_params"])
+	}
+	if ls["request_timeout_ms"] != float64(6000) {
+		t.Errorf("litellm_settings.request_timeout_ms = %#v", ls["request_timeout_ms"])
+	}
+	// Arbitrary nested JSON must survive intact, not be flattened to a string.
+	nested, ok := ls["custom_nested"].(map[string]interface{})
+	if !ok || len(nested["a"].([]interface{})) != 2 {
+		t.Errorf("litellm_settings.custom_nested = %#v", ls["custom_nested"])
+	}
+}
+
+// An extra key that collides with a value the operator derives from the rest of
+// the spec must be dropped, not applied — and must be reported, so it does not
+// silently go missing from the rendered config.
+func TestGenerateProxyConfig_ExtraNeverOverridesDerivedSettings(t *testing.T) {
+	raw := func(s string) apiextensionsv1.JSON { return apiextensionsv1.JSON{Raw: []byte(s)} }
+	jsonLogs := true
+	instance := &litellmv1alpha1.LiteLLMInstance{
+		Spec: litellmv1alpha1.LiteLLMInstanceSpec{
+			LiteLLMSettings: &litellmv1alpha1.LiteLLMSettingsSpec{
+				JSONLogs: &jsonLogs,
+				Extra: map[string]apiextensionsv1.JSON{
+					"json_logs":        raw(`false`),
+					"success_callback": raw(`["nowhere"]`),
+					"harmless":         raw(`1`),
+				},
+			},
+			Callbacks: &litellmv1alpha1.CallbacksSpec{Types: []string{"langfuse"}},
+		},
+	}
+	config, conflicts := GenerateProxyConfigWithConflicts(instance, nil)
+
+	ls := config["litellm_settings"].(map[string]interface{})
+	if ls["json_logs"] != true {
+		t.Errorf("extra overrode the typed jsonLogs field: json_logs = %v", ls["json_logs"])
+	}
+	if got := ls["success_callback"].([]string); len(got) != 1 || got[0] != "langfuse" {
+		t.Errorf("extra overrode spec.callbacks: success_callback = %#v", ls["success_callback"])
+	}
+	if ls["harmless"] != float64(1) {
+		t.Errorf("non-colliding extra key was dropped: %#v", ls["harmless"])
+	}
+
+	want := []string{"litellm_settings.json_logs", "litellm_settings.success_callback"}
+	if !reflect.DeepEqual(conflicts, want) {
+		t.Errorf("conflicts = %v, want %v", conflicts, want)
+	}
+	if ic := ExtraSettingsConflicts(instance, nil); !reflect.DeepEqual(ic, want) {
+		t.Errorf("ExtraSettingsConflicts = %v, want %v", ic, want)
 	}
 }

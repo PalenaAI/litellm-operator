@@ -499,6 +499,13 @@ func (r *LiteLLMInstanceReconciler) reconcileConfigMap(ctx context.Context, inst
 	if err != nil {
 		return err
 	}
+	// Raw `extra` settings that collide with an operator-derived key are dropped.
+	// Say so, otherwise the config silently does not contain what was written.
+	if ignored := resources.ExtraSettingsConflicts(instance, guardrails); len(ignored) > 0 {
+		emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonExtraSettingsIgnored,
+			"Ignored %d extra setting(s) the operator derives from the spec: %s",
+			len(ignored), strings.Join(ignored, ", "))
+	}
 	if err := controllerutil.SetControllerReference(instance, desired, r.Scheme); err != nil {
 		return err
 	}

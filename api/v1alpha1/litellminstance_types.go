@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -865,6 +866,17 @@ type SaltKeySpec struct {
 
 // GeneralSettingsSpec defines LiteLLM general settings.
 type GeneralSettingsSpec struct {
+	// Extra passes arbitrary keys straight through to general_settings, as an
+	// escape hatch for LiteLLM settings this CRD does not model yet. Values are
+	// arbitrary JSON.
+	//
+	// Keys the operator computes itself always win: a colliding entry is ignored
+	// and reported as an ExtraSettingsIgnored warning event. Prefer a typed field
+	// where one exists — settings placed here are neither validated nor
+	// documented by the operator.
+	// +optional
+	Extra map[string]apiextensionsv1.JSON `json:"extra,omitempty"`
+
 	// Batch write interval in seconds.
 	// +optional
 	ProxyBatchWriteAt int `json:"proxyBatchWriteAt,omitempty"`
@@ -1059,6 +1071,32 @@ type LiteLLMSettingsSpec struct {
 	// for log aggregation in Kubernetes.
 	// +optional
 	JSONLogs *bool `json:"jsonLogs,omitempty"`
+
+	// CheckProviderEndpoint makes the proxy query each provider's own /models
+	// endpoint when serving GET /v1/models, so a wildcard deployment (e.g.
+	// "xai/*" or "litellm_proxy/*") is listed as the upstream's real model names
+	// instead of the literal wildcard pattern. Written to
+	// litellm_settings.check_provider_endpoint.
+	//
+	// This is a global switch: it applies to every wildcard deployment on the
+	// proxy, and each discovery call reaches out to the upstream provider
+	// (LiteLLM caches the result).
+	// +optional
+	CheckProviderEndpoint *bool `json:"checkProviderEndpoint,omitempty"`
+
+	// Extra passes arbitrary keys straight through to litellm_settings, as an
+	// escape hatch for LiteLLM settings this CRD does not model yet. Values are
+	// arbitrary JSON.
+	//
+	// Keys the operator computes itself always win: an entry here that collides
+	// with a setting derived from elsewhere in the spec (caching, callbacks,
+	// fallbacks, SSO, logging, defaultCustomerBudget, jsonLogs,
+	// checkProviderEndpoint, …) is ignored, and the instance reports an
+	// ExtraSettingsIgnored warning event naming it. Prefer a typed field where
+	// one exists — settings placed here are neither validated nor documented by
+	// the operator.
+	// +optional
+	Extra map[string]apiextensionsv1.JSON `json:"extra,omitempty"`
 }
 
 // ProviderBudget defines a spending limit for a single LLM provider.
