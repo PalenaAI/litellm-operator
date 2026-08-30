@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Annotations and labels on the generated virtual key Secret via `LiteLLMVirtualKey.spec.keySecretTemplate`** ([#27](https://github.com/PalenaAI/litellm-operator/issues/27)) — lets third-party controllers act on the Secret the operator mints, without an external mutating admission policy. The motivating case is [kubernetes-reflector](https://github.com/emberstack/kubernetes-reflector) mirroring the key into the namespace where the consuming application runs. Entries are merged, so annotations and labels added by other controllers are preserved; the operator's own labels win on conflict.
+
+### Fixed
+
+- **The generated key Secret is now reconciled on every pass, not only when the key is minted.** Previously the Secret was written once inside the mint branch, which had three consequences: metadata edits never reached an existing Secret, a hand-created Secret was filled in without an `ownerReference` (so it was never garbage collected with the CR, leaking the credential), and deleting the Secret left the `LiteLLMVirtualKey` permanently unusable because nothing recreated it.
+- **A deleted key Secret now rotates the key instead of failing silently.** LiteLLM stores only a hash, so the key material cannot be recovered; the operator deletes the orphaned key, mints a replacement, and emits a `KeySecretMissing` warning event. Absence is confirmed with an uncached read so a stale informer cache cannot destroy a working key.
+- **`spec.keySecretName` and `spec.keySecretTemplate` are excluded from the virtual key sync hash**, so editing Kubernetes-side Secret plumbing no longer triggers a pointless `POST /key/update`. `keySecretName` is also now explicitly pinned by `status.keySecretRef` once a key has been minted, matching the behaviour it already had, so that editing it cannot orphan the only copy of the key material.
+
 ### Security
 
 - **Bumped the Go toolchain to 1.26.7** (from 1.25.12) in `go.mod` and the `Dockerfile` builder image, clearing 7 HIGH stdlib CVEs reported by the weekly Trivy scan of the published image: CVE-2026-56862 (`crypto/tls`), CVE-2026-56860 (`net/url`), CVE-2026-56859 (`encoding/xml`), CVE-2026-56858 (`html/template`), CVE-2026-56853 (`net/http`), CVE-2026-39821 (vendored `golang.org/x/net/idna`) and CVE-2026-33818 (`encoding/asn1`). All are fixed in Go 1.25.13+/1.26.6+; the 1.25 series is end-of-life now that Go 1.27 has shipped, so the operator moves to the supported 1.26 branch rather than taking another 1.25 patch.

@@ -520,6 +520,17 @@ metadata:
             },
             "keyAlias": "engineering-ci-key",
             "keySecretName": "engineering-ci-api-key",
+            "keySecretTemplate": {
+              "annotations": {
+                "reflector.v1.k8s.emberstack.com/reflection-allowed": "true",
+                "reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces": "apps",
+                "reflector.v1.k8s.emberstack.com/reflection-auto-enabled": "true",
+                "reflector.v1.k8s.emberstack.com/reflection-auto-namespaces": "apps"
+              },
+              "labels": {
+                "app.kubernetes.io/part-of": "engineering-ci"
+              }
+            },
             "maxBudget": "100",
             "models": [
               "gpt-4o"
@@ -534,7 +545,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.22.0
-    createdAt: "2026-08-01T11:46:24Z"
+    createdAt: "2026-08-30T12:21:18Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -1169,9 +1180,17 @@ spec:
         path: keyAlias
       - description: |-
           Name for the Secret that stores the generated API key.
-          Defaults to "{name}-key".
+          Defaults to "{name}-key". Only honoured before the key is minted; once
+          status.keySecretRef is set the name is pinned, so that editing this field
+          cannot orphan the only copy of the key material.
         displayName: Key Secret Name
         path: keySecretName
+      - description: |-
+          Metadata to apply to the Secret that stores the generated API key, so that
+          third-party controllers can act on it (e.g. kubernetes-reflector mirroring
+          the Secret into the namespace of the consuming application).
+        displayName: Key Secret Template
+        path: keySecretTemplate
       - description: Maximum budget in USD.
         displayName: Max Budget
         path: maxBudget

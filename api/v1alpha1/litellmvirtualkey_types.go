@@ -115,10 +115,19 @@ type LiteLLMVirtualKeySpec struct {
 	MaxParallelRequests *int `json:"maxParallelRequests,omitempty"`
 
 	// Name for the Secret that stores the generated API key.
-	// Defaults to "{name}-key".
+	// Defaults to "{name}-key". Only honoured before the key is minted; once
+	// status.keySecretRef is set the name is pinned, so that editing this field
+	// cannot orphan the only copy of the key material.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Key Secret Name"
 	KeySecretName string `json:"keySecretName,omitempty"`
+
+	// Metadata to apply to the Secret that stores the generated API key, so that
+	// third-party controllers can act on it (e.g. kubernetes-reflector mirroring
+	// the Secret into the namespace of the consuming application).
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Key Secret Template"
+	KeySecretTemplate *KeySecretTemplateSpec `json:"keySecretTemplate,omitempty"`
 
 	// Guardrails to activate for this key. Each entry must match the
 	// guardrailName of a LiteLLMGuardrail CR bound to the same instance.
@@ -126,6 +135,24 @@ type LiteLLMVirtualKeySpec struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Guardrails"
 	Guardrails []string `json:"guardrails,omitempty"`
+}
+
+// KeySecretTemplateSpec defines metadata applied to the operator-managed Secret
+// holding the generated API key. Configured entries are applied and their values
+// reconciled; entries added by other controllers are preserved. Because merging
+// preserves what is already on the Secret, removing an entry here does not remove
+// it from the Secret — delete it from the Secret directly.
+type KeySecretTemplateSpec struct {
+	// Annotations to apply to the key Secret, for example
+	// reflector.v1.k8s.emberstack.com/reflection-allowed: "true" to have
+	// kubernetes-reflector mirror the Secret into another namespace.
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// Labels to apply to the key Secret. The operator's own labels take
+	// precedence on conflict.
+	// +optional
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // LiteLLMVirtualKeyStatus defines the observed state of LiteLLMVirtualKey.

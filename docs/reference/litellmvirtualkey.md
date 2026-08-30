@@ -50,7 +50,15 @@ spec:
 | `modelMaxBudget` | map[string]string | No | — | Per-model spending limits in USD (enterprise) |
 | `maxParallelRequests` | *int | No | — | Maximum concurrent requests for this key |
 | `guardrails` | []string | No | — | Names of [LiteLLMGuardrail](/reference/litellmguardrail) CRs this key opts into. Each entry must match `spec.guardrailName` on a guardrail bound to the same instance (enterprise) |
-| `keySecretName` | string | No | `{name}-key` | Name for the generated Secret |
+| `keySecretName` | string | No | `{name}-key` | Name for the generated Secret. Only honoured before the key is minted — once `status.keySecretRef` is set the name is pinned, so editing it cannot orphan the only copy of the key material |
+| `keySecretTemplate` | *KeySecretTemplateSpec | No | — | Annotations and labels to apply to the generated Secret, so third-party controllers can act on it |
+
+### KeySecretTemplateSpec
+
+| Field | Type | Required | Default | Description |
+| --- | --- | --- | --- | --- |
+| `annotations` | map[string]string | No | — | Annotations to apply to the key Secret |
+| `labels` | map[string]string | No | — | Labels to apply to the key Secret. The operator’s own labels win on conflict |
 
 ## Status Fields
 
@@ -98,3 +106,45 @@ data:
 ```
 
 See [Virtual Key Secrets](/guide/virtual-keys) for more details on lifecycle and garbage collection.
+
+## Annotating the Generated Secret
+
+`spec.keySecretTemplate` puts annotations and labels on the generated Secret, so
+that other controllers can act on it without an external mutating admission
+policy. A common use is [kubernetes-reflector](https://github.com/emberstack/kubernetes-reflector),
+which mirrors the Secret into the namespace where the consuming application runs:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMVirtualKey
+metadata:
+  name: eng-ci-key
+spec:
+  instanceRef:
+    name: my-gateway
+  keyAlias: eng-ci-key
+  keySecretTemplate:
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+      reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces: "apps"
+      reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
+      reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "apps"
+    labels:
+      app.kubernetes.io/part-of: checkout
+```
+
+Entries are merged, not replaced: annotations and labels added to the Secret by
+other controllers survive reconciliation. The flip side is that removing an entry
+from `keySecretTemplate` does not remove it from the Secret — delete it from the
+Secret directly.
+
+Mirroring a Secret copies a live credential across a namespace boundary. Scope
+`reflection-allowed-namespaces` to the namespaces that genuinely need the key.
+
+## If the Generated Secret Is Deleted
+
+LiteLLM stores only a hash of the key, so the material in the Secret is the only
+copy — it cannot be re-read from the API. If the Secret is deleted, the operator
+deletes the now-unusable key from LiteLLM, mints a replacement, and writes a fresh
+Secret, emitting a `KeySecretMissing` warning event. Consumers must re-read the
+Secret to pick up the new key.

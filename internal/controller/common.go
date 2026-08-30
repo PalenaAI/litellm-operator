@@ -101,6 +101,7 @@ const (
 	EventReasonInstanceNotReady   = "InstanceNotReady"
 	EventReasonSecretNotFound     = "SecretNotFound"
 	EventReasonSecretKeyMissing   = "SecretKeyMissing"
+	EventReasonKeySecretMissing   = "KeySecretMissing"
 	EventReasonValidationFailed   = "ValidationFailed"
 	EventReasonEnterpriseRequired = "EnterpriseLicenseRequired"
 	EventReasonHealthDegraded     = "HealthDegraded"

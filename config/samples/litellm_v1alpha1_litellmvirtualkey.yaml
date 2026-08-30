@@ -17,3 +17,13 @@ spec:
   budgetDuration: "30d"
   rpmLimit: 60
   keySecretName: engineering-ci-api-key
+  # Annotate the generated Secret so kubernetes-reflector mirrors it into the
+  # namespace where the consuming application runs.
+  keySecretTemplate:
+    annotations:
+      reflector.v1.k8s.emberstack.com/reflection-allowed: "true"
+      reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces: "apps"
+      reflector.v1.k8s.emberstack.com/reflection-auto-enabled: "true"
+      reflector.v1.k8s.emberstack.com/reflection-auto-namespaces: "apps"
+    labels:
+      app.kubernetes.io/part-of: engineering-ci

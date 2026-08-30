@@ -89,8 +89,32 @@ spec:
               keySecretName:
                 description: |-
                   Name for the Secret that stores the generated API key.
-                  Defaults to "{name}-key".
+                  Defaults to "{name}-key". Only honoured before the key is minted; once
+                  status.keySecretRef is set the name is pinned, so that editing this field
+                  cannot orphan the only copy of the key material.
                 type: string
+              keySecretTemplate:
+                description: |-
+                  Metadata to apply to the Secret that stores the generated API key, so that
+                  third-party controllers can act on it (e.g. kubernetes-reflector mirroring
+                  the Secret into the namespace of the consuming application).
+                properties:
+                  annotations:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Annotations to apply to the key Secret, for example
+                      reflector.v1.k8s.emberstack.com/reflection-allowed: "true" to have
+                      kubernetes-reflector mirror the Secret into another namespace.
+                    type: object
+                  labels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Labels to apply to the key Secret. The operator's own labels take
+                      precedence on conflict.
+                    type: object
+                type: object
               maxBudget:
                 description: Maximum budget in USD.
                 type: string
