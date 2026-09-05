@@ -113,11 +113,17 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	// Reconcile database migration status
 	r.reconcileMigrationStatus(ctx, &instance, labels)
 
-	// Reconcile all managed resources
-	reconcileErr := r.reconcileResources(ctx, &instance, labels, licenseSecretName, guardrails)
+	// Reconcile all managed resources. With spec.workload.managed=false the
+	// proxy belongs to something else (a Helm chart, a GitOps pipeline), so
+	// the operator creates nothing and adopts nothing — it only resolves the
+	// endpoint and master key the entity CRDs need.
+	var reconcileErr error
+	if workloadManaged(&instance) {
+		reconcileErr = r.reconcileResources(ctx, &instance, labels, licenseSecretName, guardrails)
 
-	// Auto-rollback: track successful deployment revision and rollback on failure
-	r.reconcileAutoRollback(ctx, &instance)
+		// Auto-rollback: track successful deployment revision and rollback on failure
+		r.reconcileAutoRollback(ctx, &instance)
+	}
 
 	// Update status
 	r.updateInstanceStatus(ctx, &instance, reconcileErr)
@@ -131,6 +137,29 @@ func (r *LiteLLMInstanceReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 // reconcileMigrationStatus reconciles the database migration job and updates the DatabaseReady condition.
 func (r *LiteLLMInstanceReconciler) reconcileMigrationStatus(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, labels map[string]string) {
 	log := logf.FromContext(ctx)
+
+	// An externally-managed proxy owns its own schema. LiteLLM migrates on
+	// startup, and whatever deployed it (a Helm chart, a GitOps pipeline) has
+	// its own migration hook — a second migrator would race the real one.
+	// Worse, the migration Job takes its image from spec.image.tag, which for
+	// an unmanaged instance describes nothing the operator deployed and
+	// defaults to "latest": the operator would run prisma at an arbitrary
+	// schema version against a database it does not own.
+	if !workloadManaged(instance) {
+		message := "Schema is owned by the externally-managed proxy"
+		if instance.Spec.Database.Migration != nil && instance.Spec.Database.Migration.Enabled {
+			message = "spec.database.migration is ignored while workload.managed is false; " +
+				"schema is owned by the externally-managed proxy"
+		}
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionDatabaseReady,
+			Status:             metav1.ConditionTrue,
+			Reason:             "WorkloadUnmanaged",
+			Message:            message,
+			ObservedGeneration: instance.Generation,
+		})
+		return
+	}
 
 	if instance.Spec.Database.Migration == nil || !instance.Spec.Database.Migration.Enabled {
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
@@ -1090,35 +1119,42 @@ func (r *LiteLLMInstanceReconciler) setPodsHealthyCondition(ctx context.Context,
 }
 
 func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance, reconcileErr error) {
-	// Fetch deployment status
-	var dep appsv1.Deployment
-	if err := r.Get(ctx, types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, &dep); err == nil {
-		instance.Status.Replicas = dep.Status.Replicas
-		instance.Status.ReadyReplicas = dep.Status.ReadyReplicas
-		instance.Status.Ready = dep.Status.ReadyReplicas > 0
+	// Set endpoint first — readiness of an unmanaged proxy is probed against
+	// it. When the proxy serves TLS the scheme is https; this is the single
+	// source of the URL every controller (and the health probes) uses to reach
+	// the admin API, so flipping it here makes all operator calls speak TLS.
+	instance.Status.Endpoint = instanceEndpoint(instance)
+
+	if workloadManaged(instance) {
+		// Fetch deployment status
+		var dep appsv1.Deployment
+		if err := r.Get(ctx, types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, &dep); err == nil {
+			instance.Status.Replicas = dep.Status.Replicas
+			instance.Status.ReadyReplicas = dep.Status.ReadyReplicas
+			instance.Status.Ready = dep.Status.ReadyReplicas > 0
+		}
+
+		// Explain pod-level faults behind an unready workload.
+		r.setPodsHealthyCondition(ctx, instance)
+	} else {
+		// No Deployment to look at: the proxy may be a StatefulSet, live in
+		// another namespace, or sit outside the cluster entirely. Answering
+		// the admin API is the readiness signal that holds in every case.
+		instance.Status.Ready = r.proxyReachable(ctx, instance)
+		instance.Status.Replicas = 0
+		instance.Status.ReadyReplicas = 0
+		instance.Status.UnhealthyPods = nil
+		meta.RemoveStatusCondition(&instance.Status.Conditions, ConditionPodsHealthy)
 	}
 
-	// Explain pod-level faults behind an unready workload.
-	r.setPodsHealthyCondition(ctx, instance)
-
-	// Set endpoint. When the proxy serves TLS the scheme is https — this is
-	// the single source of the URL every controller (and the health probes)
-	// uses to reach the admin API, so flipping it here makes all operator
-	// calls speak TLS.
-	port := instance.Spec.Service.Port
-	if port == 0 {
-		port = 4000
-	}
-	scheme := "http"
-	if instanceServesTLS(instance) {
-		scheme = "https"
-	}
-	instance.Status.Endpoint = fmt.Sprintf("%s://%s.%s.svc:%d", scheme, instance.Name, instance.Namespace, port)
-
-	// Set version
-	instance.Status.Version = instance.Spec.Image.Tag
-	if instance.Status.Version == "" {
-		instance.Status.Version = "latest"
+	// Set version. For an unmanaged proxy the image tag describes nothing the
+	// operator deployed, so the version is left to probeInstanceHealth, which
+	// reads the real one off /health/readiness.
+	if workloadManaged(instance) {
+		instance.Status.Version = instance.Spec.Image.Tag
+		if instance.Status.Version == "" {
+			instance.Status.Version = "latest"
+		}
 	}
 
 	// SSO status
@@ -1150,19 +1186,29 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 		emitEvent(r.Recorder, instance, corev1.EventTypeWarning, EventReasonReconcileFailed,
 			"Reconcile failed: %v", reconcileErr)
 	} else if instance.Status.Ready {
+		reason, message := "AllResourcesReady", "All managed resources are ready"
+		if !workloadManaged(instance) {
+			reason, message = "ProxyReachable",
+				fmt.Sprintf("Attached to externally-managed proxy at %s", instance.Status.Endpoint)
+		}
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
 			Status:             metav1.ConditionTrue,
-			Reason:             "AllResourcesReady",
-			Message:            "All managed resources are ready",
+			Reason:             reason,
+			Message:            message,
 			ObservedGeneration: instance.Generation,
 		})
 	} else {
+		reason, message := "DeploymentNotReady", "Waiting for deployment to become ready"
+		if !workloadManaged(instance) {
+			reason, message = "ProxyNotReachable",
+				fmt.Sprintf("Externally-managed proxy at %s did not answer", instance.Status.Endpoint)
+		}
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
 			Status:             metav1.ConditionFalse,
-			Reason:             "DeploymentNotReady",
-			Message:            "Waiting for deployment to become ready",
+			Reason:             reason,
+			Message:            message,
 			ObservedGeneration: instance.Generation,
 		})
 	}
@@ -1308,6 +1354,34 @@ func (r *LiteLLMInstanceReconciler) checkEnterpriseFeaturesWarning(instance *lit
 	}
 }
 
+// proxyReachable reports whether the LiteLLM admin API answers at
+// status.endpoint. This is the readiness signal for an instance whose workload
+// the operator does not manage, where there is no Deployment to inspect.
+//
+// ponytail: costs one extra liveness call per reconcile, because
+// probeInstanceHealth repeats it once this returns true. Fold the two together
+// if a 60s liveness request per instance ever matters.
+func (r *LiteLLMInstanceReconciler) proxyReachable(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) bool {
+	if r.LiteLLMClientFactory == nil {
+		return false
+	}
+	ref := masterKeyRef(instance)
+	if ref == nil {
+		return false
+	}
+	masterKey, err := getSecretValue(ctx, r.Client, instance.Namespace, ref)
+	if err != nil {
+		logf.FromContext(ctx).V(1).Info("cannot resolve master key for unmanaged proxy", "error", err)
+		return false
+	}
+
+	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	api := r.LiteLLMClientFactory(instance.Status.Endpoint, masterKey,
+		litellm.WithCACert(operatorProxyCACert(ctx, r.Client, instance)))
+	return api.Health().CheckLiveness(probeCtx) == nil
+}
+
 // probeInstanceHealth calls /health/liveliness and /health/readiness on the
 // running proxy, updates the Ready / RedisReady conditions, and emits
 // Kubernetes Events on transitions. The master key is resolved the same way
@@ -1316,17 +1390,11 @@ func (r *LiteLLMInstanceReconciler) checkEnterpriseFeaturesWarning(instance *lit
 func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, instance *litellmv1alpha1.LiteLLMInstance) {
 	log := logf.FromContext(ctx)
 
-	masterKeyRef := instance.Spec.MasterKey.SecretRef
-	if masterKeyRef == nil && instance.Spec.MasterKey.AutoGenerate {
-		masterKeyRef = &litellmv1alpha1.SecretKeyRef{
-			Name: instance.Name + "-master-key",
-			Key:  "master-key",
-		}
-	}
-	if masterKeyRef == nil {
+	ref := masterKeyRef(instance)
+	if ref == nil {
 		return
 	}
-	masterKey, err := getSecretValue(ctx, r.Client, instance.Namespace, masterKeyRef)
+	masterKey, err := getSecretValue(ctx, r.Client, instance.Namespace, ref)
 	if err != nil {
 		log.V(1).Info("health probe skipped, cannot resolve master key", "error", err)
 		return
@@ -1354,7 +1422,8 @@ func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, ins
 		return
 	}
 
-	if _, err := api.Health().Readiness(probeCtx); err != nil {
+	readiness, err := api.Health().Readiness(probeCtx)
+	if err != nil {
 		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
 			Type:               ConditionReady,
 			Status:             metav1.ConditionFalse,
@@ -1367,6 +1436,16 @@ func (r *LiteLLMInstanceReconciler) probeInstanceHealth(ctx context.Context, ins
 				"LiteLLM readiness probe failed: %v", err)
 		}
 		return
+	}
+
+	// For an unmanaged proxy there is no image tag the operator chose, so the
+	// only truthful version is the one the proxy reports. LiteLLM only puts
+	// litellm_version in the readiness payload when its own general_settings
+	// sets allow_public_health_readiness_details: true — the endpoint takes no
+	// auth, so the master key does not unlock it. Absent that, status.version
+	// stays empty, which is honest: the operator does not know.
+	if !workloadManaged(instance) && readiness != nil && readiness.LiteLLMVersion != "" {
+		instance.Status.Version = readiness.LiteLLMVersion
 	}
 
 	if !previouslyHealthy {

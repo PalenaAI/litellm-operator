@@ -287,6 +287,51 @@ spec:
 | `pullPolicy` | string | `IfNotPresent` | Image pull policy |
 | `pullSecrets` | []SecretRef | — | Image pull secrets |
 
+### `workload`
+
+Controls whether the operator provisions the proxy workload. Omit the block (the default) and the operator creates and owns the Deployment, Service, ConfigMap and ServiceAccount as it always has.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `managed` | bool | `true` | Whether the operator owns the proxy workload. Set `false` to attach to a deployment managed elsewhere |
+| `endpoint` | string | — | Base URL of the existing proxy, e.g. `http://litellm.platform.svc:4000`. Only valid when `managed` is `false`. Defaults to `http(s)://<metadata.name>.<namespace>.svc:<service.port>` |
+
+With `managed: false` the operator creates nothing and adopts nothing — no existing object is mutated, no owner reference added. It resolves an endpoint and a master key so the entity CRDs (`LiteLLMTeam`, `LiteLLMVirtualKey`, `LiteLLMBudget`, `LiteLLMModel`, ...) work against a proxy owned by a Helm chart, a GitOps pipeline or an internal platform.
+
+```yaml
+spec:
+  workload:
+    managed: false
+    endpoint: http://litellm.platform.svc:4000
+  masterKey:
+    secretRef:
+      name: litellm-master-key
+      key: LITELLM_MASTER_KEY
+  database: {}
+```
+
+Behaviour differences when unmanaged:
+
+| | Managed (default) | Unmanaged |
+| --- | --- | --- |
+| Deployment, Service, ConfigMap, ServiceAccount | Created and reconciled | Never touched |
+| Ingress, Route, HTTPRoute, HPA, PDB, NetworkPolicy, ServiceMonitor | Created when enabled | Never touched |
+| Auto-rollback (`spec.upgrade.autoRollback`) | Active | Skipped |
+| Database migration Job (`spec.database.migration`) | Created when enabled | Never — the proxy owns its schema |
+| `status.ready` | At least one Deployment replica ready | Admin API answers `/health/liveliness` at `status.endpoint` |
+| `status.replicas` / `readyReplicas` | Deployment counts | `0` |
+| `status.version` | `spec.image.tag` (or `latest`) | Empty, unless the proxy discloses `litellm_version` on `/health/readiness` |
+| `PodsHealthy` condition | Set | Absent — the operator owns no pods |
+| `DatabaseReady` condition reason | `MigrationSkipped` / `MigrationComplete` / … | `WorkloadUnmanaged` |
+| `Ready` condition reason | `AllResourcesReady` / `DeploymentNotReady` | `ProxyReachable` / `ProxyNotReachable` |
+| Health probing, config sync, entity CRDs, finalizer cleanup | Active | Active |
+
+`masterKey.autoGenerate` is not useful here: the operator would mint a key the running proxy has never seen. Reference the existing proxy's admin key with `masterKey.secretRef`.
+
+Database fields describe the proxy's own database and are only consumed when building the workload, so `database: {}` is the normal unmanaged value.
+
+`spec.database.migration` is ignored entirely. An externally-managed proxy owns its own schema: LiteLLM migrates on startup, and whatever deployed it has its own migration hook, so a second migrator would race the real one. The migration Job also takes its image from `spec.image.tag` — meaningless for a proxy the operator did not deploy, and defaulting to `latest` — which would run `prisma migrate deploy` at an arbitrary schema version against a database the operator does not own. `DatabaseReady` reports `WorkloadUnmanaged`, and says so explicitly if you configured a migration anyway.
+
 ### `replicas`
 
 | Field | Type | Default | Description |
@@ -835,11 +880,11 @@ Admin UI configuration. Controls UI availability, access restrictions, model per
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `ready` | bool | Whether the instance is fully ready |
-| `replicas` | int32 | Current replica count |
-| `readyReplicas` | int32 | Ready replica count |
-| `endpoint` | string | Internal cluster endpoint URL |
-| `version` | string | Current LiteLLM version |
+| `ready` | bool | Whether the instance is fully ready. Managed: at least one Deployment replica is serving. Unmanaged: the admin API answers at `endpoint` |
+| `replicas` | int32 | Current replica count (`0` when `workload.managed` is `false`) |
+| `readyReplicas` | int32 | Ready replica count (`0` when `workload.managed` is `false`) |
+| `endpoint` | string | Endpoint URL the operator uses to reach the admin API: `spec.workload.endpoint` when set, otherwise the derived in-cluster Service address |
+| `version` | string | Current LiteLLM version. Managed: `spec.image.tag`. Unmanaged: the `litellm_version` the proxy reports on `/health/readiness`, or empty — LiteLLM includes that field only when its `general_settings` sets `allow_public_health_readiness_details: true`, and the endpoint is unauthenticated so the master key does not unlock it |
 | `database` | DatabaseStatus | Database connection status |
 | `redis` | *RedisStatus | Redis connection status |
 | `configSync` | *ConfigSyncStatus | Config sync status and counts |

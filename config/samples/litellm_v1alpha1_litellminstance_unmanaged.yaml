@@ -1,0 +1,31 @@
+# Attaching to a LiteLLM proxy the operator did not deploy.
+#
+# With workload.managed=false the operator creates nothing — no Deployment,
+# Service, ConfigMap or ServiceAccount — and adopts nothing. It only resolves
+# an endpoint and a master key, which is all the entity CRDs (LiteLLMTeam,
+# LiteLLMVirtualKey, LiteLLMBudget, LiteLLMModel, ...) need. Use it when the
+# proxy is owned by a Helm chart, a GitOps pipeline or an internal platform.
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMInstance
+metadata:
+  labels:
+    app.kubernetes.io/name: litellm-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: litellminstance-unmanaged-sample
+spec:
+  workload:
+    managed: false
+    # Optional. Defaults to http(s)://<metadata.name>.<namespace>.svc:<service.port>,
+    # which requires this CR to be named after the existing Service. Set it to
+    # attach to a Service under another name or namespace, or to a proxy
+    # outside the cluster.
+    endpoint: http://litellm.platform.svc:4000
+
+  # The operator needs the admin key of the existing proxy to manage entities.
+  masterKey:
+    secretRef:
+      name: litellm-master-key
+      key: LITELLM_MASTER_KEY
+
+  # The existing proxy owns its own database; nothing to configure here.
+  database: {}

@@ -90,4 +90,51 @@ var _ = Describe("LiteLLMInstance Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
+
+	// spec.workload.endpoint is only meaningful for a proxy the operator does
+	// not deploy; a CEL rule on the CRD enforces that. Exercised here because
+	// only envtest runs API-server validation.
+	Context("When validating spec.workload", func() {
+		ctx := context.Background()
+
+		instanceWith := func(name string, workload *litellmv1alpha1.WorkloadSpec) *litellmv1alpha1.LiteLLMInstance {
+			return &litellmv1alpha1.LiteLLMInstance{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				Spec: litellmv1alpha1.LiteLLMInstanceSpec{
+					Workload:  workload,
+					MasterKey: litellmv1alpha1.MasterKeySpec{SecretRef: &litellmv1alpha1.SecretKeyRef{Name: "mk", Key: "k"}},
+				},
+			}
+		}
+
+		It("should reject an endpoint on a managed workload", func() {
+			err := k8sClient.Create(ctx, instanceWith("wl-managed-endpoint", &litellmv1alpha1.WorkloadSpec{
+				Managed: boolPtr(true), Endpoint: "http://litellm.platform.svc:4000",
+			}))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("workload.endpoint is only valid when workload.managed is false"))
+		})
+
+		It("should accept an endpoint on an unmanaged workload", func() {
+			resource := instanceWith("wl-unmanaged-endpoint", &litellmv1alpha1.WorkloadSpec{
+				Managed: boolPtr(false), Endpoint: "http://litellm.platform.svc:4000",
+			})
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, resource)).To(Succeed()) })
+		})
+
+		It("should reject an endpoint that is not an http(s) URL", func() {
+			err := k8sClient.Create(ctx, instanceWith("wl-bad-scheme", &litellmv1alpha1.WorkloadSpec{
+				Managed: boolPtr(false), Endpoint: "litellm.platform.svc:4000",
+			}))
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should default workload.managed to true", func() {
+			resource := instanceWith("wl-default", &litellmv1alpha1.WorkloadSpec{})
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, resource)).To(Succeed()) })
+			Expect(resource.Spec.Workload.Managed).To(HaveValue(BeTrue()))
+		})
+	})
 })
