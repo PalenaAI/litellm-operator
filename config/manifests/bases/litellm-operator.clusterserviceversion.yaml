@@ -390,6 +390,12 @@ spec:
       - description: Upgrade strategy configuration.
         displayName: Upgrade
         path: upgrade
+      - description: |-
+          Workload controls whether the operator provisions the proxy workload.
+          Omit it (the default) to have the operator create and own the
+          Deployment, Service, ConfigMap and ServiceAccount as usual.
+        displayName: Workload
+        path: workload
       statusDescriptors:
       - description: |-
           UnhealthyPods explains why proxy pods are not running — crash loops, image

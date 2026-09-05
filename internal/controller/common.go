@@ -160,14 +160,7 @@ func resolveInstance(
 		return nil, fmt.Errorf("instance %q is not ready", ref.Name)
 	}
 
-	masterKeyRef := instance.Spec.MasterKey.SecretRef
-	if masterKeyRef == nil && instance.Spec.MasterKey.AutoGenerate {
-		masterKeyRef = &litellmv1alpha1.SecretKeyRef{
-			Name: instance.Name + "-master-key",
-			Key:  "master-key",
-		}
-	}
-	masterKey, err := getSecretValue(ctx, c, namespace, masterKeyRef)
+	masterKey, err := getSecretValue(ctx, c, namespace, masterKeyRef(&instance))
 	if err != nil {
 		return nil, fmt.Errorf("get master key: %w", err)
 	}
@@ -178,6 +171,49 @@ func resolveInstance(
 		CACert:    operatorProxyCACert(ctx, c, &instance),
 		Instance:  &instance,
 	}, nil
+}
+
+// masterKeyRef returns the Secret reference holding the admin master key,
+// falling back to the Secret the operator generates when autoGenerate is set.
+// Returns nil when neither is configured.
+func masterKeyRef(instance *litellmv1alpha1.LiteLLMInstance) *litellmv1alpha1.SecretKeyRef {
+	if ref := instance.Spec.MasterKey.SecretRef; ref != nil {
+		return ref
+	}
+	if instance.Spec.MasterKey.AutoGenerate {
+		return &litellmv1alpha1.SecretKeyRef{
+			Name: instance.Name + "-master-key",
+			Key:  "master-key",
+		}
+	}
+	return nil
+}
+
+// workloadManaged reports whether the operator provisions the proxy workload.
+// Absent spec.workload means managed, so instances written before the field
+// existed keep their behaviour.
+func workloadManaged(instance *litellmv1alpha1.LiteLLMInstance) bool {
+	w := instance.Spec.Workload
+	return w == nil || w.Managed == nil || *w.Managed
+}
+
+// instanceEndpoint returns the base URL every controller and health probe uses
+// to reach the admin API: the explicit spec.workload.endpoint when attaching to
+// an externally-managed proxy, otherwise the in-cluster Service address derived
+// from the instance name.
+func instanceEndpoint(instance *litellmv1alpha1.LiteLLMInstance) string {
+	if w := instance.Spec.Workload; w != nil && w.Endpoint != "" {
+		return w.Endpoint
+	}
+	port := instance.Spec.Service.Port
+	if port == 0 {
+		port = 4000
+	}
+	scheme := "http"
+	if instanceServesTLS(instance) {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s.%s.svc:%d", scheme, instance.Name, instance.Namespace, port)
 }
 
 // instanceServesTLS reports whether the proxy is configured to serve HTTPS.

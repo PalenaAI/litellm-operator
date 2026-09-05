@@ -28,6 +28,13 @@ type LiteLLMInstanceSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Image"
 	Image ImageSpec `json:"image,omitempty"`
 
+	// Workload controls whether the operator provisions the proxy workload.
+	// Omit it (the default) to have the operator create and own the
+	// Deployment, Service, ConfigMap and ServiceAccount as usual.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Workload"
+	Workload *WorkloadSpec `json:"workload,omitempty"`
+
 	// Number of LiteLLM proxy replicas.
 	// +kubebuilder:default=1
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Replicas"
@@ -611,6 +618,36 @@ type ImageSpec struct {
 	// Image pull secrets.
 	// +optional
 	PullSecrets []SecretRef `json:"pullSecrets,omitempty"`
+}
+
+// WorkloadSpec controls whether the operator provisions the LiteLLM proxy
+// workload, or merely attaches to one that already exists.
+//
+// With managed=false the operator creates nothing: no Deployment, Service,
+// ConfigMap, ServiceAccount or optional resource is reconciled, and no
+// existing object is adopted or mutated. The instance still resolves an
+// endpoint and a master key, so the entity CRDs (LiteLLMTeam,
+// LiteLLMVirtualKey, LiteLLMBudget, LiteLLMModel, ...) work against a proxy
+// deployed by a Helm chart, a GitOps pipeline or anything else.
+// +kubebuilder:validation:XValidation:rule="!has(self.endpoint) || (has(self.managed) && !self.managed)",message="workload.endpoint is only valid when workload.managed is false"
+type WorkloadSpec struct {
+	// Managed indicates the operator owns the proxy workload. Set false to
+	// attach to a deployment managed elsewhere. Defaults to true, including
+	// when unset, so an omitted field never silently orphans a workload.
+	// +optional
+	// +kubebuilder:default=true
+	Managed *bool `json:"managed,omitempty"`
+
+	// Endpoint is the base URL of the existing proxy, e.g.
+	// "http://litellm.platform.svc:4000". Only valid when managed is false.
+	// Defaults to the in-cluster Service address derived from the instance
+	// name, namespace and spec.service.port, which requires this CR to be
+	// named after the existing Service. Set it explicitly to attach to a
+	// Service under a different name, in another namespace, or to a proxy
+	// outside the cluster.
+	// +optional
+	// +kubebuilder:validation:Pattern=`^https?://[^\s/?#]+`
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 // AutoscalingSpec defines horizontal pod autoscaling settings.

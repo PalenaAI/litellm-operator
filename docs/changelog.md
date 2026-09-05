@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`LiteLLMInstance.spec.workload.managed: false`** ([#29](https://github.com/PalenaAI/litellm-operator/issues/29)) — attaches an instance to a LiteLLM proxy the operator did not deploy, so the entity CRDs (`LiteLLMTeam`, `LiteLLMVirtualKey`, `LiteLLMBudget`, `LiteLLMModel`, ...) can be used against a proxy owned by a Helm chart, a GitOps pipeline or an internal platform. Workload reconciliation and auto-rollback are skipped entirely: nothing is created, and no existing object is adopted or mutated, replacing the RBAC-denial workaround that left the instance permanently `Degraded` while it worked. `spec.database.migration` is ignored: an externally-managed proxy owns its own schema, and the migration Job would otherwise run `prisma migrate deploy` from `spec.image.tag` (defaulting to `latest`) against a database the operator does not own. Health probing, config sync, and finalizer-based cleanup of upstream entities are unaffected.
+- **`LiteLLMInstance.spec.workload.endpoint`** — sets the admin API URL explicitly instead of deriving `http(s)://<metadata.name>.<namespace>.svc:<service.port>`, so an unmanaged instance no longer has to be named after a Service it does not own, and can attach to a proxy in another namespace or outside the cluster. Valid only when `managed` is `false`; rejected by a CEL rule otherwise. Readiness for an unmanaged instance now comes from the admin API answering at that endpoint rather than from a name-matched Deployment, which also makes a StatefulSet-backed or off-cluster proxy work; the `Ready` condition reports `ProxyReachable` / `ProxyNotReachable` and no `PodsHealthy` condition is set, because the operator owns no pods. `status.version` is left empty instead of echoing `spec.image.tag`, which describes nothing the operator deployed; it is filled in only when the proxy discloses `litellm_version` on `/health/readiness` (LiteLLM gates that behind its own `allow_public_health_readiness_details`).
+
 ## [0.23.0] - 2026-08-30
 
 ### Added

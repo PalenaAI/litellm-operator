@@ -4578,6 +4578,35 @@ spec:
                     - recreate
                     type: string
                 type: object
+              workload:
+                description: |-
+                  Workload controls whether the operator provisions the proxy workload.
+                  Omit it (the default) to have the operator create and own the
+                  Deployment, Service, ConfigMap and ServiceAccount as usual.
+                properties:
+                  endpoint:
+                    description: |-
+                      Endpoint is the base URL of the existing proxy, e.g.
+                      "http://litellm.platform.svc:4000". Only valid when managed is false.
+                      Defaults to the in-cluster Service address derived from the instance
+                      name, namespace and spec.service.port, which requires this CR to be
+                      named after the existing Service. Set it explicitly to attach to a
+                      Service under a different name, in another namespace, or to a proxy
+                      outside the cluster.
+                    pattern: ^https?://[^\s/?#]+
+                    type: string
+                  managed:
+                    default: true
+                    description: |-
+                      Managed indicates the operator owns the proxy workload. Set false to
+                      attach to a deployment managed elsewhere. Defaults to true, including
+                      when unset, so an omitted field never silently orphans a workload.
+                    type: boolean
+                type: object
+                x-kubernetes-validations:
+                - message: workload.endpoint is only valid when workload.managed is
+                    false
+                  rule: '!has(self.endpoint) || (has(self.managed) && !self.managed)'
             required:
             - database
             - masterKey
