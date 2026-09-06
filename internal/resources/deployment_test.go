@@ -113,6 +113,27 @@ func TestBuildDeployment_NoDeploymentAnnotationsByDefault(t *testing.T) {
 	}
 }
 
+func TestBuildDeployment_PodScheduling(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PodScheduling = &litellmv1alpha1.PodSchedulingSpec{
+		NodeSelector: map[string]string{"kubernetes.io/arch": "arm64"},
+		Tolerations: []corev1.Toleration{{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}},
+	}
+
+	podSpec := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil).Spec.Template.Spec
+	if got := podSpec.NodeSelector["kubernetes.io/arch"]; got != "arm64" {
+		t.Errorf("expected arm64 node selector, got %q", got)
+	}
+	if len(podSpec.Tolerations) != 1 || podSpec.Tolerations[0].Effect != corev1.TaintEffectNoSchedule {
+		t.Errorf("expected configured toleration, got %#v", podSpec.Tolerations)
+	}
+}
+
 func TestBuildDeployment_LicenseSecretChangesTemplate(t *testing.T) {
 	instance := newTestInstance()
 	labels := map[string]string{"app": "litellm"}
