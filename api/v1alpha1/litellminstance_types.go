@@ -95,6 +95,11 @@ type LiteLLMInstanceSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Deployment"
 	Deployment *DeploymentSpec `json:"deployment,omitempty"`
 
+	// PodScheduling configures scheduling for LiteLLM proxy Pods.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Pod Scheduling"
+	PodScheduling *PodSchedulingSpec `json:"podScheduling,omitempty"`
+
 	// Ingress configuration.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Ingress"
@@ -1162,6 +1167,17 @@ type DeploymentSpec struct {
 	// preserved.
 	// +optional
 	Annotations map[string]string `json:"annotations,omitempty"`
+}
+
+// PodSchedulingSpec configures node placement for LiteLLM proxy Pods.
+type PodSchedulingSpec struct {
+	// NodeSelector selects the nodes where LiteLLM proxy Pods may run.
+	// +optional
+	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
+
+	// Tolerations allows LiteLLM proxy Pods to run on matching tainted nodes.
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }
 
 // IngressSpec defines Ingress configuration.

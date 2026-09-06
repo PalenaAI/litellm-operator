@@ -19,6 +19,7 @@ package resources
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -277,6 +278,10 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 
 	if len(instance.Spec.TopologySpreadConstraints) > 0 {
 		dep.Spec.Template.Spec.TopologySpreadConstraints = instance.Spec.TopologySpreadConstraints
+	}
+	if scheduling := instance.Spec.PodScheduling; scheduling != nil {
+		dep.Spec.Template.Spec.NodeSelector = maps.Clone(scheduling.NodeSelector)
+		dep.Spec.Template.Spec.Tolerations = slices.Clone(scheduling.Tolerations)
 	}
 
 	return dep
