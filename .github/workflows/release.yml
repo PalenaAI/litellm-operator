@@ -80,8 +80,10 @@ jobs:
       - name: Derive version and image names
         id: vars
         run: |
-          repo_lc=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           owner_lc=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          # The legacy litellm-operator package is not connected to this fork,
+          # so its package ACL cannot grant this workflow write access.
+          repo_lc="${owner_lc}/litellm-operator-fork"
           {
             echo "VERSION=${GITHUB_REF_NAME#v}"
             echo "IMAGE=${REGISTRY}/${repo_lc}"
