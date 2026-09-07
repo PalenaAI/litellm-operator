@@ -174,7 +174,7 @@ jobs:
           echo "${GHCR_TOKEN}" | helm registry login \
             "${REGISTRY}" --username "${GHCR_USER}" --password-stdin
           helm push "/tmp/helm/litellm-operator-${VERSION}.tgz" \
-            "oci://${REGISTRY}/${OWNER_LC}/charts"
+            "oci://${REGISTRY}/${OWNER_LC}/charts-litellm-operator-fork"
 
       - name: Install Trivy
         env:
