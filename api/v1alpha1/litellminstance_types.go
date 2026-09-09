@@ -95,7 +95,8 @@ type LiteLLMInstanceSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Deployment"
 	Deployment *DeploymentSpec `json:"deployment,omitempty"`
 
-	// PodScheduling configures scheduling for LiteLLM proxy Pods.
+	// PodScheduling configures node placement for operator-managed LiteLLM Pods,
+	// including proxy Deployment Pods and database migration Job Pods.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Pod Scheduling"
 	PodScheduling *PodSchedulingSpec `json:"podScheduling,omitempty"`
@@ -1169,13 +1170,13 @@ type DeploymentSpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
-// PodSchedulingSpec configures node placement for LiteLLM proxy Pods.
+// PodSchedulingSpec configures node placement for operator-managed LiteLLM Pods.
 type PodSchedulingSpec struct {
-	// NodeSelector selects the nodes where LiteLLM proxy Pods may run.
+	// NodeSelector selects the nodes where LiteLLM Pods may run.
 	// +optional
 	NodeSelector map[string]string `json:"nodeSelector,omitempty"`
 
-	// Tolerations allows LiteLLM proxy Pods to run on matching tainted nodes.
+	// Tolerations allows LiteLLM Pods to run on matching tainted nodes.
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 }

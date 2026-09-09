@@ -19,7 +19,10 @@ package resources
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -161,6 +164,22 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 		jobHashSeed = "gateway|" + image + "|" + migrateDeployCommand
 	}
 
+	// A Job Pod template is immutable. Include placement in its name seed so a
+	// placement change creates a new Job instead of reusing a pending Job with
+	// the old unschedulable template.
+	if scheduling := instance.Spec.PodScheduling; scheduling != nil {
+		schedulingSeed, err := json.Marshal(struct {
+			NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
+			Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
+		}{
+			NodeSelector: scheduling.NodeSelector,
+			Tolerations:  scheduling.Tolerations,
+		})
+		if err == nil {
+			jobHashSeed += "|scheduling=" + string(schedulingSeed)
+		}
+	}
+
 	// Include the command/image-selection in the hash so toggling
 	// useDatabaseImage (or upgrading from the legacy db-push command on a
 	// pre-v0.12 operator) triggers a fresh Job rather than colliding with
@@ -209,6 +228,13 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: s.Name})
 	}
 
+	var nodeSelector map[string]string
+	var tolerations []corev1.Toleration
+	if scheduling := instance.Spec.PodScheduling; scheduling != nil {
+		nodeSelector = maps.Clone(scheduling.NodeSelector)
+		tolerations = slices.Clone(scheduling.Tolerations)
+	}
+
 	return &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -225,6 +251,8 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 				Spec: corev1.PodSpec{
 					RestartPolicy:    corev1.RestartPolicyOnFailure,
 					ImagePullSecrets: imagePullSecrets,
+					NodeSelector:     nodeSelector,
+					Tolerations:      tolerations,
 					Containers: []corev1.Container{
 						{
 							Name:            "migrate",
