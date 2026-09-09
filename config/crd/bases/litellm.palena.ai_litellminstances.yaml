@@ -3572,17 +3572,18 @@ spec:
                 - enabled
                 type: object
               podScheduling:
-                description: PodScheduling configures scheduling for LiteLLM proxy
-                  Pods.
+                description: |-
+                  PodScheduling configures node placement for operator-managed LiteLLM Pods,
+                  including proxy Deployment Pods and database migration Job Pods.
                 properties:
                   nodeSelector:
                     additionalProperties:
                       type: string
-                    description: NodeSelector selects the nodes where LiteLLM proxy
-                      Pods may run.
+                    description: NodeSelector selects the nodes where LiteLLM Pods
+                      may run.
                     type: object
                   tolerations:
-                    description: Tolerations allows LiteLLM proxy Pods to run on matching
+                    description: Tolerations allows LiteLLM Pods to run on matching
                       tainted nodes.
                     items:
                       description: |-

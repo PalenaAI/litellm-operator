@@ -545,7 +545,7 @@ metadata:
     capabilities: Deep Insights
     categories: AI/Machine Learning
     containerImage: ghcr.io/palenaai/litellm-operator:v0.23.0
-    createdAt: "2026-08-30T14:56:20Z"
+    createdAt: "2026-09-09T05:42:52Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
@@ -845,6 +845,11 @@ spec:
       - description: Pod disruption budget configuration.
         displayName: Pod Disruption Budget
         path: podDisruptionBudget
+      - description: |-
+          PodScheduling configures node placement for operator-managed LiteLLM Pods,
+          including proxy Deployment Pods and database migration Job Pods.
+        displayName: Pod Scheduling
+        path: podScheduling
       - description: |-
           Role-based access control configuration.
           Controls route restrictions, key generation permissions, and per-role access.

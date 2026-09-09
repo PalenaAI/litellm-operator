@@ -83,6 +83,15 @@ spec:
     annotations:
       reloader.stakater.com/auto: "true"
 
+  podScheduling:
+    nodeSelector:
+      kubernetes.io/arch: arm64
+    tolerations:
+      - key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+        effect: NoSchedule
+
   ingress:
     enabled: true
     host: litellm.example.com
@@ -330,6 +339,15 @@ The migration Job runs `prisma migrate deploy` (applying LiteLLM's versioned mig
 | `timeout` | string | `"300s"` | Migration Job timeout |
 | `useDatabaseImage` | bool | `false` | Run LiteLLM's dedicated `litellm-migrations` migrations image instead of `prisma migrate deploy` in the gateway image. When `true`, **only** the database image runs — the operator does not also invoke prisma inside the gateway image |
 | `databaseImage` | *DatabaseImageSpec | — | Override repo/tag/pullPolicy for the database image. Only consulted when `useDatabaseImage: true`. Repo defaults to `ghcr.io/berriai/litellm-migrations`; tag defaults to `spec.image.tag` so versions stay aligned |
+
+### `podScheduling`
+
+Node placement applied consistently to the proxy Deployment Pods and the database migration Job Pod. Changing it creates a fresh migration Job because Kubernetes does not allow its Pod template to be modified in place.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `nodeSelector` | map[string]string | Node labels required by LiteLLM Pods |
+| `tolerations` | []Toleration | Taints LiteLLM Pods may tolerate |
 
 **When to enable `useDatabaseImage`:**
 

@@ -17,8 +17,11 @@ limitations under the License.
 package resources
 
 import (
+	"reflect"
 	"strings"
 	"testing"
+
+	corev1 "k8s.io/api/core/v1"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 )
@@ -179,6 +182,36 @@ func TestBuildMigrationJob_ToggleProducesDistinctJobNames(t *testing.T) {
 
 	if gatewayJob.Name == dbImageJob.Name {
 		t.Errorf("job names must differ across migration modes; both got %q", gatewayJob.Name)
+	}
+}
+
+func TestBuildMigrationJob_PodScheduling(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Image.Tag = testGatewayTag
+	withoutScheduling := BuildMigrationJob(instance, nil)
+	instance.Spec.PodScheduling = &litellmv1alpha1.PodSchedulingSpec{
+		NodeSelector: map[string]string{
+			"cloud.google.com/gke-nodepool": "general-arm64",
+			"kubernetes.io/arch":            "arm64",
+		},
+		Tolerations: []corev1.Toleration{{
+			Key:      "kubernetes.io/arch",
+			Operator: corev1.TolerationOpEqual,
+			Value:    "arm64",
+			Effect:   corev1.TaintEffectNoSchedule,
+		}},
+	}
+
+	job := BuildMigrationJob(instance, nil)
+	podSpec := job.Spec.Template.Spec
+	if !reflect.DeepEqual(podSpec.NodeSelector, instance.Spec.PodScheduling.NodeSelector) {
+		t.Errorf("migration Job node selector = %#v, want %#v", podSpec.NodeSelector, instance.Spec.PodScheduling.NodeSelector)
+	}
+	if !reflect.DeepEqual(podSpec.Tolerations, instance.Spec.PodScheduling.Tolerations) {
+		t.Errorf("migration Job tolerations = %#v, want %#v", podSpec.Tolerations, instance.Spec.PodScheduling.Tolerations)
+	}
+	if job.Name == withoutScheduling.Name {
+		t.Errorf("scheduling change must produce a distinct Job name; both got %q", job.Name)
 	}
 }
 

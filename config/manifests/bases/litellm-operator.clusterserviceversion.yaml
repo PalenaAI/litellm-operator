@@ -333,6 +333,11 @@ spec:
         displayName: Pod Disruption Budget
         path: podDisruptionBudget
       - description: |-
+          PodScheduling configures node placement for operator-managed LiteLLM Pods,
+          including proxy Deployment Pods and database migration Job Pods.
+        displayName: Pod Scheduling
+        path: podScheduling
+      - description: |-
           Role-based access control configuration.
           Controls route restrictions, key generation permissions, and per-role access.
           Some features (key_generation_settings, role_permissions) require a LiteLLM Enterprise license.
