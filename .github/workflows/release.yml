@@ -88,6 +88,7 @@ jobs:
             echo "VERSION=${GITHUB_REF_NAME#v}"
             echo "IMAGE=${REGISTRY}/${repo_lc}"
             echo "BUNDLE=${REGISTRY}/${repo_lc}-bundle"
+            echo "CATALOG=${REGISTRY}/${repo_lc}-catalog"
             echo "OWNER_LC=${owner_lc}"
           } >> "$GITHUB_OUTPUT"
 
@@ -158,6 +159,51 @@ jobs:
       - name: Sign bundle image (cosign keyless)
         env:
           IMG_REF: ${{ steps.vars.outputs.BUNDLE }}@${{ steps.build-bundle.outputs.digest }}
+        run: cosign sign --yes "$IMG_REF"
+
+      - name: Generate and validate file-based catalog
+        env:
+          BUNDLE: ${{ steps.vars.outputs.BUNDLE }}:${{ github.ref_name }}
+          VERSION: ${{ steps.vars.outputs.VERSION }}
+        run: |
+          mkdir -p catalog-configs
+          make opm
+          ./bin/opm render bundle --output yaml > catalog-configs/bundle.yaml
+          perl -0pi -e "s|image: \"\"|image: ${BUNDLE}|" catalog-configs/bundle.yaml
+          printf '%s\n' \
+            '---' \
+            'defaultChannel: alpha' \
+            'name: litellm-operator' \
+            'schema: olm.package' > catalog-configs/package.yaml
+          printf '%s\n' \
+            '---' \
+            'entries:' \
+            "  - name: litellm-operator.v${VERSION}" \
+            'name: alpha' \
+            'package: litellm-operator' \
+            'schema: olm.channel' > catalog-configs/channel.yaml
+          ./bin/opm validate catalog-configs
+          ./bin/opm generate dockerfile catalog-configs \
+            --base-image quay.io/operator-framework/opm:v1.55.0 \
+            --builder-image quay.io/operator-framework/opm:v1.55.0
+
+      - name: Build and push file-based catalog image
+        id: build-catalog
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        with:
+          context: .
+          file: ./catalog-configs.Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ${{ steps.vars.outputs.CATALOG }}:${{ github.ref_name }}
+            ${{ steps.vars.outputs.CATALOG }}:latest
+
+      - name: Sign file-based catalog image (cosign keyless)
+        env:
+          IMG_REF: ${{ steps.vars.outputs.CATALOG }}@${{ steps.build-catalog.outputs.digest }}
         run: cosign sign --yes "$IMG_REF"
 
       - name: Package and push Helm chart to GHCR (OCI)
