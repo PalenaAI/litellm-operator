@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`LiteLLMInstance.spec.podScheduling`** ([#33](https://github.com/PalenaAI/litellm-operator/pull/33), [#35](https://github.com/PalenaAI/litellm-operator/pull/35)) — node placement for operator-managed Pods, applied to both the proxy Deployment and the database migration Job so the migration cannot be scheduled somewhere the proxy is not allowed to run. Because a Job's Pod template is immutable, placement is part of the migration Job's name seed: changing it creates a fresh Job instead of leaving a pending one pinned to an unschedulable template.
+  - `nodeSelector` — node labels required by LiteLLM Pods.
+  - `tolerations` — taints LiteLLM Pods may tolerate.
+  - `affinity` — node affinity and pod (anti-)affinity, for rules `nodeSelector` cannot express: set-based matches, soft/preferred placement (e.g. prefer spot capacity, fall back to on-demand), and spreading replicas across nodes or zones.
+
+  `spec.topologySpreadConstraints` remains where it is, at the top level of the spec and applied to the proxy Deployment only — spread constraints are meaningless for the single-Pod migration Job.
+
 ### Fixed
+
+- **An empty `podScheduling` no longer re-runs the database migration.** The migration Job's name seed was gated on the `podScheduling` pointer rather than on its contents, so an explicit `podScheduling: {}` or empty `nodeSelector`/`tolerations` — which a Helm template or GitOps overlay renders easily — hashed differently from omitting the field, despite meaning the same thing. That produced a new Job name and re-ran `prisma migrate deploy`. Omitted, empty and unset placement now all yield the same Job name. Relatedly, a failure to encode placement for the seed can no longer silently drop it (which would have restored the very Job-name collision the seed guards against).
 
 - **A rotated Secret now reaches the running proxy.** `secretKeyRef` env vars and Secret volumes are resolved when the container starts and are never refreshed, so updating a Secret's *value* left the rendered Deployment byte-identical — the reference had not changed — and nothing rolled. The pod kept serving the old credential indefinitely. The instance controller now stamps a digest of the contents of every Secret the pod consumes onto the pod template (`litellm.palena.ai/secret-hash`), so a rotation changes the template and rolls the Deployment. The motivating case is `LITELLM_LICENSE`, where an updated enterprise licence silently never took effect, but the same applied to `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, `DATABASE_URL`, the SSO client secret and every other Secret-backed value. A Secret that does not exist yet is folded into the digest as absent, so installing a licence after the instance was created also rolls it. Only referenced keys are hashed, so an unrelated key changing in a shared Secret does not cause a pointless restart, and `imagePullSecrets` are excluded because the kubelet reads them at pull time rather than projecting them into the container. A transient read failure surfaces as a reconcile error rather than a digest that looks like the Secret vanished.
 
@@ -16,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **Bumped `google.golang.org/grpc` to v1.83.2** (from v1.82.1), clearing four alerts that shared this one root cause: CVE-2026-84304 (HIGH, Trivy — fragmented HTTP/2 DATA frames stored as separate `recvMsg` entries let an unauthenticated remote attacker exhaust process memory via concurrent multiplexed streams), plus Dependabot GHSA-2v4p-qf9q-27wj (HIGH), GHSA-vp52-pcj8-j9qc (HIGH) and GHSA-qc2q-p7wx-3px3 (MEDIUM).
+- **Unbroke the OpenSSF Scorecard workflow** by bumping `ossf/scorecard-action` from v2.4.0 to v2.4.4. v2.4.0 is the last release whose container is pulled from `gcr.io/openssf/scorecard-action`, and that registry began refusing pulls ("This API method requires billing to be enabled" against OpenSSF's own GCP project) — the same commit that passed on 2026-08-31 failed on 2026-09-07 with no change on our side. v2.4.1 moved the image to `ghcr.io/ossf/scorecard-action`, so any version at or above it is unaffected.
 - **The release workflow's licence scan installs from a hash-pinned lock** (`.github/scancode-requirements.txt`, generated from `.github/scancode-requirements.in`), resolving the OSSF Scorecard `PinnedDependenciesID` finding on `.github/workflows/release.yml`. `pip install --require-hashes` pins the whole transitive tree instead of scancode alone — the gap that broke the v0.23.0 release, where an unrelated `click` 8.4.2 -> 8.5.0 bump changed the outcome of two otherwise identical runs. Python is now pinned with `setup-python` to match the interpreter the lock was resolved against.
 
 ## [0.23.0] - 2026-08-30
