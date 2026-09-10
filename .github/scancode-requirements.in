@@ -1,0 +1,19 @@
+# Source for .github/scancode-requirements.txt — the hash-pinned lock used by the
+# release workflow's licence scan.
+#
+# click is bounded deliberately. scancode's option-dependency check (commoncode's
+# PluggableCommandLineOption) misreads unset boolean flags as set on click 8.5.0,
+# so every scancode invocation aborts with "--strip-root cannot be used together
+# with --full-root". That broke the v0.23.0 release: scancode was pinned but its
+# dependencies were not, and click 8.4.2 -> 8.5.0 was the only change between two
+# otherwise identical runs. scancode 32.5.0 fixes the incompatibility; the bound
+# stops click 9.x doing it again, since scancode declares no upper bound itself.
+#
+# Regenerate (Python must match the release workflow's setup-python version):
+#
+#   docker run --rm --platform linux/amd64 -v "$PWD/.github:/w" -w /w python:3.12-slim \
+#     sh -c 'pip install -q uv && uv pip compile scancode-requirements.in \
+#              --generate-hashes --python-version 3.12 \
+#              --output-file scancode-requirements.txt'
+scancode-toolkit==32.5.0
+click<9

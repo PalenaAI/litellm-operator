@@ -61,6 +61,14 @@ const (
 	// AnnotationSyncHash stores the hash of the last synced spec.
 	AnnotationSyncHash = "litellm.palena.ai/sync-hash"
 
+	// AnnotationSecretHash stores a digest of the contents of every Secret the
+	// proxy pod consumes. It lives on the pod template so that rotating a Secret
+	// changes the template and rolls the Deployment: secretKeyRef env vars and
+	// Secret volumes are resolved at container start and never refreshed, so
+	// without it a rotated credential (notably LITELLM_LICENSE) never reaches the
+	// running pod.
+	AnnotationSecretHash = "litellm.palena.ai/secret-hash"
+
 	// AnnotationAuthMode records how a model's provider auth was last pushed
 	// ("credential" or "inline"). A flip between modes forces a delete+recreate
 	// of the LiteLLM model, because /model/update merges and cannot clear the

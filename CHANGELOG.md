@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A rotated Secret now reaches the running proxy.** `secretKeyRef` env vars and Secret volumes are resolved when the container starts and are never refreshed, so updating a Secret's *value* left the rendered Deployment byte-identical — the reference had not changed — and nothing rolled. The pod kept serving the old credential indefinitely. The instance controller now stamps a digest of the contents of every Secret the pod consumes onto the pod template (`litellm.palena.ai/secret-hash`), so a rotation changes the template and rolls the Deployment. The motivating case is `LITELLM_LICENSE`, where an updated enterprise licence silently never took effect, but the same applied to `LITELLM_MASTER_KEY`, `LITELLM_SALT_KEY`, `DATABASE_URL`, the SSO client secret and every other Secret-backed value. A Secret that does not exist yet is folded into the digest as absent, so installing a licence after the instance was created also rolls it. Only referenced keys are hashed, so an unrelated key changing in a shared Secret does not cause a pointless restart, and `imagePullSecrets` are excluded because the kubelet reads them at pull time rather than projecting them into the container. A transient read failure surfaces as a reconcile error rather than a digest that looks like the Secret vanished.
+
+  Note: the first reconcile after upgrading stamps the digest for the first time, which rolls each managed gateway once.
+
+### Security
+
+- **Bumped `google.golang.org/grpc` to v1.83.2** (from v1.82.1), clearing four alerts that shared this one root cause: CVE-2026-84304 (HIGH, Trivy — fragmented HTTP/2 DATA frames stored as separate `recvMsg` entries let an unauthenticated remote attacker exhaust process memory via concurrent multiplexed streams), plus Dependabot GHSA-2v4p-qf9q-27wj (HIGH), GHSA-vp52-pcj8-j9qc (HIGH) and GHSA-qc2q-p7wx-3px3 (MEDIUM).
+- **The release workflow's licence scan installs from a hash-pinned lock** (`.github/scancode-requirements.txt`, generated from `.github/scancode-requirements.in`), resolving the OSSF Scorecard `PinnedDependenciesID` finding on `.github/workflows/release.yml`. `pip install --require-hashes` pins the whole transitive tree instead of scancode alone — the gap that broke the v0.23.0 release, where an unrelated `click` 8.4.2 -> 8.5.0 bump changed the outcome of two otherwise identical runs. Python is now pinned with `setup-python` to match the interpreter the lock was resolved against.
+
 ## [0.23.0] - 2026-08-30
 
 ### Added

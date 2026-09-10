@@ -220,17 +220,23 @@ jobs:
           go-licenses report ./... > release-artifacts/THIRD_PARTY_LICENSES.csv 2>/dev/null || true
           test -s release-artifacts/THIRD_PARTY_LICENSES.csv
 
+      # Pinned so the interpreter matches the one .github/scancode-requirements.txt
+      # was resolved against: --require-hashes needs a wheel whose hash is listed,
+      # and a runner-side Python bump could otherwise select an unlisted one.
+      - name: Setup Python
+        uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: '3.12'
+
       - name: Install scancode-toolkit
         run: |
-          # click is bounded deliberately. scancode's option-dependency check
-          # (commoncode's PluggableCommandLineOption) misreads unset boolean
-          # flags as set on click 8.5.0, so every scancode invocation aborts with
-          # "--strip-root cannot be used together with --full-root". That broke
-          # the v0.23.0 release: scancode is pinned but its deps were not, and
-          # click 8.4.2 -> 8.5.0 was the only change between two identical runs.
-          # 32.5.0 fixes the incompatibility; the bound stops click 9.x doing it
-          # again, since scancode itself declares no upper bound.
-          python3 -m pip install --user scancode-toolkit==32.5.0 'click<9'
+          # Installed from a fully hash-pinned lock (see
+          # .github/scancode-requirements.in for the constraints and how to
+          # regenerate). --require-hashes pins the whole transitive tree, which is
+          # what the v0.23.0 release needed: scancode itself was pinned but its
+          # dependencies were not, and an unrelated click 8.4.2 -> 8.5.0 bump broke
+          # two otherwise identical runs.
+          python3 -m pip install --user --require-hashes -r .github/scancode-requirements.txt
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Run scancode-toolkit

@@ -75,6 +75,33 @@ func TestPreserveExternalPodTemplateAnnotations(t *testing.T) {
 			},
 		},
 		{
+			// A digest left over from a pod that consumed a Secret must not be
+			// carried forward once the instance stops consuming any, or the stale
+			// value would pin the pod template forever.
+			name: "drops stale secret digest",
+			existing: map[string]string{
+				AnnotationSecretHash:                "stale-digest",
+				"kubectl.kubernetes.io/restartedAt": "2026-09-10T11:34:05Z",
+			},
+			want: map[string]string{
+				"kubectl.kubernetes.io/restartedAt": "2026-09-10T11:34:05Z",
+			},
+		},
+		{
+			name: "secret digest and rollout restart coexist",
+			existing: map[string]string{
+				AnnotationSecretHash:                "old-digest",
+				"kubectl.kubernetes.io/restartedAt": "2026-09-10T11:34:05Z",
+			},
+			desired: map[string]string{
+				AnnotationSecretHash: "new-digest",
+			},
+			want: map[string]string{
+				AnnotationSecretHash:                "new-digest",
+				"kubectl.kubernetes.io/restartedAt": "2026-09-10T11:34:05Z",
+			},
+		},
+		{
 			name: "leaves annotations nil when both inputs are empty",
 		},
 	}

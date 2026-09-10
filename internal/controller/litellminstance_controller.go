@@ -581,8 +581,23 @@ func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, ins
 		return err
 	}
 
+	// Stamp a digest of every Secret the pod consumes onto the pod template.
+	// Secret-backed env vars and volumes are resolved once at container start, so
+	// without this a rotation leaves the rendered Deployment byte-identical and
+	// the running pod keeps the old value forever (see podTemplateSecretHash).
+	secretHash, err := podTemplateSecretHash(ctx, r.Client, desired.Namespace, desired.Spec.Template.Spec)
+	if err != nil {
+		return err
+	}
+	if secretHash != "" {
+		if desired.Spec.Template.Annotations == nil {
+			desired.Spec.Template.Annotations = make(map[string]string, 1)
+		}
+		desired.Spec.Template.Annotations[AnnotationSecretHash] = secretHash
+	}
+
 	var existing appsv1.Deployment
-	err := r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
+	err = r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
 	if apierrors.IsNotFound(err) {
 		return r.Create(ctx, desired)
 	}
@@ -617,13 +632,23 @@ func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, ins
 
 const autoRollbackPodTemplateAnnotation = "litellm.palena.ai/auto-rollback"
 
+// operatorManagedPodTemplateAnnotations are pod template annotations this
+// controller owns. They are never carried over from the live Deployment: each is
+// re-derived every reconcile, so preserving a stale value would pin the pod
+// template to it (a Secret digest that outlived its Secret would suppress the
+// very rollout it exists to trigger).
+var operatorManagedPodTemplateAnnotations = map[string]bool{
+	autoRollbackPodTemplateAnnotation: true,
+	AnnotationSecretHash:              true,
+}
+
 // preserveExternalPodTemplateAnnotations carries annotations owned by other
 // clients and controllers into the desired template. Annotations explicitly
 // managed by this controller are only retained when present in the desired
 // template.
 func preserveExternalPodTemplateAnnotations(existing, desired map[string]string) map[string]string {
 	for key, value := range existing {
-		if key == autoRollbackPodTemplateAnnotation {
+		if operatorManagedPodTemplateAnnotations[key] {
 			continue
 		}
 		if desired == nil {
