@@ -91,6 +91,15 @@ spec:
         operator: Equal
         value: arm64
         effect: NoSchedule
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: litellm
 
   ingress:
     enabled: true
@@ -340,15 +349,6 @@ The migration Job runs `prisma migrate deploy` (applying LiteLLM's versioned mig
 | `useDatabaseImage` | bool | `false` | Run LiteLLM's dedicated `litellm-migrations` migrations image instead of `prisma migrate deploy` in the gateway image. When `true`, **only** the database image runs — the operator does not also invoke prisma inside the gateway image |
 | `databaseImage` | *DatabaseImageSpec | — | Override repo/tag/pullPolicy for the database image. Only consulted when `useDatabaseImage: true`. Repo defaults to `ghcr.io/berriai/litellm-migrations`; tag defaults to `spec.image.tag` so versions stay aligned |
 
-### `podScheduling`
-
-Node placement applied consistently to the proxy Deployment Pods and the database migration Job Pod. Changing it creates a fresh migration Job because Kubernetes does not allow its Pod template to be modified in place.
-
-| Field | Type | Description |
-| --- | --- | --- |
-| `nodeSelector` | map[string]string | Node labels required by LiteLLM Pods |
-| `tolerations` | []Toleration | Taints LiteLLM Pods may tolerate |
-
 **When to enable `useDatabaseImage`:**
 
 - You are on LiteLLM v1.86+ and want the maintained recovery logic (P3005 baseline, P3009/P3018 idempotent retries, v2 migration resolver) for free.
@@ -371,6 +371,41 @@ spec:
       # databaseImage:               # optional override (e.g. internal mirror)
       #   repository: registry.example.com/mirror/litellm-migrations
       #   tag: v1.87.0
+```
+
+### `podScheduling`
+
+Node placement applied consistently to the proxy Deployment Pods and the database migration Job Pod. Changing it creates a fresh migration Job because Kubernetes does not allow its Pod template to be modified in place. An omitted `podScheduling`, an empty `podScheduling: {}` and empty values are equivalent and leave the Job name unchanged.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `nodeSelector` | map[string]string | Node labels required by LiteLLM Pods |
+| `tolerations` | []Toleration | Taints LiteLLM Pods may tolerate |
+| `affinity` | *Affinity | Node affinity and pod (anti-)affinity, for rules `nodeSelector` cannot express: set-based matches, soft/preferred placement, and spreading replicas across nodes or zones |
+
+Note that `spec.topologySpreadConstraints` is configured separately, at the top level of the spec, and applies to the proxy Deployment only — spread constraints are meaningless for the single-Pod migration Job.
+
+Example:
+
+```yaml
+spec:
+  podScheduling:
+    nodeSelector:
+      kubernetes.io/arch: arm64
+    tolerations:
+      - key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+        effect: NoSchedule
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  app.kubernetes.io/name: litellm
 ```
 
 ### `redis`

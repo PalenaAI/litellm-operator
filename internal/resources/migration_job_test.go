@@ -236,3 +236,93 @@ func TestBuildMigrationJob_InjectsDatabaseURLFromExternalSecret(t *testing.T) {
 		t.Error("DATABASE_URL env var not injected into migration Job")
 	}
 }
+
+// An omitted podScheduling, an explicit empty podScheduling{} and empty maps all
+// mean the same thing, so they must produce the same Job name. Gating the name
+// seed on the pointer alone made a rendered-but-empty block — which a Helm
+// template or GitOps overlay easily produces — hash differently from an absent
+// one, re-running the database migration for no reason.
+func TestBuildMigrationJob_EmptyPodSchedulingKeepsJobName(t *testing.T) {
+	nameWith := func(scheduling *litellmv1alpha1.PodSchedulingSpec) string {
+		instance := newTestInstance()
+		instance.Spec.Image.Tag = testGatewayTag
+		instance.Spec.PodScheduling = scheduling
+		return BuildMigrationJob(instance, nil).Name
+	}
+
+	omitted := nameWith(nil)
+	cases := map[string]*litellmv1alpha1.PodSchedulingSpec{
+		"empty struct":     {},
+		"empty maps":       {NodeSelector: map[string]string{}, Tolerations: []corev1.Toleration{}},
+		"nil affinity too": {NodeSelector: nil, Tolerations: nil, Affinity: nil},
+	}
+	for name, scheduling := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := nameWith(scheduling); got != omitted {
+				t.Errorf("Job name = %q, want %q (same as omitting podScheduling)", got, omitted)
+			}
+		})
+	}
+}
+
+// Affinity is placement like any other, so it must reach the Job Pod and change
+// the Job's name — the template is immutable, so a pending Job pinned to the old
+// affinity would otherwise never be replaced.
+func TestBuildMigrationJob_Affinity(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.Image.Tag = testGatewayTag
+	withoutAffinity := BuildMigrationJob(instance, nil)
+
+	affinity := &corev1.Affinity{
+		NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+					MatchExpressions: []corev1.NodeSelectorRequirement{{
+						Key:      "node.kubernetes.io/instance-type",
+						Operator: corev1.NodeSelectorOpIn,
+						Values:   []string{"m6i.large", "m6i.xlarge"},
+					}},
+				}},
+			},
+		},
+	}
+	instance.Spec.PodScheduling = &litellmv1alpha1.PodSchedulingSpec{Affinity: affinity}
+
+	job := BuildMigrationJob(instance, nil)
+	if !reflect.DeepEqual(job.Spec.Template.Spec.Affinity, affinity) {
+		t.Errorf("migration Job affinity = %#v, want %#v", job.Spec.Template.Spec.Affinity, affinity)
+	}
+	if job.Name == withoutAffinity.Name {
+		t.Errorf("an affinity change must produce a distinct Job name; both got %q", job.Name)
+	}
+}
+
+// The Job must not alias the CR's Affinity, or mutating the built Job would
+// write back into the instance spec held in the informer cache.
+func TestBuildMigrationJob_AffinityIsDeepCopied(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PodScheduling = &litellmv1alpha1.PodSchedulingSpec{
+		Affinity: &corev1.Affinity{
+			NodeAffinity: &corev1.NodeAffinity{
+				PreferredDuringSchedulingIgnoredDuringExecution: []corev1.PreferredSchedulingTerm{{
+					Weight: 1,
+					Preference: corev1.NodeSelectorTerm{
+						MatchExpressions: []corev1.NodeSelectorRequirement{{
+							Key:      "pool",
+							Operator: corev1.NodeSelectorOpIn,
+							Values:   []string{"spot"},
+						}},
+					},
+				}},
+			},
+		},
+	}
+
+	job := BuildMigrationJob(instance, nil)
+	job.Spec.Template.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution[0].Weight = 99
+
+	if got := instance.Spec.PodScheduling.Affinity.NodeAffinity.
+		PreferredDuringSchedulingIgnoredDuringExecution[0].Weight; got != 1 {
+		t.Errorf("mutating the Job wrote back into the instance spec: weight = %d, want 1", got)
+	}
+}

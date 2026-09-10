@@ -167,17 +167,8 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 	// A Job Pod template is immutable. Include placement in its name seed so a
 	// placement change creates a new Job instead of reusing a pending Job with
 	// the old unschedulable template.
-	if scheduling := instance.Spec.PodScheduling; scheduling != nil {
-		schedulingSeed, err := json.Marshal(struct {
-			NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
-			Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
-		}{
-			NodeSelector: scheduling.NodeSelector,
-			Tolerations:  scheduling.Tolerations,
-		})
-		if err == nil {
-			jobHashSeed += "|scheduling=" + string(schedulingSeed)
-		}
+	if seed := podSchedulingSeed(instance.Spec.PodScheduling); seed != "" {
+		jobHashSeed += "|scheduling=" + seed
 	}
 
 	// Include the command/image-selection in the hash so toggling
@@ -230,9 +221,12 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 
 	var nodeSelector map[string]string
 	var tolerations []corev1.Toleration
+	var affinity *corev1.Affinity
 	if scheduling := instance.Spec.PodScheduling; scheduling != nil {
 		nodeSelector = maps.Clone(scheduling.NodeSelector)
 		tolerations = slices.Clone(scheduling.Tolerations)
+		// DeepCopy is nil-safe, so an unset Affinity stays nil.
+		affinity = scheduling.Affinity.DeepCopy()
 	}
 
 	return &batchv1.Job{
@@ -253,6 +247,7 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 					ImagePullSecrets: imagePullSecrets,
 					NodeSelector:     nodeSelector,
 					Tolerations:      tolerations,
+					Affinity:         affinity,
 					Containers: []corev1.Container{
 						{
 							Name:            "migrate",
@@ -272,4 +267,42 @@ func BuildMigrationJob(instance *litellmv1alpha1.LiteLLMInstance, labels map[str
 			},
 		},
 	}
+}
+
+// podSchedulingSeed encodes placement for the migration Job's name hash, or ""
+// when no placement is configured.
+//
+// The empty result matters: an omitted podScheduling, an explicit
+// `podScheduling: {}` and empty maps all mean "no placement constraints", so they
+// must produce the same Job name. Gating on the pointer alone made a rendered-but-
+// empty block (as a Helm template or GitOps overlay easily produces) hash
+// differently from an absent one, re-running the migration for no reason.
+//
+// json.Marshal is used because it orders map keys deterministically, which the
+// hash depends on, and because Affinity is too nested to encode by hand.
+func podSchedulingSeed(scheduling *litellmv1alpha1.PodSchedulingSpec) string {
+	if scheduling == nil {
+		return ""
+	}
+	if len(scheduling.NodeSelector) == 0 && len(scheduling.Tolerations) == 0 && scheduling.Affinity == nil {
+		return ""
+	}
+
+	seed, err := json.Marshal(struct {
+		NodeSelector map[string]string   `json:"nodeSelector,omitempty"`
+		Tolerations  []corev1.Toleration `json:"tolerations,omitempty"`
+		Affinity     *corev1.Affinity    `json:"affinity,omitempty"`
+	}{
+		NodeSelector: scheduling.NodeSelector,
+		Tolerations:  scheduling.Tolerations,
+		Affinity:     scheduling.Affinity,
+	})
+	if err != nil {
+		// Unreachable: these are plain structs, maps and slices with no channels,
+		// funcs or cycles. Fold the failure into the seed rather than dropping
+		// placement from it, which would silently restore the Job-name collision
+		// this guards against.
+		return "unencodable:" + err.Error()
+	}
+	return string(seed)
 }

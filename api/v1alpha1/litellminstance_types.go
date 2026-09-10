@@ -1179,6 +1179,14 @@ type PodSchedulingSpec struct {
 	// Tolerations allows LiteLLM Pods to run on matching tainted nodes.
 	// +optional
 	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	// Affinity constrains which nodes LiteLLM Pods are eligible for, expressing
+	// rules NodeSelector cannot: set-based and preferred (soft) node affinity for
+	// GPU or spot pools, and pod affinity/anti-affinity to spread or co-locate
+	// Pods relative to others. Applied to both the proxy Deployment and the
+	// database migration Job.
+	// +optional
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
 }
 
 // IngressSpec defines Ingress configuration.

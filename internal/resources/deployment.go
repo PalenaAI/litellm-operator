@@ -282,6 +282,8 @@ func BuildDeployment(instance *litellmv1alpha1.LiteLLMInstance, labels map[strin
 	if scheduling := instance.Spec.PodScheduling; scheduling != nil {
 		dep.Spec.Template.Spec.NodeSelector = maps.Clone(scheduling.NodeSelector)
 		dep.Spec.Template.Spec.Tolerations = slices.Clone(scheduling.Tolerations)
+		// DeepCopy is nil-safe, so an unset Affinity stays nil.
+		dep.Spec.Template.Spec.Affinity = scheduling.Affinity.DeepCopy()
 	}
 
 	return dep

@@ -17,6 +17,7 @@ limitations under the License.
 package resources
 
 import (
+	"reflect"
 	"testing"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
@@ -1146,5 +1147,63 @@ func TestBuildDeployment_ExtraEnvVarsOverrideOperatorVars(t *testing.T) {
 	}
 	if customHits != 1 {
 		t.Errorf("expected CUSTOM_ONLY to be present exactly once, got %d", customHits)
+	}
+}
+
+// Affinity must reach the proxy Pod template alongside nodeSelector/tolerations.
+func TestBuildDeployment_Affinity(t *testing.T) {
+	instance := newTestInstance()
+	affinity := &corev1.Affinity{
+		PodAntiAffinity: &corev1.PodAntiAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{{
+				TopologyKey: "kubernetes.io/hostname",
+				LabelSelector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"app.kubernetes.io/name": "litellm"},
+				},
+			}},
+		},
+	}
+	instance.Spec.PodScheduling = &litellmv1alpha1.PodSchedulingSpec{Affinity: affinity}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
+	if !reflect.DeepEqual(dep.Spec.Template.Spec.Affinity, affinity) {
+		t.Errorf("Deployment affinity = %#v, want %#v", dep.Spec.Template.Spec.Affinity, affinity)
+	}
+}
+
+// An unset Affinity must stay nil rather than becoming an empty struct, which
+// would be persistent drift against the live Deployment.
+func TestBuildDeployment_AffinityUnsetStaysNil(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PodScheduling = &litellmv1alpha1.PodSchedulingSpec{
+		NodeSelector: map[string]string{"kubernetes.io/arch": "arm64"},
+	}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
+	if dep.Spec.Template.Spec.Affinity != nil {
+		t.Errorf("expected nil Affinity when unset, got %#v", dep.Spec.Template.Spec.Affinity)
+	}
+}
+
+// The Deployment must not alias the CR's Affinity (see the migration Job twin).
+func TestBuildDeployment_AffinityIsDeepCopied(t *testing.T) {
+	instance := newTestInstance()
+	instance.Spec.PodScheduling = &litellmv1alpha1.PodSchedulingSpec{
+		Affinity: &corev1.Affinity{
+			PodAntiAffinity: &corev1.PodAntiAffinity{
+				RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{{
+					TopologyKey: "kubernetes.io/hostname",
+				}},
+			},
+		},
+	}
+
+	dep := BuildDeployment(instance, map[string]string{"app": "litellm"}, "", nil)
+	dep.Spec.Template.Spec.Affinity.PodAntiAffinity.
+		RequiredDuringSchedulingIgnoredDuringExecution[0].TopologyKey = "topology.kubernetes.io/zone"
+
+	if got := instance.Spec.PodScheduling.Affinity.PodAntiAffinity.
+		RequiredDuringSchedulingIgnoredDuringExecution[0].TopologyKey; got != "kubernetes.io/hostname" {
+		t.Errorf("mutating the Deployment wrote back into the instance spec: topologyKey = %q", got)
 	}
 }
