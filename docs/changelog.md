@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The operator now logs at `info` in JSON instead of DEBUG in console encoding.** `cmd/main.go` carried the kubebuilder scaffold's `zap.Options{Development: true}`, which puts the whole operator at DEBUG level. In a real deployment that made a single `V(1)` line — `license Secret found`, emitted once per instance reconcile — about 98% of all log output, roughly 100 lines an hour per instance, burying anything worth reading. Nothing was configurable: the chart's `args` were a hardcoded list with no log-level knob, so the verbosity could not be turned down without patching the Deployment.
+
+### Added
+
+- **`logging.level`, `logging.development` and `logging.encoder` Helm values**, mapping to the manager's `--zap-log-level`, `--zap-devel` and `--zap-encoder` flags, so verbosity is configurable at install time. `logging.level` accepts `debug`/`info`/`error` or a positive integer for V-level logging, where `1` restores the per-reconcile diagnostics that used to be on by default.
+- **An `extraArgs` Helm value** for manager flags the chart does not model (e.g. `--zap-stacktrace-level=panic`), so a new upstream flag no longer requires a chart release to be reachable.
+
 ## [0.24.0] - 2026-09-10
 
 ### Added
