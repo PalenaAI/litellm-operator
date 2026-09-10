@@ -45,6 +45,18 @@ spec:
             {{- if .Values.watchNamespaces }}
             - --watch-namespaces={{ .Values.watchNamespaces }}
             {{- end }}
+            {{- if (.Values.logging).level }}
+            - --zap-log-level={{ .Values.logging.level }}
+            {{- end }}
+            {{- if (.Values.logging).development }}
+            - --zap-devel=true
+            {{- end }}
+            {{- if (.Values.logging).encoder }}
+            - --zap-encoder={{ .Values.logging.encoder }}
+            {{- end }}
+            {{- with .Values.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           ports: []
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}

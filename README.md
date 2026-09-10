@@ -628,6 +628,33 @@ helm install litellm-operator deploy/charts/litellm-operator/ \
 WATCH_NAMESPACE=team-a,team-b
 ```
 
+### Operator Log Level
+
+The operator logs at `info` in JSON. Raise the verbosity when debugging:
+
+**Helm:**
+
+```bash
+helm upgrade litellm-operator deploy/charts/litellm-operator/ \
+  --set logging.level=debug
+```
+
+`logging.level` accepts `debug`, `info`, `error`, or a positive integer for
+V-level logging (`1` turns on the operator's own per-reconcile diagnostics).
+`logging.development=true` additionally switches to console encoding with
+stacktraces, which is meant for local runs rather than clusters, and
+`logging.encoder` (`json`/`console`) sets the encoding on its own. Anything the
+chart does not model can go through `extraArgs`.
+
+**Flag:**
+
+```bash
+/manager --zap-log-level=debug
+```
+
+Note that `debug` is genuinely verbose: the operator emits a V(1) line per
+instance reconcile, so a single instance produces roughly 100 lines an hour.
+
 ### 7. Retrieve a generated API key
 
 The generated API key is stored in a Secret (default name: `{name}-key`):

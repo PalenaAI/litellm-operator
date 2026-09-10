@@ -110,6 +110,39 @@ Set the environment variable before running:
 WATCH_NAMESPACE=default make run
 ```
 
+## Operator Log Level
+
+The operator logs at `info` in JSON encoding. Raise the verbosity when debugging.
+
+### Helm
+
+```bash
+helm upgrade litellm-operator deploy/charts/litellm-operator/ \
+  --set logging.level=debug
+```
+
+| Value | Default | Description |
+| --- | --- | --- |
+| `logging.level` | `info` | `debug`, `info`, `error`, or a positive integer for V-level logging. `1` enables the operator's own per-reconcile diagnostics |
+| `logging.development` | `false` | Console encoding, debug level and stacktraces on warnings. Overrides `logging.level`; intended for local runs, not clusters |
+| `logging.encoder` | `""` | `json` or `console`. Empty follows the mode above |
+| `extraArgs` | `[]` | Extra manager flags the values above do not model, e.g. `--zap-stacktrace-level=panic` |
+
+### Flag
+
+```bash
+/manager --zap-log-level=debug
+```
+
+All of controller-runtime's zap flags are available (`--zap-devel`,
+`--zap-encoder`, `--zap-stacktrace-level`, `--zap-time-encoding`).
+
+::: warning
+`debug` is genuinely verbose: the operator emits a V(1) line per instance
+reconcile, so one instance produces roughly 100 lines an hour. Prefer raising
+the level temporarily while diagnosing rather than leaving it on.
+:::
+
 ## Verify Installation
 
 After installation, verify the operator is running:

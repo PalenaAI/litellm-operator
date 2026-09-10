@@ -53,3 +53,20 @@ installCRDs: true
 # Restrict the operator to watch specific namespaces (comma-separated).
 # If empty, the operator watches all namespaces.
 watchNamespaces: ""
+
+logging:
+  # Verbosity: "debug", "info", "error", or a positive integer for V-level
+  # logging (1 enables the operator's own V(1) diagnostics, e.g. per-reconcile
+  # license Secret detection). Leave at "info" unless you are debugging — the
+  # operator emits a V(1) line per instance reconcile, roughly 100 an hour.
+  level: info
+  # Development mode: console encoding, debug level, stacktraces on warnings.
+  # Overrides `level`. Intended for local runs, not for clusters.
+  development: false
+  # Log encoding: "json" or "console". Empty follows the mode above (json in
+  # production, console in development).
+  encoder: ""
+
+# Additional arguments appended to the manager's command line, for flags the
+# values above do not model (e.g. --zap-stacktrace-level=panic).
+extraArgs: []

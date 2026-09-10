@@ -90,8 +90,17 @@ func main() {
 	flag.StringVar(&watchNamespaces, "watch-namespaces", "",
 		"Comma-separated list of namespaces to watch. If empty, watches all namespaces. "+
 			"Can also be set via the WATCH_NAMESPACE environment variable.")
+	// Production defaults: JSON encoding at info level. This was the kubebuilder
+	// scaffold's Development: true, which puts the whole operator at DEBUG — in a
+	// real deployment a single V(1) line per reconcile ("license Secret found")
+	// accounted for ~98% of the log volume, roughly 100 lines an hour per
+	// instance, drowning anything worth reading.
+	//
+	// Every zap knob stays reachable through the flags BindFlags registers, so
+	// debug logging is one --zap-log-level=debug away (or --zap-devel for
+	// console encoding and stacktraces). The Helm chart surfaces both as values.
 	opts := zap.Options{
-		Development: true,
+		Development: false,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
