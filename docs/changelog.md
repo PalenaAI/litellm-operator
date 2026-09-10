@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-09-10
+
 ### Changed
 
 - **The operator now logs at `info` in JSON instead of DEBUG in console encoding.** `cmd/main.go` carried the kubebuilder scaffold's `zap.Options{Development: true}`, which puts the whole operator at DEBUG level. In a real deployment that made a single `V(1)` line — `license Secret found`, emitted once per instance reconcile — about 98% of all log output, roughly 100 lines an hour per instance, burying anything worth reading. Nothing was configurable: the chart's `args` were a hardcoded list with no log-level knob, so the verbosity could not be turned down without patching the Deployment.
