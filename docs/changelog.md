@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-09-10
+
 ### Added
 
 - **`LiteLLMInstance.spec.podScheduling`** ([#33](https://github.com/PalenaAI/litellm-operator/pull/33), [#35](https://github.com/PalenaAI/litellm-operator/pull/35)) — node placement for operator-managed Pods, applied to both the proxy Deployment and the database migration Job so the migration cannot be scheduled somewhere the proxy is not allowed to run. Because a Job's Pod template is immutable, placement is part of the migration Job's name seed: changing it creates a fresh Job instead of leaving a pending one pinned to an unschedulable template.
