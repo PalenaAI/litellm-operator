@@ -1157,6 +1157,22 @@ func (r *LiteLLMInstanceReconciler) updateInstanceStatus(ctx context.Context, in
 		}
 	}
 
+	// A CR copied from a managed instance keeps sections set that do nothing
+	// here; say so instead of leaving it looking healthy.
+	if workloadManaged(instance) {
+		meta.RemoveStatusCondition(&instance.Status.Conditions, ConditionWorkloadUnmanaged)
+	} else if ignored := ignoredConfigSections(instance); len(ignored) > 0 {
+		meta.SetStatusCondition(&instance.Status.Conditions, metav1.Condition{
+			Type:               ConditionWorkloadUnmanaged,
+			Status:             metav1.ConditionTrue,
+			Reason:             "ConfigSettingsIgnored",
+			Message:            fmt.Sprintf("Ignored while workload.managed is false; the proxy owns its own configuration: %s", strings.Join(ignored, ", ")),
+			ObservedGeneration: instance.Generation,
+		})
+	} else {
+		meta.RemoveStatusCondition(&instance.Status.Conditions, ConditionWorkloadUnmanaged)
+	}
+
 	// SSO status
 	if instance.Spec.SSO != nil && instance.Spec.SSO.Enabled {
 		instance.Status.SSO = &litellmv1alpha1.SSOStatus{

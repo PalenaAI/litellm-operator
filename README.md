@@ -176,7 +176,7 @@ spec:
 Two fields matter:
 
 - **`endpoint`** — where the operator reaches the admin API. Omit it and the operator derives `http(s)://<metadata.name>.<namespace>.svc:<spec.service.port>`, which requires this CR to be named after the existing Service. Set it explicitly to attach to a Service under a different name, in another namespace, or to a proxy outside the cluster entirely.
-- **`masterKey`** — the admin key of the *existing* proxy. `autoGenerate: true` makes no sense here: the operator would mint a key the running proxy has never heard of.
+- **`masterKey`** — the admin key of the *existing* proxy. `secretRef` is required; `autoGenerate: true` is rejected, since the Secret it would create is only ever built while the operator owns the workload.
 
 Readiness comes from the admin API answering (`/health/liveliness`), not from a Deployment the operator does not own, so a StatefulSet or an off-cluster proxy works the same way:
 
@@ -189,6 +189,8 @@ kubectl get litellminstance my-gateway
 `status.version` is left empty rather than echoing an image tag the operator never chose. It is populated only when the proxy discloses `litellm_version` on `/health/readiness`, which LiteLLM does only if its own `general_settings` sets `allow_public_health_readiness_details: true` — that endpoint takes no auth, so the master key does not unlock it.
 
 Everything else keeps working: health probing, config sync, and finalizer-based cleanup of upstream entities. Only workload provisioning and auto-rollback are skipped. `endpoint` is rejected when `managed` is true.
+
+Copying a managed CR's spec sections (`sso`, `caching`, `rbac`, ...) onto an unmanaged one doesn't apply them — the `WorkloadUnmanaged` condition names whichever of those the CR actually has set. See [`docs/reference/litellminstance.md`](docs/reference/litellminstance.md#workload) for the full behavior table.
 
 ### 5. Register a model
 

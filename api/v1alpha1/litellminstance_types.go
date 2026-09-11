@@ -23,6 +23,8 @@ import (
 )
 
 // LiteLLMInstanceSpec defines the desired state of LiteLLMInstance.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.workload) || !has(self.workload.managed) || self.workload.managed || has(self.masterKey.secretRef)",message="masterKey.secretRef is required when workload.managed is false"
 type LiteLLMInstanceSpec struct {
 	// Image configuration for the LiteLLM proxy.
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Image"

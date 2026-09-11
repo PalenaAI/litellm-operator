@@ -324,9 +324,12 @@ Behaviour differences when unmanaged:
 | `PodsHealthy` condition | Set | Absent — the operator owns no pods |
 | `DatabaseReady` condition reason | `MigrationSkipped` / `MigrationComplete` / … | `WorkloadUnmanaged` |
 | `Ready` condition reason | `AllResourcesReady` / `DeploymentNotReady` | `ProxyReachable` / `ProxyNotReachable` |
+| `WorkloadUnmanaged` condition | Absent | Set when the CR also carries spec sections the operator ignores unmanaged (see below) |
 | Health probing, config sync, entity CRDs, finalizer cleanup | Active | Active |
 
-`masterKey.autoGenerate` is not useful here: the operator would mint a key the running proxy has never seen. Reference the existing proxy's admin key with `masterKey.secretRef`.
+`masterKey.autoGenerate` is rejected here by a CEL rule: the Secret it would create is only ever built by the managed-workload reconcile path, so on an unmanaged instance the reference would dangle. Reference the existing proxy's admin key with `masterKey.secretRef` instead.
+
+A CR copied from a managed instance often keeps fields like `sso`, `caching`, `rbac`, or `secretManager` set — those only take effect through the ConfigMap a managed workload builds. The `WorkloadUnmanaged` condition names whichever of these the CR actually has set, so one that never set them stays quiet.
 
 Database fields describe the proxy's own database and are only consumed when building the workload, so `database: {}` is the normal unmanaged value.
 

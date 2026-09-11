@@ -4611,6 +4611,10 @@ spec:
             - database
             - masterKey
             type: object
+            x-kubernetes-validations:
+            - message: masterKey.secretRef is required when workload.managed is false
+              rule: '!has(self.workload) || !has(self.workload.managed) || self.workload.managed
+                || has(self.masterKey.secretRef)'
           status:
             description: LiteLLMInstanceStatus defines the observed state of LiteLLMInstance.
             properties:

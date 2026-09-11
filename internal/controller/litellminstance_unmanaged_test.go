@@ -193,6 +193,53 @@ func TestUnmanagedWorkloadNeverRunsMigrations(t *testing.T) {
 	}
 }
 
+// Docs alone don't stop a CR copied from a managed instance from looking
+// healthy while spec sections like sso/caching/rbac are silently ignored.
+// The WorkloadUnmanaged condition must name only what the user actually set.
+func TestUnmanagedWorkloadReportsIgnoredConfig(t *testing.T) {
+	t.Run("names only the sections that are set", func(t *testing.T) {
+		instance := unmanagedInstance("http://litellm.platform.svc:4000")
+		instance.Spec.SSO = &litellmv1alpha1.SSOSpec{Enabled: true}
+		instance.Spec.Caching = &litellmv1alpha1.CachingSpec{Enabled: true}
+		_, out := reconcileUnmanaged(t, instance, nil)
+
+		cond := meta.FindStatusCondition(out.Status.Conditions, ConditionWorkloadUnmanaged)
+		if cond == nil || cond.Status != metav1.ConditionTrue || cond.Reason != "ConfigSettingsIgnored" {
+			t.Fatalf("WorkloadUnmanaged condition = %+v, want True/ConfigSettingsIgnored", cond)
+		}
+		for _, want := range []string{"spec.sso", "spec.caching"} {
+			if !strings.Contains(cond.Message, want) {
+				t.Errorf("message = %q, want it to contain %q", cond.Message, want)
+			}
+		}
+		if strings.Contains(cond.Message, "spec.rbac") {
+			t.Errorf("message = %q, should not name a section the user never set", cond.Message)
+		}
+	})
+
+	t.Run("absent when nothing ignorable is set", func(t *testing.T) {
+		_, out := reconcileUnmanaged(t, unmanagedInstance("http://litellm.platform.svc:4000"), nil)
+
+		if cond := meta.FindStatusCondition(out.Status.Conditions, ConditionWorkloadUnmanaged); cond != nil {
+			t.Errorf("WorkloadUnmanaged condition = %+v, want absent", cond)
+		}
+	})
+
+	t.Run("absent when managed", func(t *testing.T) {
+		instance := unmanagedInstance("")
+		instance.Spec.Workload.Managed = boolPtr(true)
+		instance.Spec.SSO = &litellmv1alpha1.SSOSpec{Enabled: true}
+		instance.Spec.Database.External = &litellmv1alpha1.ExternalDBSpec{
+			ConnectionSecretRef: litellmv1alpha1.SecretKeyRef{Name: "db", Key: "url"},
+		}
+		_, out := reconcileUnmanaged(t, instance, nil)
+
+		if cond := meta.FindStatusCondition(out.Status.Conditions, ConditionWorkloadUnmanaged); cond != nil {
+			t.Errorf("WorkloadUnmanaged condition = %+v, want absent when managed", cond)
+		}
+	})
+}
+
 // Readiness of an unmanaged proxy comes from the admin API answering, not from
 // a Deployment that may not exist (StatefulSet, other namespace, off-cluster).
 func TestUnmanagedReadinessFollowsLivenessProbe(t *testing.T) {

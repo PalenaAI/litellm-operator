@@ -90,6 +90,9 @@ const (
 	// failures, OOM kills, unschedulable pods). It is independent of Ready —
 	// Ready keeps meaning "at least one replica is serving".
 	ConditionPodsHealthy = "PodsHealthy"
+	// ConditionWorkloadUnmanaged reports which spec sections the user set that
+	// the operator ignores while workload.managed is false.
+	ConditionWorkloadUnmanaged = "WorkloadUnmanaged"
 
 	// Event reasons — kept in one place so operators and alerting tooling
 	// can filter on them reliably.
@@ -195,6 +198,33 @@ func masterKeyRef(instance *litellmv1alpha1.LiteLLMInstance) *litellmv1alpha1.Se
 func workloadManaged(instance *litellmv1alpha1.LiteLLMInstance) bool {
 	w := instance.Spec.Workload
 	return w == nil || w.Managed == nil || *w.Managed
+}
+
+// ignoredConfigSections lists the spec paths, among those the user actually
+// set, that only take effect through the managed-workload ConfigMap and so
+// do nothing while workload.managed is false.
+func ignoredConfigSections(instance *litellmv1alpha1.LiteLLMInstance) []string {
+	var sections []string
+	add := func(set bool, path string) {
+		if set {
+			sections = append(sections, path)
+		}
+	}
+	add(instance.Spec.SSO != nil, "spec.sso")
+	add(instance.Spec.SCIM != nil, "spec.scim")
+	add(instance.Spec.JWTAuth != nil, "spec.jwtAuth")
+	add(instance.Spec.OAuth2Auth != nil, "spec.oauth2Auth")
+	add(instance.Spec.RBAC != nil, "spec.rbac")
+	add(instance.Spec.Security != nil, "spec.security")
+	add(instance.Spec.Logging != nil, "spec.logging")
+	add(instance.Spec.AdminUI != nil, "spec.adminUI")
+	add(instance.Spec.Caching != nil, "spec.caching")
+	add(instance.Spec.RouterSettings != nil, "spec.routerSettings")
+	add(instance.Spec.Callbacks != nil, "spec.callbacks")
+	add(len(instance.Spec.PassThroughEndpoints) > 0, "spec.passThroughEndpoints")
+	add(instance.Spec.SecretManager != nil, "spec.secretManager")
+	add(instance.Status.License != nil && instance.Status.License.Active, "license injection")
+	return sections
 }
 
 // instanceEndpoint returns the base URL every controller and health probe uses

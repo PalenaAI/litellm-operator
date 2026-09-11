@@ -137,4 +137,49 @@ var _ = Describe("LiteLLMInstance Controller", func() {
 			Expect(resource.Spec.Workload.Managed).To(HaveValue(BeTrue()))
 		})
 	})
+
+	// autoGenerate's Secret is only created by the managed-workload
+	// reconcile path, so left unmanaged it would dangle; a CEL rule
+	// requires an explicit secretRef instead.
+	Context("When validating spec.masterKey against an unmanaged workload", func() {
+		ctx := context.Background()
+
+		instanceWithMasterKey := func(name string, managed bool, masterKey litellmv1alpha1.MasterKeySpec) *litellmv1alpha1.LiteLLMInstance {
+			return &litellmv1alpha1.LiteLLMInstance{
+				ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+				Spec: litellmv1alpha1.LiteLLMInstanceSpec{
+					Workload:  &litellmv1alpha1.WorkloadSpec{Managed: boolPtr(managed)},
+					MasterKey: masterKey,
+				},
+			}
+		}
+
+		It("should reject autoGenerate without secretRef on an unmanaged workload", func() {
+			err := k8sClient.Create(ctx, instanceWithMasterKey("mk-unmanaged-autogen", false,
+				litellmv1alpha1.MasterKeySpec{AutoGenerate: true}))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("masterKey.secretRef is required when workload.managed is false"))
+		})
+
+		It("should reject no master key at all on an unmanaged workload", func() {
+			err := k8sClient.Create(ctx, instanceWithMasterKey("mk-unmanaged-none", false,
+				litellmv1alpha1.MasterKeySpec{}))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("masterKey.secretRef is required when workload.managed is false"))
+		})
+
+		It("should accept a secretRef on an unmanaged workload", func() {
+			resource := instanceWithMasterKey("mk-unmanaged-secretref", false,
+				litellmv1alpha1.MasterKeySpec{SecretRef: &litellmv1alpha1.SecretKeyRef{Name: "mk", Key: "k"}})
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, resource)).To(Succeed()) })
+		})
+
+		It("should accept autoGenerate without secretRef on a managed workload", func() {
+			resource := instanceWithMasterKey("mk-managed-autogen", true,
+				litellmv1alpha1.MasterKeySpec{AutoGenerate: true})
+			Expect(k8sClient.Create(ctx, resource)).To(Succeed())
+			DeferCleanup(func() { Expect(k8sClient.Delete(ctx, resource)).To(Succeed()) })
+		})
+	})
 })
