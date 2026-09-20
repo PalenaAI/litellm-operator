@@ -131,6 +131,11 @@ const (
 	EventReasonConfigSyncUnmanaged       = "ConfigSyncUnmanaged"
 )
 
+// Every controller emits Events through emitEvent below, on CRs in the user's
+// namespace rather than the operator's, so the permission belongs on the
+// ClusterRole and not on the leader-election Role that already carries it.
+// +kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+
 // emitEvent records a Kubernetes Event on an object if the recorder is set.
 // Recorder is nil in tests where the reconciler is constructed directly,
 // so we guard every call site with this helper rather than passing a fake
