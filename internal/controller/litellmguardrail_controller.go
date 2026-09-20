@@ -162,6 +162,25 @@ func (r *LiteLLMGuardrailReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
+	// Guardrails only take effect through the ConfigMap the instance
+	// controller builds, which is never built while workload.managed is
+	// false. Reporting Ready=True here would be a green CR doing nothing.
+	if !workloadManaged(&instance) {
+		emitEvent(r.Recorder, &g, corev1.EventTypeWarning, EventReasonValidationFailed,
+			"Guardrail %q: instance %q is unmanaged, so no config is rendered for it",
+			g.Spec.GuardrailName, instance.Name)
+		meta.SetStatusCondition(&g.Status.Conditions, metav1.Condition{
+			Type:               ConditionReady,
+			Status:             metav1.ConditionFalse,
+			Reason:             "InstanceUnmanaged",
+			Message:            fmt.Sprintf("instance %q has workload.managed=false; the operator never renders guardrail config for it", instance.Name),
+			ObservedGeneration: g.Generation,
+		})
+		g.Status.Configured = false
+		_ = r.Status().Update(ctx, &g)
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	}
+
 	// If an API key is declared, validate the Secret exists and has the
 	// requested key. Some providers (e.g. local presidio, custom_guardrail
 	// pointing at an internal service) don't need one, so this is optional.

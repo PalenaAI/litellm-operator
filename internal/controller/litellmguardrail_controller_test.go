@@ -199,4 +199,60 @@ var _ = Describe("LiteLLMGuardrail Controller guardrailClass validation", func()
 			Expect(updated.Status.Configured).To(BeFalse())
 		})
 	})
+
+	Context("when the referenced instance has workload.managed=false", func() {
+		const (
+			name         = "test-guardrail-unmanaged-instance"
+			instanceName = "test-guardrail-unmanaged-target"
+		)
+		key := types.NamespacedName{Name: name, Namespace: "default"}
+		instanceKey := types.NamespacedName{Name: instanceName, Namespace: "default"}
+
+		BeforeEach(func() {
+			instance := &litellmv1alpha1.LiteLLMInstance{}
+			if err := k8sClient.Get(ctx, instanceKey, instance); err != nil && errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, &litellmv1alpha1.LiteLLMInstance{
+					ObjectMeta: metav1.ObjectMeta{Name: instanceName, Namespace: "default"},
+					Spec: litellmv1alpha1.LiteLLMInstanceSpec{
+						Workload: &litellmv1alpha1.WorkloadSpec{Managed: boolPtr(false)},
+						MasterKey: litellmv1alpha1.MasterKeySpec{
+							SecretRef: &litellmv1alpha1.SecretKeyRef{Name: "mk", Key: "k"},
+						},
+					},
+				})).To(Succeed())
+			}
+
+			g := &litellmv1alpha1.LiteLLMGuardrail{}
+			if err := k8sClient.Get(ctx, key, g); err != nil && errors.IsNotFound(err) {
+				Expect(k8sClient.Create(ctx, &litellmv1alpha1.LiteLLMGuardrail{
+					ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+					Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+						InstanceRef:   litellmv1alpha1.InstanceRef{Name: instanceName},
+						GuardrailName: "presidio-pii",
+						Provider:      "presidio",
+						Mode:          "pre_call",
+					},
+				})).To(Succeed())
+			}
+		})
+
+		AfterEach(func() {
+			cleanup(key)
+			instance := &litellmv1alpha1.LiteLLMInstance{}
+			if err := k8sClient.Get(ctx, instanceKey, instance); err == nil {
+				Expect(k8sClient.Delete(ctx, instance)).To(Succeed())
+			}
+		})
+
+		It("reports Ready=False with reason InstanceUnmanaged instead of Validated", func() {
+			reconcileGuardrail(key)
+			reason, status := readyReason(key)
+			Expect(reason).To(Equal("InstanceUnmanaged"))
+			Expect(status).To(Equal(metav1.ConditionFalse))
+
+			updated := &litellmv1alpha1.LiteLLMGuardrail{}
+			Expect(k8sClient.Get(ctx, key, updated)).To(Succeed())
+			Expect(updated.Status.Configured).To(BeFalse())
+		})
+	})
 })

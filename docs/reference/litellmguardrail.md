@@ -270,6 +270,7 @@ The names must match `spec.guardrailName` on a LiteLLMGuardrail CR bound to the 
 | `APIBaseRequired` | `provider == generic_guardrail_api` but `spec.apiBase` is empty |
 | `UnreachableFallbackNotAllowed` | `spec.unreachableFallback` is set on a provider other than `generic_guardrail_api` |
 | `InstanceNotFound` | `spec.instanceRef.name` does not resolve to a LiteLLMInstance in the same namespace |
+| `InstanceUnmanaged` | The referenced instance has `spec.workload.managed: false` — guardrail config is never rendered for it |
 | `SecretNotFound` | `spec.apiKeySecretRef.name` does not exist |
 | `SecretKeyMissing` | The referenced Secret exists but does not contain `spec.apiKeySecretRef.key` |
 
@@ -314,7 +315,7 @@ The env var name follows `GUARDRAIL_<SANITIZED>_API_KEY` where `<SANITIZED>` is 
 
 Both the guardrail controller and the LiteLLMInstance controller watch LiteLLMGuardrail objects:
 
-- The **guardrail controller** validates the CR: checks the referenced instance exists and (if declared) the API key Secret exists and contains the expected key.
+- The **guardrail controller** validates the CR: checks the referenced instance exists, is managed (see [`workload.managed`](litellminstance.md#workload)), and (if declared) the API key Secret exists and contains the expected key.
 - The **LiteLLMInstance controller** re-reconciles the target instance whenever a guardrail is created, updated, or deleted — rebuilding the ConfigMap and rolling the Deployment with the new env vars.
 
 There is nothing to "apply" manually: editing a LiteLLMGuardrail triggers an automatic rollout on the owning instance.
