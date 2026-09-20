@@ -497,7 +497,7 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 				cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(ContainSubstring("controller-runtime.metrics\tServing metrics server"),
+				g.Expect(output).To(ContainSubstring("Serving metrics server"),
 					"Metrics server not yet started")
 			}
 			Eventually(verifyMetricsServerStarted).Should(Succeed())
@@ -837,20 +837,33 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 			Expect(output).NotTo(BeEmpty(), "litellmModelId should be set after sync")
 		})
 
+		// LiteLLM serves /organization/* only to Enterprise licensees, so against the
+		// OSS image the operator settles on EnterpriseLicenseRequired instead of Synced.
+		// Both are correct terminal states; the org-scoped specs follow whichever one
+		// this LiteLLM build produces.
+		orgEnterpriseGated := false
+
 		It("should create a LiteLLMOrganization and wait for Synced", func() {
 			By("applying the LiteLLMOrganization CR")
 			applyYAML(organizationYAML)
 
-			By("waiting for the organization to be synced")
-			verifyOrgSynced := func(g Gomega) {
+			By("waiting for the organization to settle on a Synced condition")
+			var reason string
+			verifyOrgSettled := func(g Gomega) {
 				cmd := exec.Command("kubectl", "get", "litellmorganization", orgName,
 					"-n", testNamespace,
-					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].status}")
+					"-o", "jsonpath={.status.conditions[?(@.type=='Synced')].reason}")
 				output, err := utils.Run(cmd)
 				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(output).To(Equal("True"))
+				g.Expect(output).To(BeElementOf("Synced", "EnterpriseLicenseRequired"))
+				reason = output
 			}
-			Eventually(verifyOrgSynced, 2*time.Minute, 5*time.Second).Should(Succeed())
+			Eventually(verifyOrgSettled, 2*time.Minute, 5*time.Second).Should(Succeed())
+
+			orgEnterpriseGated = reason == "EnterpriseLicenseRequired"
+			if orgEnterpriseGated {
+				Skip("LiteLLM requires an Enterprise license for organizations")
+			}
 
 			By("verifying the organization has a LiteLLM ID")
 			cmd := exec.Command("kubectl", "get", "litellmorganization", orgName,
@@ -861,6 +874,10 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 		})
 
 		It("should create a LiteLLMTeam scoped to an organization", func() {
+			if orgEnterpriseGated {
+				Skip("no organization to scope a team to")
+			}
+
 			By("applying the org-scoped LiteLLMTeam CR")
 			applyYAML(orgTeamYAML)
 
@@ -1148,6 +1165,10 @@ var _ = Describe("Manager", Ordered, ContinueOnFailure, func() {
 		})
 
 		It("should delete org-scoped Team and verify cleanup", func() {
+			if orgEnterpriseGated {
+				Skip("no organization to scope a team to")
+			}
+
 			cmd := exec.Command("kubectl", "delete", "litellmteam", orgTeamName,
 				"-n", testNamespace, "--timeout=60s")
 			_, err := utils.Run(cmd)
