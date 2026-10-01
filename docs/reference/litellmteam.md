@@ -85,6 +85,7 @@ spec:
 | --- | --- | --- | --- | --- |
 | `instanceRef` | InstanceRef | Yes | — | Reference to the LiteLLMInstance |
 | `organizationRef` | *OrganizationRef | No | — | Reference to a [LiteLLMOrganization](/reference/litellmorganization) in the same namespace |
+| `teamId` | string | No | — | Pins the LiteLLM `team_id`. An existing team with this id is adopted instead of duplicated; otherwise the team is created with it. See [Adopting Existing Teams](#adopting-existing-teams) |
 | `teamAlias` | string | Yes | — | Human-readable team name |
 | `models` | []string | No | — | Models this team can access |
 | `maxBudgetMonthly` | *float64 | No | — | Maximum monthly budget in USD |
@@ -167,3 +168,32 @@ engineering   engineering   5         mixed        true     2d
 ## Member Management
 
 See [Team Member Management](/guide/team-members) for a detailed explanation of the three modes.
+
+## Adopting Existing Teams
+
+LiteLLM does not treat `team_alias` as unique, so a `LiteLLMTeam` for a team that already exists (made in the Admin UI, or before the operator was installed) would otherwise create a second team with the same alias. Set `teamId` to the existing team's id to bring it under the CR instead:
+
+```yaml
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMTeam
+metadata:
+  name: engineering
+spec:
+  instanceRef:
+    name: my-gateway
+  teamId: 3f2b6c1e-0000-4000-8000-000000000000  # id of the existing team
+  teamAlias: engineering
+  models: [gpt-4o]
+```
+
+The first time it reconciles the CR, the operator looks up `teamId`:
+
+| `/team/info` result | What happens |
+| --- | --- |
+| Team found | Adopted: the id is recorded, the CR is annotated `litellm.palena.ai/adopted: "true"`, and the team is updated to match the spec |
+| 404 | The team is created with that `team_id` |
+| Any other error | Nothing is created; the reconcile is retried |
+
+An adopted team is **never deleted** from LiteLLM when its CR is deleted. The operator did not create it, and the keys and spend history attached to it cannot be recreated. Teams the operator created are deleted on CR deletion as before.
+
+Adoption applies the whole spec to the existing team, including membership. With the default `memberManagement: mixed`, `members` are only added. With `memberManagement: crd`, members of the existing team who are not listed in `members` are **removed**, so list them before adopting a team in that mode.

@@ -97,3 +97,11 @@ service-bot   service-bot@example.com    internal_user   true     1d
 - **GitOps user management** alongside SSO for specific accounts
 
 When SSO/SCIM handles user provisioning, `LiteLLMUser` CRDs are typically not needed for human users.
+
+## Adopting Existing Users
+
+If `userId` already exists in LiteLLM (created by SSO, the Admin UI, or before the operator was installed), `/user/new` returns 409. The operator then confirms through `/user/info` that the user exists under `userId` and adopts it: the id is recorded, the CR is annotated `litellm.palena.ai/adopted: "true"`, and the user is updated to match the spec.
+
+LiteLLM also returns 409 when `userEmail` belongs to a *different* user. In that case `/user/info` finds no user under `userId`, so nothing is adopted and the CR reports the conflict.
+
+An adopted user is **never deleted** from LiteLLM when its CR is deleted, because the operator did not create it. Users the operator created are deleted on CR deletion as before.

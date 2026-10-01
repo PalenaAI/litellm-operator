@@ -127,8 +127,15 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("resolve organization ref: %w", err)
 	}
 
+	if team.Status.LiteLLMTeamID == "" && team.Spec.TeamID != "" {
+		if err := r.adoptExistingTeam(ctx, apiClient, team); err != nil {
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+		}
+	}
+
 	if team.Status.LiteLLMTeamID == "" {
 		req := litellm.TeamCreateRequest{
+			TeamID:              team.Spec.TeamID,
 			TeamAlias:           team.Spec.TeamAlias,
 			OrganizationID:      orgID,
 			Models:              team.Spec.Models,
@@ -229,6 +236,37 @@ func (r *LiteLLMTeamReconciler) reconcileTeam(
 	now := metav1.Now()
 	team.Status.LastSyncTime = &now
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+// adoptExistingTeam binds the CR to the team named by spec.teamId when that
+// team already exists. It records the id and the adopted annotation but no sync
+// hash, so the update path in reconcileTeam then brings the team to the CR's
+// spec. A 404 leaves the CR unbound, and the team is created under that id. Any
+// other error is returned rather than guessed at: creating on an inconclusive
+// check is how duplicate teams appear.
+func (r *LiteLLMTeamReconciler) adoptExistingTeam(
+	ctx context.Context,
+	apiClient litellm.Client,
+	team *litellmv1alpha1.LiteLLMTeam,
+) error {
+	if _, err := apiClient.Teams().Get(ctx, team.Spec.TeamID); err != nil {
+		if apiErr, ok := litellm.IsAPIError(err); ok && apiErr.IsNotFound() {
+			return nil
+		}
+		return fmt.Errorf("check for existing team %q: %w", team.Spec.TeamID, err)
+	}
+	// The adopted mark is persisted before the id; see markAdopted.
+	if err := markAdopted(ctx, r.Client, team); err != nil {
+		return err
+	}
+	team.Status.LiteLLMTeamID = team.Spec.TeamID
+	if err := r.Status().Update(ctx, team); err != nil {
+		return fmt.Errorf("update status after adopt: %w", err)
+	}
+	logf.FromContext(ctx).Info("adopted existing team", "teamId", team.Spec.TeamID)
+	emitEvent(r.Recorder, team, corev1.EventTypeNormal, EventReasonAdopted,
+		"Adopted existing LiteLLM team %q (id=%s)", team.Spec.TeamAlias, team.Spec.TeamID)
+	return nil
 }
 
 func (r *LiteLLMTeamReconciler) reconcileMembers(
@@ -442,7 +480,10 @@ func (r *LiteLLMTeamReconciler) handleDeletion(ctx context.Context, team *litell
 	if !controllerutil.ContainsFinalizer(team, FinalizerName) {
 		return ctrl.Result{}, nil
 	}
-	if team.Status.LiteLLMTeamID != "" {
+	if team.Annotations[AnnotationAdopted] == AnnotationAdoptedValue {
+		emitEvent(r.Recorder, team, corev1.EventTypeNormal, EventReasonDeleted,
+			"Team %q was adopted, not created, by the operator; left in place in LiteLLM", team.Spec.TeamAlias)
+	} else if team.Status.LiteLLMTeamID != "" {
 		resolved, err := resolveInstance(ctx, r.Client, team.Namespace, team.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))

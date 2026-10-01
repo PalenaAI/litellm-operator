@@ -61,6 +61,14 @@ const (
 	// AnnotationSyncHash stores the hash of the last synced spec.
 	AnnotationSyncHash = "litellm.palena.ai/sync-hash"
 
+	// AnnotationAdopted marks a CR whose LiteLLM object already existed when the
+	// operator first reconciled it. The operator did not create that object, so
+	// it never deletes it upstream when the CR is deleted.
+	AnnotationAdopted = "litellm.palena.ai/adopted"
+
+	// AnnotationAdoptedValue is the value AnnotationAdopted is set to.
+	AnnotationAdoptedValue = "true"
+
 	// AnnotationSecretHash stores a digest of the contents of every Secret the
 	// proxy pod consumes. It lives on the pod template so that rotating a Secret
 	// changes the template and rolls the Deployment: secretKeyRef env vars and
@@ -107,6 +115,7 @@ const (
 	EventReasonCreated              = "Created"
 	EventReasonUpdated              = "Updated"
 	EventReasonDeleted              = "Deleted"
+	EventReasonAdopted              = "Adopted"
 	EventReasonSynced               = "Synced"
 	EventReasonReconcileFailed      = "ReconcileFailed"
 	EventReasonInstanceNotReady     = "InstanceNotReady"
@@ -347,4 +356,22 @@ func isEnterpriseLicenseError(err error) bool {
 			strings.Contains(strings.ToLower(apiErr.Message), "enterprise")
 	}
 	return false
+}
+
+// markAdopted records on the CR that its LiteLLM object was adopted, not
+// created, so handleDeletion leaves that object in place. Callers persist it
+// before writing the adopted id to status: if a failure lands between the two
+// writes, the CR is still unbound and the next reconcile adopts again, whereas
+// the reverse order could leave an adopted object looking operator-created.
+func markAdopted(ctx context.Context, c client.Client, obj client.Object) error {
+	annotations := obj.GetAnnotations()
+	if annotations == nil {
+		annotations = map[string]string{}
+	}
+	annotations[AnnotationAdopted] = AnnotationAdoptedValue
+	obj.SetAnnotations(annotations)
+	if err := c.Update(ctx, obj); err != nil {
+		return fmt.Errorf("mark adopted: %w", err)
+	}
+	return nil
 }
