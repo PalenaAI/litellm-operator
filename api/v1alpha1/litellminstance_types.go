@@ -147,11 +147,16 @@ type LiteLLMInstanceSpec struct {
 
 	// Topology spread constraints.
 	// +optional
+	// +listType=map
+	// +listMapKey=topologyKey
+	// +listMapKey=whenUnsatisfiable
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Topology Spread Constraints"
 	TopologySpreadConstraints []corev1.TopologySpreadConstraint `json:"topologySpreadConstraints,omitempty"`
 
 	// Extra environment variables for the LiteLLM container.
 	// +optional
+	// +listType=map
+	// +listMapKey=name
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Env Vars"
 	ExtraEnvVars []corev1.EnvVar `json:"extraEnvVars,omitempty"`
 
@@ -251,12 +256,16 @@ type LiteLLMInstanceSpec struct {
 	// hatch for mounting arbitrary Secrets/ConfigMaps the typed fields do not
 	// cover. Pair with extraVolumeMounts.
 	// +optional
+	// +listType=map
+	// +listMapKey=name
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Volumes"
 	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
 
 	// ExtraVolumeMounts are additional volume mounts on the LiteLLM container.
 	// Escape hatch paired with extraVolumes.
 	// +optional
+	// +listType=map
+	// +listMapKey=mountPath
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Volume Mounts"
 	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 }
@@ -625,6 +634,8 @@ type ImageSpec struct {
 
 	// Image pull secrets.
 	// +optional
+	// +listType=map
+	// +listMapKey=name
 	PullSecrets []SecretRef `json:"pullSecrets,omitempty"`
 }
 
@@ -1397,6 +1408,8 @@ type CallbacksSpec struct {
 
 	// Environment variables for callback configuration.
 	// +optional
+	// +listType=map
+	// +listMapKey=name
 	EnvVars []corev1.EnvVar `json:"envVars,omitempty"`
 }
 

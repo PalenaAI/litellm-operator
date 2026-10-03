@@ -418,6 +418,9 @@ spec:
                       - name
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                   types:
                     description: Callback types to enable (e.g., "langfuse", "otel",
                       "custom").
@@ -833,6 +836,9 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               extraVolumeMounts:
                 description: |-
                   ExtraVolumeMounts are additional volume mounts on the LiteLLM container.
@@ -899,6 +905,9 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - mountPath
+                x-kubernetes-list-type: map
               extraVolumes:
                 description: |-
                   ExtraVolumes are additional volumes attached to the proxy pod. Escape
@@ -2686,6 +2695,9 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               fallbacks:
                 description: Fallback configuration for model routing.
                 properties:
@@ -2932,6 +2944,9 @@ spec:
                       - name
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
                   repository:
                     default: ghcr.io/berriai/litellm
                     description: Container image repository.
@@ -5528,6 +5543,10 @@ spec:
                   - whenUnsatisfiable
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - topologyKey
+                - whenUnsatisfiable
+                x-kubernetes-list-type: map
               upgrade:
                 description: Upgrade strategy configuration.
                 properties:
