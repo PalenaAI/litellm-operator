@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -144,11 +145,26 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 	}
 
 	if user.Status.LiteLLMUserID == "" {
+		var userID string
+		adopted := false
 		resp, err := apiClient.Users().Create(ctx, req)
 		if err != nil {
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("create user: %w", err)
+			if err := adoptExistingUser(ctx, apiClient, user, req, err); err != nil {
+				return ctrl.Result{RequeueAfter: 30 * time.Second}, err
+			}
+			// Persist the adopted mark before the id, so a failure between the
+			// two writes can never leave an adopted user looking operator-created
+			// (which would let a later CR deletion delete it). If it fails here,
+			// the next reconcile simply adopts again.
+			if err := markAdopted(ctx, r.Client, user); err != nil {
+				return ctrl.Result{}, err
+			}
+			adopted = true
+			userID = user.Spec.UserID
+		} else {
+			userID = resp.UserID
 		}
-		user.Status.LiteLLMUserID = resp.UserID
+		user.Status.LiteLLMUserID = userID
 		user.Status.Synced = true
 		if err := r.Status().Update(ctx, user); err != nil {
 			return ctrl.Result{}, fmt.Errorf("update status after create: %w", err)
@@ -160,9 +176,15 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 		if err := r.Update(ctx, user); err != nil {
 			return ctrl.Result{}, err
 		}
-		log.Info("created user", "userId", resp.UserID)
-		emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonCreated,
-			"User %q registered with LiteLLM (id=%s)", user.Spec.UserEmail, resp.UserID)
+		if adopted {
+			log.Info("adopted existing user", "userId", userID)
+			emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonAdopted,
+				"Adopted existing LiteLLM user %q (id=%s)", user.Spec.UserEmail, userID)
+		} else {
+			log.Info("created user", "userId", userID)
+			emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonCreated,
+				"User %q registered with LiteLLM (id=%s)", user.Spec.UserEmail, userID)
+		}
 	} else {
 		currentHash := computeSpecHash(user.Spec)
 		if user.Annotations[AnnotationSyncHash] != currentHash {
@@ -191,6 +213,34 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 	now := metav1.Now()
 	user.Status.LastSyncTime = &now
 	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+}
+
+// adoptExistingUser handles a failed /user/new. It adopts the user only when
+// the failure is a 409 and /user/info confirms spec.userId exists. LiteLLM also
+// answers 409 when spec.userEmail belongs to a different user, and adopting
+// then would bind the CR to the wrong account, so the conflict alone is not
+// enough. On adoption the user is brought to the CR's spec with /user/update.
+func adoptExistingUser(
+	ctx context.Context,
+	apiClient litellm.Client,
+	user *litellmv1alpha1.LiteLLMUser,
+	req litellm.UserCreateRequest,
+	createErr error,
+) error {
+	apiErr, ok := litellm.IsAPIError(createErr)
+	if !ok || apiErr.StatusCode != http.StatusConflict || user.Spec.UserID == "" {
+		return fmt.Errorf("create user: %w", createErr)
+	}
+	if _, err := apiClient.Users().Get(ctx, user.Spec.UserID); err != nil {
+		if getErr, ok := litellm.IsAPIError(err); ok && getErr.IsNotFound() {
+			return fmt.Errorf("create user: %w (no user with id %q, so not adopting)", createErr, user.Spec.UserID)
+		}
+		return fmt.Errorf("create user: %w (could not check for existing user %q: %v)", createErr, user.Spec.UserID, err)
+	}
+	if err := apiClient.Users().Update(ctx, req); err != nil {
+		return fmt.Errorf("update adopted user: %w", err)
+	}
+	return nil
 }
 
 func (r *LiteLLMUserReconciler) resolveTeamRefs(
@@ -225,7 +275,10 @@ func (r *LiteLLMUserReconciler) handleDeletion(ctx context.Context, user *litell
 	if !controllerutil.ContainsFinalizer(user, FinalizerName) {
 		return ctrl.Result{}, nil
 	}
-	if user.Status.LiteLLMUserID != "" {
+	if user.Annotations[AnnotationAdopted] == AnnotationAdoptedValue {
+		emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonDeleted,
+			"User %q was adopted, not created, by the operator; left in place in LiteLLM", user.Spec.UserEmail)
+	} else if user.Status.LiteLLMUserID != "" {
 		resolved, err := resolveInstance(ctx, r.Client, user.Namespace, user.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))

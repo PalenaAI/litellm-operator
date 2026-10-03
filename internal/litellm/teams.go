@@ -37,6 +37,7 @@ type TeamService interface {
 
 // TeamCreateRequest is the request to create a team.
 type TeamCreateRequest struct {
+	TeamID              string            `json:"team_id,omitempty"`
 	TeamAlias           string            `json:"team_alias"`
 	OrganizationID      string            `json:"organization_id,omitempty"`
 	Models              []string          `json:"models,omitempty"`

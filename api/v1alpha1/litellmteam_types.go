@@ -31,6 +31,16 @@ type LiteLLMTeamSpec struct {
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Organization Ref"
 	OrganizationRef *OrganizationRef `json:"organizationRef,omitempty"`
 
+	// TeamID pins the LiteLLM team_id. If a team with this id already exists
+	// (created through the Admin UI or before the operator was installed), the
+	// operator adopts it instead of creating a second team with the same alias,
+	// and never deletes it when this resource is deleted. Otherwise the team is
+	// created with this id. When empty, LiteLLM generates the id. Only read
+	// before the team is first synced.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Team ID"
+	TeamID string `json:"teamId,omitempty"`
+
 	// Human-readable team alias.
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Team Alias"
 	TeamAlias string `json:"teamAlias"`
