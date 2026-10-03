@@ -5,7 +5,7 @@ metadata:
     alm-examples: '[]'
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.25.0
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.26.0
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     repository: https://github.com/PalenaAI/litellm-operator
@@ -527,6 +527,15 @@ spec:
       - description: Human-readable team alias.
         displayName: Team Alias
         path: teamAlias
+      - description: |-
+          TeamID pins the LiteLLM team_id. If a team with this id already exists
+          (created through the Admin UI or before the operator was installed), the
+          operator adopts it instead of creating a second team with the same alias,
+          and never deletes it when this resource is deleted. Otherwise the team is
+          created with this id. When empty, LiteLLM generates the id. Only read
+          before the team is first synced.
+        displayName: Team ID
+        path: teamId
       - description: |-
           Max budget in USD applied to each individual team member (distinct from
           the team-wide maxBudgetMonthly). The reset cadence follows the team's

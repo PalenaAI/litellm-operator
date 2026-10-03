@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-03
+
 ### Added
 
 - **Adopting existing users and teams.** A `LiteLLMUser` or `LiteLLMTeam` can now take over an object that already exists in LiteLLM (created through the Admin UI, SSO, or before the operator was installed) instead of failing or duplicating it. Previously a `LiteLLMUser` whose `userId` already existed retried `/user/new` forever on a 409 and never recorded an id, so any `LiteLLMVirtualKey` with a `userRef` to it never synced. A `LiteLLMTeam` for an existing team created a second team with the same alias, because LiteLLM does not treat `team_alias` as unique.
@@ -35,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Note: the first reconcile after upgrading stamps the digest for the first time, which rolls each managed gateway once.
 
 - **A guardrail being deleted is no longer rendered back into the config for one reconcile.** `LiteLLMGuardrail` CRs stay listable between `kubectl delete` and the guardrail controller removing their finalizer, and the instance controller included them, so a reconcile landing in that window wrote the guardrail back into the ConfigMap. It converged on the next event, but the flap is gone: guardrails marked for deletion are now skipped.
+
+### Security
+
+- **Bumped the `go.opentelemetry.io/otel` modules to v1.45.0** (from v1.43.0/v1.44.0) for [GO-2026-6505](https://pkg.go.dev/vuln/GO-2026-6505): the OTLP trace exporter could log endpoint URLs at info level. The operator does not use OpenTelemetry directly — it arrives via controller-runtime's metrics filters and `k8s.io/component-base/tracing`, and only the package init is reachable — but `govulncheck` reported it as affecting the operator and failed CI.
 
 ## [0.25.0] - 2026-09-10
 

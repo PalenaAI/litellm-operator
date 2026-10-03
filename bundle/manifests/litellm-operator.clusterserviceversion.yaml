@@ -544,15 +544,15 @@ metadata:
       ]
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.25.0
-    createdAt: "2026-09-10T13:48:04Z"
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.26.0
+    createdAt: "2026-10-03T15:46:03Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/PalenaAI/litellm-operator
     support: bitkaio LLC
-  name: litellm-operator.v0.25.0
+  name: litellm-operator.v0.26.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -1070,6 +1070,15 @@ spec:
         displayName: Team Alias
         path: teamAlias
       - description: |-
+          TeamID pins the LiteLLM team_id. If a team with this id already exists
+          (created through the Admin UI or before the operator was installed), the
+          operator adopts it instead of creating a second team with the same alias,
+          and never deletes it when this resource is deleted. Otherwise the team is
+          created with this id. When empty, LiteLLM generates the id. Only read
+          before the team is first synced.
+        displayName: Team ID
+        path: teamId
+      - description: |-
           Max budget in USD applied to each individual team member (distinct from
           the team-wide maxBudgetMonthly). The reset cadence follows the team's
           budgetDuration.
@@ -1524,7 +1533,7 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
-                image: ghcr.io/palenaai/litellm-operator:v0.25.0
+                image: ghcr.io/palenaai/litellm-operator:v0.26.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -1623,4 +1632,4 @@ spec:
   provider:
     name: bitkaio LLC
     url: https://palena.ai
-  version: 0.25.0
+  version: 0.26.0
