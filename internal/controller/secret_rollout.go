@@ -22,6 +22,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"maps"
 	"slices"
 
@@ -30,20 +31,60 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// secretRef records how one Secret is consumed by a pod spec.
-type secretRef struct {
-	// whole is true when the pod consumes every key in the Secret (envFrom, or a
+// dataRef records how one Secret or ConfigMap is consumed by a pod spec.
+type dataRef struct {
+	// whole is true when the pod consumes every key in the object (envFrom, or a
 	// volume without an explicit item list), so any key changing matters.
 	whole bool
 	// keys are the individually referenced keys, used when whole is false.
 	keys map[string]struct{}
 }
 
-func (s *secretRef) addKey(key string) {
-	if s.keys == nil {
-		s.keys = make(map[string]struct{})
+func (d *dataRef) addKey(key string) {
+	if d.keys == nil {
+		d.keys = make(map[string]struct{})
 	}
-	s.keys[key] = struct{}{}
+	d.keys[key] = struct{}{}
+}
+
+// refFunc returns an accessor that lazily creates the dataRef for a named
+// object, so a collector can record several references to the same one.
+func refFunc(refs map[string]*dataRef) func(name string) *dataRef {
+	return func(name string) *dataRef {
+		if name == "" {
+			return nil
+		}
+		if r, ok := refs[name]; ok {
+			return r
+		}
+		r := &dataRef{}
+		refs[name] = r
+		return r
+	}
+}
+
+// hashWriter accumulates a digest over length-prefixed fields, so that no
+// combination of names, keys and values can be reassembled into a different set
+// with the same digest. Only the digest is ever returned — never a value.
+type hashWriter struct {
+	h hash.Hash
+}
+
+func newHashWriter() *hashWriter {
+	return &hashWriter{h: sha256.New()}
+}
+
+func (w *hashWriter) write(parts ...[]byte) {
+	for _, p := range parts {
+		var n [8]byte
+		binary.BigEndian.PutUint64(n[:], uint64(len(p)))
+		w.h.Write(n[:])
+		w.h.Write(p)
+	}
+}
+
+func (w *hashWriter) sum() string {
+	return hex.EncodeToString(w.h.Sum(nil))
 }
 
 // podSpecSecretRefs collects every Secret the pod spec consumes as *data*, along
@@ -52,20 +93,9 @@ func (s *secretRef) addKey(key string) {
 // imagePullSecrets are deliberately excluded: they are read by the kubelet when
 // pulling the image, not projected into the container, so rotating one does not
 // make a running pod stale and must not trigger a rollout.
-func podSpecSecretRefs(spec corev1.PodSpec) map[string]*secretRef {
-	refs := map[string]*secretRef{}
-
-	ref := func(name string) *secretRef {
-		if name == "" {
-			return nil
-		}
-		if r, ok := refs[name]; ok {
-			return r
-		}
-		r := &secretRef{}
-		refs[name] = r
-		return r
-	}
+func podSpecSecretRefs(spec corev1.PodSpec) map[string]*dataRef {
+	refs := map[string]*dataRef{}
+	ref := refFunc(refs)
 
 	containers := slices.Concat(spec.Containers, spec.InitContainers)
 	for _, c := range containers {
@@ -146,20 +176,10 @@ func podTemplateSecretHash(ctx context.Context, c client.Reader, namespace strin
 		return "", nil
 	}
 
-	h := sha256.New()
-	// Length-prefix every field so that no combination of names, keys and values
-	// can be reassembled into a different set with the same digest.
-	write := func(parts ...[]byte) {
-		for _, p := range parts {
-			var n [8]byte
-			binary.BigEndian.PutUint64(n[:], uint64(len(p)))
-			h.Write(n[:])
-			h.Write(p)
-		}
-	}
+	h := newHashWriter()
 
 	for _, name := range slices.Sorted(maps.Keys(refs)) {
-		write([]byte(name))
+		h.write([]byte(name))
 
 		var secret corev1.Secret
 		if err := c.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &secret); err != nil {
@@ -168,7 +188,7 @@ func podTemplateSecretHash(ctx context.Context, c client.Reader, namespace strin
 				// looks like "the Secret is gone" and roll the workload.
 				return "", fmt.Errorf("hashing Secret %s/%s for pod template: %w", namespace, name, err)
 			}
-			write([]byte("\x00absent"))
+			h.write([]byte("\x00absent"))
 			continue
 		}
 
@@ -188,12 +208,12 @@ func podTemplateSecretHash(ctx context.Context, c client.Reader, namespace strin
 		for _, k := range wanted {
 			v, ok := secret.Data[k]
 			if !ok {
-				write([]byte(k), []byte("\x00missing"))
+				h.write([]byte(k), []byte("\x00missing"))
 				continue
 			}
-			write([]byte(k), v)
+			h.write([]byte(k), v)
 		}
 	}
 
-	return hex.EncodeToString(h.Sum(nil)), nil
+	return h.sum(), nil
 }

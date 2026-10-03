@@ -17,7 +17,6 @@ limitations under the License.
 package resources
 
 import (
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -1129,10 +1128,4 @@ func mapDefaultTeamParams(p *litellmv1alpha1.DefaultTeamParams) map[string]inter
 		m["rpm_limit"] = *p.RPMLimit
 	}
 	return m
-}
-
-// MarshalJSON is a helper to serialize the config as JSON for hashing.
-func ConfigHash(config map[string]interface{}) string {
-	data, _ := json.Marshal(config)
-	return string(data)
 }

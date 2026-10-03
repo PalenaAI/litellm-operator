@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -145,6 +146,73 @@ func TestReconcileDeploymentRollsOnSecretRotation(t *testing.T) {
 	}
 	if after := rolled.Spec.Template.Annotations[AnnotationSecretHash]; after == before {
 		t.Error("pod template digest unchanged after rotation; the Deployment would not roll")
+	}
+}
+
+// The regression this mechanism exists for: deleting a LiteLLMGuardrail rewrites
+// proxy_server_config.yaml, but litellm parses that file only at startup. The
+// pod template must therefore change too, otherwise nothing rolls and the
+// running proxy keeps enforcing the guardrail — which is exactly what happened
+// for a guardrail carrying no apiKeySecretRef, since without one its removal
+// took no env var with it and left the template byte-identical.
+func TestReconcileDeploymentRollsWhenGuardrailIsDeleted(t *testing.T) {
+	ctx := context.Background()
+	instance := instanceForResourceTest()
+	labels := labelsForInstance(instance.Name)
+	scheme := instanceResourceTestScheme(t)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(dbSecretForResourceTest()).Build()
+	reconciler := &LiteLLMInstanceReconciler{Client: c, Scheme: scheme}
+
+	// A guardrail with no apiKeySecretRef: it contributes to the config file and
+	// to nothing else on the pod.
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{{
+		ObjectMeta: metav1.ObjectMeta{Name: "pii-detector", Namespace: "default"},
+		Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+			InstanceRef:   litellmv1alpha1.InstanceRef{Name: instance.Name},
+			GuardrailName: "pii-detector",
+			Provider:      "presidio",
+			Mode:          "pre_call",
+		},
+	}}
+
+	if err := reconciler.reconcileConfigMap(ctx, instance, labels, guardrails); err != nil {
+		t.Fatalf("create configmap: %v", err)
+	}
+	if err := reconciler.reconcileDeployment(ctx, instance, labels, "", guardrails); err != nil {
+		t.Fatalf("create deployment: %v", err)
+	}
+
+	var created appsv1.Deployment
+	if err := c.Get(ctx, types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, &created); err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	before := created.Spec.Template.Annotations[AnnotationConfigHash]
+	if before == "" {
+		t.Fatal("expected the pod template to carry a ConfigMap digest")
+	}
+
+	// Delete the guardrail: the config is rewritten without it.
+	if err := reconciler.reconcileConfigMap(ctx, instance, labels, nil); err != nil {
+		t.Fatalf("rewrite configmap: %v", err)
+	}
+	var cm corev1.ConfigMap
+	if err := c.Get(ctx, types.NamespacedName{Name: instance.Name + "-config", Namespace: instance.Namespace}, &cm); err != nil {
+		t.Fatalf("get configmap: %v", err)
+	}
+	if strings.Contains(cm.Data["proxy_server_config.yaml"], "pii-detector") {
+		t.Fatal("guardrail is still in the rendered config")
+	}
+
+	if err := reconciler.reconcileDeployment(ctx, instance, labels, "", nil); err != nil {
+		t.Fatalf("reconcile after guardrail deletion: %v", err)
+	}
+
+	var rolled appsv1.Deployment
+	if err := c.Get(ctx, types.NamespacedName{Name: instance.Name, Namespace: instance.Namespace}, &rolled); err != nil {
+		t.Fatalf("get deployment: %v", err)
+	}
+	if after := rolled.Spec.Template.Annotations[AnnotationConfigHash]; after == before {
+		t.Error("pod template digest unchanged after the guardrail left the config; the proxy would keep enforcing it")
 	}
 }
 

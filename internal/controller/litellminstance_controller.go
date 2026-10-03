@@ -213,6 +213,12 @@ func (r *LiteLLMInstanceReconciler) listGuardrailsForInstance(ctx context.Contex
 	}
 	filtered := make([]litellmv1alpha1.LiteLLMGuardrail, 0, len(list.Items))
 	for _, g := range list.Items {
+		// A guardrail under deletion is still listable until its finalizer is
+		// removed. Rendering it would put it back into the config for one
+		// reconcile, so drop it as soon as it is marked for deletion.
+		if !g.DeletionTimestamp.IsZero() {
+			continue
+		}
 		if g.Spec.InstanceRef.Name == instance.Name {
 			filtered = append(filtered, g)
 		}
@@ -625,6 +631,22 @@ func (r *LiteLLMInstanceReconciler) reconcileDeployment(ctx context.Context, ins
 		desired.Spec.Template.Annotations[AnnotationSecretHash] = secretHash
 	}
 
+	// Same for the ConfigMaps it consumes. litellm reads proxy_server_config.yaml
+	// exactly once at startup, so a config-only change — a deleted
+	// LiteLLMGuardrail, edited routerSettings — rewrites the ConfigMap while the
+	// rendered Deployment stays byte-identical, and the running proxy would keep
+	// the old config forever (see podTemplateConfigMapHash).
+	configHash, err := podTemplateConfigMapHash(ctx, r.Client, desired.Namespace, desired.Spec.Template.Spec)
+	if err != nil {
+		return err
+	}
+	if configHash != "" {
+		if desired.Spec.Template.Annotations == nil {
+			desired.Spec.Template.Annotations = make(map[string]string, 1)
+		}
+		desired.Spec.Template.Annotations[AnnotationConfigHash] = configHash
+	}
+
 	var existing appsv1.Deployment
 	err = r.Get(ctx, types.NamespacedName{Name: desired.Name, Namespace: desired.Namespace}, &existing)
 	if apierrors.IsNotFound(err) {
@@ -669,6 +691,7 @@ const autoRollbackPodTemplateAnnotation = "litellm.palena.ai/auto-rollback"
 var operatorManagedPodTemplateAnnotations = map[string]bool{
 	autoRollbackPodTemplateAnnotation: true,
 	AnnotationSecretHash:              true,
+	AnnotationConfigHash:              true,
 }
 
 // preserveExternalPodTemplateAnnotations carries annotations owned by other

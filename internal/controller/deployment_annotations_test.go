@@ -75,6 +75,30 @@ func TestPreserveExternalPodTemplateAnnotations(t *testing.T) {
 			},
 		},
 		{
+			// Same for the config digest: carrying one forward would pin the pod
+			// template to a config the ConfigMap no longer holds.
+			name: "drops stale config digest",
+			existing: map[string]string{
+				AnnotationConfigHash:                "stale-digest",
+				"kubectl.kubernetes.io/restartedAt": "2026-09-10T11:34:05Z",
+			},
+			want: map[string]string{
+				"kubectl.kubernetes.io/restartedAt": "2026-09-10T11:34:05Z",
+			},
+		},
+		{
+			name: "keeps desired config digest",
+			existing: map[string]string{
+				AnnotationConfigHash: "old",
+			},
+			desired: map[string]string{
+				AnnotationConfigHash: "new",
+			},
+			want: map[string]string{
+				AnnotationConfigHash: "new",
+			},
+		},
+		{
 			// A digest left over from a pod that consumed a Secret must not be
 			// carried forward once the instance stops consuming any, or the stale
 			// value would pin the pod template forever.

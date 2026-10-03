@@ -77,6 +77,13 @@ const (
 	// running pod.
 	AnnotationSecretHash = "litellm.palena.ai/secret-hash"
 
+	// AnnotationConfigHash stores a digest of the contents of every ConfigMap
+	// the proxy pod consumes, chiefly the generated proxy_server_config.yaml.
+	// litellm parses its config once at startup, so without this a config-only
+	// change leaves the pod template byte-identical and the running proxy keeps
+	// the old config (see podTemplateConfigMapHash).
+	AnnotationConfigHash = "litellm.palena.ai/config-hash"
+
 	// AnnotationAuthMode records how a model's provider auth was last pushed
 	// ("credential" or "inline"). A flip between modes forces a delete+recreate
 	// of the LiteLLM model, because /model/update merges and cannot clear the
