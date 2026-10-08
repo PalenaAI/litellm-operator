@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-10-08
+
 ### Added
 
 - **`LiteLLMUser.spec.initialPasswordSecretRef`** — gives a user an initial Admin UI login password from a Secret key, for environments without SSO. The password is applied once after the user is created or adopted, and afterwards only when the Secret's value changes, so a password the user changes in the Admin UI is never overwritten by a resync. It is sent with `POST /user/update`, because current LiteLLM rejects a password on `/user/new`, and recent versions mark an admin-set password as requiring a reset at first login. Change detection uses an Argon2id digest (random salt) in `status.initialPasswordDigest`; the plaintext is never stored on the CR. The controller watches Secrets, so a new value is applied within seconds. The password is redacted from LiteLLM error messages before they reach a condition, event or log line, since validation errors echo the submitted input. Progress is reported on a new `InitialPasswordApplied` condition, separate from `Synced`, so a missing Secret or a rejected password does not stop the rest of the user from syncing.
+
+### Security
+
+- **Bumped `urllib3` to 2.8.0** in the release workflow's hash-pinned licence-scan requirements (`.github/scancode-requirements.txt`) for [GHSA-vxq7-64xx-v4gw](https://github.com/advisories/GHSA-vxq7-64xx-v4gw), [GHSA-8988-9cw3-xx77](https://github.com/advisories/GHSA-8988-9cw3-xx77) and [GHSA-gh4c-6fx4-qh6g](https://github.com/advisories/GHSA-gh4c-6fx4-qh6g). CI tooling only; nothing in the operator image changed.
+- **Bumped the documentation site's `vue` (3.5.43), `source-map-js` (1.2.2) and `nanoid` (3.3.20)** for [GHSA-g2v6-rqmx-r4w6](https://github.com/advisories/GHSA-g2v6-rqmx-r4w6), [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q) and [GHSA-2v37-7h3g-55p8](https://github.com/advisories/GHSA-2v37-7h3g-55p8). Docs build only; not shipped with the operator.
 
 ## [0.26.0] - 2026-10-03
 
