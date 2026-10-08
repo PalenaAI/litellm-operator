@@ -156,7 +156,7 @@ type LiteLLMUserStatus struct {
 	// +optional
 	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
 
-	// InitialPasswordDigest is a bcrypt digest of the password the operator
+	// InitialPasswordDigest is an Argon2id digest of the password the operator
 	// last applied from spec.initialPasswordSecretRef. It is compared against
 	// the Secret's current value to decide whether the password changed;
 	// the plaintext is never stored.

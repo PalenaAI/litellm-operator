@@ -18,13 +18,15 @@ package controller
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/crypto/argon2"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -229,7 +231,7 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 
 // reconcileInitialPassword applies spec.initialPasswordSecretRef to the user.
 // The password is sent only when it differs from the one the operator last
-// applied (tracked as a bcrypt digest in status), so a password the user
+// applied (tracked as an Argon2id digest in status), so a password the user
 // changes in the Admin UI is never overwritten by a resync — only by a change
 // of the Secret's value. It goes through /user/update because LiteLLM rejects
 // a password on /user/new.
@@ -323,28 +325,66 @@ func (r *LiteLLMUserReconciler) reconcileInitialPassword(
 	return 0
 }
 
-// passwordDigest returns a bcrypt digest of password. The password is
-// pre-hashed with SHA-256 so values beyond bcrypt's 72-byte limit are still
-// fully compared.
+// Argon2id parameters for status.initialPasswordDigest — OWASP's second
+// recommended configuration (19 MiB, 2 passes, 1 lane). The digest only
+// detects a changed Secret value, but it sits on the CR where anyone who can
+// read it could attack it offline, so it must be a real password hash.
+const (
+	argon2Time    uint32 = 2
+	argon2Memory  uint32 = 19 * 1024 // KiB
+	argon2Threads uint8  = 1
+	argon2KeyLen  uint32 = 32
+	argon2SaltLen        = 16
+)
+
+// passwordDigest returns an Argon2id digest of password in PHC string format
+// ($argon2id$v=19$m=...,t=...,p=...$salt$hash) with a random salt.
 func passwordDigest(password string) (string, error) {
-	digest, err := bcrypt.GenerateFromPassword(prehashPassword(password), bcrypt.DefaultCost)
-	if err != nil {
-		return "", fmt.Errorf("compute password digest: %w", err)
+	salt := make([]byte, argon2SaltLen)
+	if _, err := rand.Read(salt); err != nil {
+		return "", fmt.Errorf("generate password digest salt: %w", err)
 	}
-	return string(digest), nil
+	key := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	return fmt.Sprintf("$argon2id$v=%d$%s$%s$%s",
+		argon2.Version, argon2Params(),
+		base64.RawStdEncoding.EncodeToString(salt),
+		base64.RawStdEncoding.EncodeToString(key)), nil
 }
 
-// passwordMatchesDigest reports whether password is the one digest was made from.
+// argon2Params renders the parameter segment of the PHC string.
+func argon2Params() string {
+	return fmt.Sprintf("m=%d,t=%d,p=%d", argon2Memory, argon2Time, argon2Threads)
+}
+
+// passwordMatchesDigest reports whether password is the one digest was made
+// from. A digest it cannot parse never matches, so the password is applied
+// again rather than silently treated as current.
 func passwordMatchesDigest(digest, password string) bool {
-	if digest == "" {
+	parts := strings.Split(digest, "$")
+	if len(parts) != 6 || parts[1] != "argon2id" {
 		return false
 	}
-	return bcrypt.CompareHashAndPassword([]byte(digest), prehashPassword(password)) == nil
-}
-
-func prehashPassword(password string) []byte {
-	sum := sha256.Sum256([]byte(password))
-	return []byte(hex.EncodeToString(sum[:]))
+	var version int
+	if _, err := fmt.Sscanf(parts[2], "v=%d", &version); err != nil || version != argon2.Version {
+		return false
+	}
+	// Only the operator's own parameters are accepted. Status is writable by
+	// anyone allowed to patch it, and honouring an arbitrary m= would let a
+	// crafted digest make the operator allocate gigabytes. A digest made with
+	// other parameters simply does not match, so the password is re-applied.
+	if parts[3] != argon2Params() {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return false
+	}
+	want, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil || len(want) != int(argon2KeyLen) {
+		return false
+	}
+	got := argon2.IDKey([]byte(password), salt, argon2Time, argon2Memory, argon2Threads, argon2KeyLen)
+	return subtle.ConstantTimeCompare(got, want) == 1
 }
 
 // adoptExistingUser handles a failed /user/new. It adopts the user only when

@@ -248,15 +248,35 @@ var _ = Describe("LiteLLMUser initial password", func() {
 })
 
 var _ = Describe("password digest", func() {
-	It("distinguishes passwords longer than bcrypt's 72-byte limit", func() {
-		long := strings.Repeat("a", 80)
+	It("is an Argon2id PHC string with a random salt", func() {
+		a, err := passwordDigest("same-password")
+		Expect(err).NotTo(HaveOccurred())
+		b, err := passwordDigest("same-password")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(a).To(HavePrefix("$argon2id$v=19$m=19456,t=2,p=1$"))
+		Expect(a).NotTo(Equal(b))
+		Expect(passwordMatchesDigest(a, "same-password")).To(BeTrue())
+		Expect(passwordMatchesDigest(b, "same-password")).To(BeTrue())
+	})
+
+	It("compares the whole password, however long", func() {
+		long := strings.Repeat("a", 200)
 		digest, err := passwordDigest(long + "1")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(passwordMatchesDigest(digest, long+"1")).To(BeTrue())
 		Expect(passwordMatchesDigest(digest, long+"2")).To(BeFalse())
 	})
 
-	It("never matches an empty digest", func() {
+	It("rejects a digest whose cost parameters were tampered with", func() {
+		digest, err := passwordDigest("pw")
+		Expect(err).NotTo(HaveOccurred())
+		tampered := strings.Replace(digest, "m=19456", "m=4194304", 1)
+		Expect(passwordMatchesDigest(tampered, "pw")).To(BeFalse())
+	})
+
+	It("never matches an empty or malformed digest", func() {
 		Expect(passwordMatchesDigest("", "anything")).To(BeFalse())
+		Expect(passwordMatchesDigest("$2a$10$notanargon2digest", "anything")).To(BeFalse())
+		Expect(passwordMatchesDigest("$argon2id$v=19$m=19456,t=2,p=1$!!$!!", "anything")).To(BeFalse())
 	})
 })

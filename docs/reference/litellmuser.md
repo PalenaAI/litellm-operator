@@ -80,7 +80,7 @@ You can use either `teamRef` (references a `LiteLLMTeam` CR by name) or `teamId`
 | `currentSpend` | *float64 | Current spend in USD |
 | `resolvedTeams` | []ResolvedTeamMembership | Resolved team memberships |
 | `lastSyncTime` | *Time | Last successful sync time |
-| `initialPasswordDigest` | string | bcrypt digest of the last password applied from `initialPasswordSecretRef` (never the plaintext) |
+| `initialPasswordDigest` | string | Argon2id digest of the last password applied from `initialPasswordSecretRef` (never the plaintext) |
 | `conditions` | []Condition | Standard conditions |
 
 ## Print Columns
@@ -130,7 +130,7 @@ It is an *initial* password: the user is expected to change it after logging in,
 
 - The password is applied once, right after the user is created (or adopted), via `POST /user/update`. LiteLLM rejects a password on `/user/new`.
 - After that it is applied **only when the Secret's value changes**. Resyncs, spec edits and operator restarts never re-send it. To reset a user's password, put a new value in the Secret.
-- The operator records a bcrypt digest of the applied value in `status.initialPasswordDigest` to detect changes. The plaintext is never stored on the CR, logged or put in events.
+- The operator records an Argon2id digest of the applied value in `status.initialPasswordDigest` to detect changes. The plaintext is never stored on the CR, logged or put in events.
 - Removing the field leaves the user's current password in LiteLLM untouched. Adding it back applies the Secret's value again.
 - Recent LiteLLM versions mark an admin-set password as requiring a reset at first login, and validate it against the proxy's password policy and breached-password check.
 
