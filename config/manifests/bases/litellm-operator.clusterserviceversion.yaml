@@ -5,7 +5,7 @@ metadata:
     alm-examples: '[]'
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.26.0
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.27.0
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     repository: https://github.com/PalenaAI/litellm-operator
@@ -572,6 +572,17 @@ spec:
       - description: Budget reset duration (e.g., "30d").
         displayName: Budget Duration
         path: budgetDuration
+      - description: |-
+          InitialPasswordSecretRef references a Secret key holding an initial
+          Admin UI login password for this user. The operator applies it once,
+          after the user is created, and again only when the Secret's value
+          changes. It never re-applies the same value, so a password the user
+          changes afterwards in the Admin UI is left alone. Removing the field
+          leaves the current password in LiteLLM untouched. Recent LiteLLM
+          versions mark an admin-set password as requiring a reset at first
+          login and validate it against the proxy's password policy.
+        displayName: Initial Password Secret
+        path: initialPasswordSecretRef
       - description: Reference to the LiteLLMInstance.
         displayName: Instance Ref
         path: instanceRef

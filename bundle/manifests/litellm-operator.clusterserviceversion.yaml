@@ -544,15 +544,15 @@ metadata:
       ]
     capabilities: Deep Insights
     categories: AI/Machine Learning
-    containerImage: ghcr.io/palenaai/litellm-operator:v0.26.0
-    createdAt: "2026-10-03T15:46:03Z"
+    containerImage: ghcr.io/palenaai/litellm-operator:v0.27.0
+    createdAt: "2026-10-08T17:57:05Z"
     description: Kubernetes operator for deploying and managing production-ready LiteLLM
       AI Gateway instances.
     operators.operatorframework.io/builder: operator-sdk-v1.42.1
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
     repository: https://github.com/PalenaAI/litellm-operator
     support: bitkaio LLC
-  name: litellm-operator.v0.26.0
+  name: litellm-operator.v0.27.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -1114,6 +1114,17 @@ spec:
       - description: Budget reset duration (e.g., "30d").
         displayName: Budget Duration
         path: budgetDuration
+      - description: |-
+          InitialPasswordSecretRef references a Secret key holding an initial
+          Admin UI login password for this user. The operator applies it once,
+          after the user is created, and again only when the Secret's value
+          changes. It never re-applies the same value, so a password the user
+          changes afterwards in the Admin UI is left alone. Removing the field
+          leaves the current password in LiteLLM untouched. Recent LiteLLM
+          versions mark an admin-set password as requiring a reset at first
+          login and validate it against the proxy's password policy.
+        displayName: Initial Password Secret
+        path: initialPasswordSecretRef
       - description: Reference to the LiteLLMInstance.
         displayName: Instance Ref
         path: instanceRef
@@ -1533,7 +1544,7 @@ spec:
                 - --health-probe-bind-address=:8081
                 command:
                 - /manager
-                image: ghcr.io/palenaai/litellm-operator:v0.26.0
+                image: ghcr.io/palenaai/litellm-operator:v0.27.0
                 livenessProbe:
                   httpGet:
                     path: /healthz
@@ -1632,4 +1643,4 @@ spec:
   provider:
     name: bitkaio LLC
     url: https://palena.ai
-  version: 0.26.0
+  version: 0.27.0
