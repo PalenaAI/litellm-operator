@@ -116,6 +116,11 @@ const (
 	// ConditionWorkloadUnmanaged reports which spec sections the user set that
 	// the operator ignores while workload.managed is false.
 	ConditionWorkloadUnmanaged = "WorkloadUnmanaged"
+	// ConditionInitialPasswordApplied reports whether a LiteLLMUser's
+	// spec.initialPasswordSecretRef has been applied. It is independent of
+	// Synced: a missing Secret or a rejected password does not stop the rest
+	// of the user from syncing.
+	ConditionInitialPasswordApplied = "InitialPasswordApplied"
 
 	// Event reasons — kept in one place so operators and alerting tooling
 	// can filter on them reliably.
@@ -136,6 +141,8 @@ const (
 	EventReasonHealthRestored       = "HealthRestored"
 	EventReasonRedisDisconnected    = "RedisDisconnected"
 	EventReasonRedisConnected       = "RedisConnected"
+	EventReasonPasswordApplied      = "PasswordApplied"
+	EventReasonPasswordRejected     = "PasswordRejected"
 
 	// Config sync event reasons.
 	EventReasonConfigSyncCompleted       = "ConfigSyncCompleted"

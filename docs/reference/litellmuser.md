@@ -49,6 +49,7 @@ spec:
 | `modelRpmLimit` | map[string]int | No | — | Per-model requests-per-minute caps (model name → RPM) |
 | `modelTpmLimit` | map[string]int | No | — | Per-model tokens-per-minute caps (model name → TPM) |
 | `objectPermission` | *ObjectPermission | No | — | Grant access to MCP servers, vector stores, agents, access groups |
+| `initialPasswordSecretRef` | *SecretKeyRef | No | — | Secret key holding an initial Admin UI login password (see [Initial Password](#initial-password)) |
 
 ### User Roles
 
@@ -79,6 +80,7 @@ You can use either `teamRef` (references a `LiteLLMTeam` CR by name) or `teamId`
 | `currentSpend` | *float64 | Current spend in USD |
 | `resolvedTeams` | []ResolvedTeamMembership | Resolved team memberships |
 | `lastSyncTime` | *Time | Last successful sync time |
+| `initialPasswordDigest` | string | bcrypt digest of the last password applied from `initialPasswordSecretRef` (never the plaintext) |
 | `conditions` | []Condition | Standard conditions |
 
 ## Print Columns
@@ -97,6 +99,49 @@ service-bot   service-bot@example.com    internal_user   true     1d
 - **GitOps user management** alongside SSO for specific accounts
 
 When SSO/SCIM handles user provisioning, `LiteLLMUser` CRDs are typically not needed for human users.
+
+## Initial Password
+
+`initialPasswordSecretRef` gives a user a password for logging in to the Admin UI, for environments without SSO. The value is read from a Secret in the CR's namespace:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: alice-initial-password
+stringData:
+  password: "Change-Me-On-First-Login!"
+---
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMUser
+metadata:
+  name: alice
+spec:
+  instanceRef:
+    name: my-gateway
+  userId: alice@example.com
+  userEmail: alice@example.com
+  initialPasswordSecretRef:
+    name: alice-initial-password
+    key: password
+```
+
+It is an *initial* password: the user is expected to change it after logging in, and the operator does not undo that.
+
+- The password is applied once, right after the user is created (or adopted), via `POST /user/update`. LiteLLM rejects a password on `/user/new`.
+- After that it is applied **only when the Secret's value changes**. Resyncs, spec edits and operator restarts never re-send it. To reset a user's password, put a new value in the Secret.
+- The operator records a bcrypt digest of the applied value in `status.initialPasswordDigest` to detect changes. The plaintext is never stored on the CR, logged or put in events.
+- Removing the field leaves the user's current password in LiteLLM untouched. Adding it back applies the Secret's value again.
+- Recent LiteLLM versions mark an admin-set password as requiring a reset at first login, and validate it against the proxy's password policy and breached-password check.
+
+Progress is reported on the `InitialPasswordApplied` condition, separate from `Synced`, so a password problem never stops the rest of the user from syncing:
+
+| Reason | Meaning |
+| --- | --- |
+| `Applied` | The Secret's current value is the applied password |
+| `SecretNotFound` / `SecretKeyMissing` | The Secret or key does not exist or is empty; applied as soon as it appears |
+| `PasswordRejected` | LiteLLM rejected the value (e.g. password policy); not retried until the Secret changes |
+| `ApplyFailed` / `SecretFetchFailed` | Transient failure; retried after 30s |
 
 ## Adopting Existing Users
 

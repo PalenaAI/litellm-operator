@@ -18,13 +18,16 @@ package litellm
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 // UserService defines operations on LiteLLM users.
 type UserService interface {
 	Create(ctx context.Context, req UserCreateRequest) (*UserCreateResponse, error)
 	Update(ctx context.Context, req UserCreateRequest) error
+	SetPassword(ctx context.Context, userID, password string) error
 	Delete(ctx context.Context, userID string) error
 	Get(ctx context.Context, userID string) (*UserInfo, error)
 	List(ctx context.Context) ([]UserInfo, error)
@@ -82,6 +85,35 @@ func (s *userService) Create(ctx context.Context, req UserCreateRequest) (*UserC
 
 func (s *userService) Update(ctx context.Context, req UserCreateRequest) error {
 	return s.client.do(ctx, http.MethodPost, "/user/update", req, nil)
+}
+
+// SetPassword sets a user's Admin UI login password via /user/update. It is
+// separate from Update because LiteLLM rejects a password on /user/new, and
+// because the password must only be sent when it changes, never on every
+// spec update.
+func (s *userService) SetPassword(ctx context.Context, userID, password string) error {
+	body := map[string]string{"user_id": userID, "password": password}
+	err := s.client.do(ctx, http.MethodPost, "/user/update", body, nil)
+	if apiErr, ok := IsAPIError(err); ok {
+		// Validation errors echo the submitted input; never let the password
+		// reach a status condition, an event or a log line.
+		apiErr.Message = redact(apiErr.Message, password)
+	}
+	return err
+}
+
+// redact removes every occurrence of secret, raw and JSON-escaped, from s.
+func redact(s, secret string) string {
+	if secret == "" {
+		return s
+	}
+	s = strings.ReplaceAll(s, secret, "[REDACTED]")
+	if escaped, err := json.Marshal(secret); err == nil {
+		if inner := string(escaped[1 : len(escaped)-1]); inner != secret {
+			s = strings.ReplaceAll(s, inner, "[REDACTED]")
+		}
+	}
+	return s
 }
 
 func (s *userService) Delete(ctx context.Context, userID string) error {

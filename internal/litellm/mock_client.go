@@ -226,11 +226,12 @@ func (m *MockTeamService) DisableLogging(ctx context.Context, teamID string) err
 
 // MockUserService records calls and returns configured responses.
 type MockUserService struct {
-	CreateFunc func(ctx context.Context, req UserCreateRequest) (*UserCreateResponse, error)
-	UpdateFunc func(ctx context.Context, req UserCreateRequest) error
-	DeleteFunc func(ctx context.Context, userID string) error
-	GetFunc    func(ctx context.Context, userID string) (*UserInfo, error)
-	ListFunc   func(ctx context.Context) ([]UserInfo, error)
+	CreateFunc      func(ctx context.Context, req UserCreateRequest) (*UserCreateResponse, error)
+	UpdateFunc      func(ctx context.Context, req UserCreateRequest) error
+	SetPasswordFunc func(ctx context.Context, userID, password string) error
+	DeleteFunc      func(ctx context.Context, userID string) error
+	GetFunc         func(ctx context.Context, userID string) (*UserInfo, error)
+	ListFunc        func(ctx context.Context) ([]UserInfo, error)
 }
 
 func (m *MockUserService) Create(ctx context.Context, req UserCreateRequest) (*UserCreateResponse, error) {
@@ -243,6 +244,13 @@ func (m *MockUserService) Create(ctx context.Context, req UserCreateRequest) (*U
 func (m *MockUserService) Update(ctx context.Context, req UserCreateRequest) error {
 	if m.UpdateFunc != nil {
 		return m.UpdateFunc(ctx, req)
+	}
+	return nil
+}
+
+func (m *MockUserService) SetPassword(ctx context.Context, userID, password string) error {
+	if m.SetPasswordFunc != nil {
+		return m.SetPasswordFunc(ctx, userID, password)
 	}
 	return nil
 }

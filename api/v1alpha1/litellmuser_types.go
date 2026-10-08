@@ -103,6 +103,18 @@ type LiteLLMUserSpec struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Object Permission"
 	ObjectPermission *ObjectPermission `json:"objectPermission,omitempty"`
+
+	// InitialPasswordSecretRef references a Secret key holding an initial
+	// Admin UI login password for this user. The operator applies it once,
+	// after the user is created, and again only when the Secret's value
+	// changes. It never re-applies the same value, so a password the user
+	// changes afterwards in the Admin UI is left alone. Removing the field
+	// leaves the current password in LiteLLM untouched. Recent LiteLLM
+	// versions mark an admin-set password as requiring a reset at first
+	// login and validate it against the proxy's password policy.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Initial Password Secret"
+	InitialPasswordSecretRef *SecretKeyRef `json:"initialPasswordSecretRef,omitempty"`
 }
 
 // UserTeamMembership defines a user's team membership.
@@ -143,6 +155,13 @@ type LiteLLMUserStatus struct {
 	// Last successful sync time.
 	// +optional
 	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+
+	// InitialPasswordDigest is a bcrypt digest of the password the operator
+	// last applied from spec.initialPasswordSecretRef. It is compared against
+	// the Secret's current value to decide whether the password changed;
+	// the plaintext is never stored.
+	// +optional
+	InitialPasswordDigest string `json:"initialPasswordDigest,omitempty"`
 
 	// Standard conditions.
 	// +optional

@@ -18,11 +18,15 @@ package controller
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,7 +35,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	litellmv1alpha1 "github.com/PalenaAI/litellm-operator/api/v1alpha1"
 	"github.com/PalenaAI/litellm-operator/internal/litellm"
@@ -48,6 +54,7 @@ type LiteLLMUserReconciler struct {
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmusers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmusers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=litellm.palena.ai,resources=litellmusers/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,resources=secrets,verbs=get;list;watch
 
 func (r *LiteLLMUserReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := logf.FromContext(ctx)
@@ -205,6 +212,11 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 		}
 	}
 
+	result := ctrl.Result{RequeueAfter: 5 * time.Minute}
+	if retry := r.reconcileInitialPassword(ctx, user, apiClient); retry > 0 {
+		result.RequeueAfter = retry
+	}
+
 	info, err := apiClient.Users().Get(ctx, user.Status.LiteLLMUserID)
 	if err == nil && info != nil {
 		user.Status.CurrentSpend = info.Spend
@@ -212,7 +224,127 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 
 	now := metav1.Now()
 	user.Status.LastSyncTime = &now
-	return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
+	return result, nil
+}
+
+// reconcileInitialPassword applies spec.initialPasswordSecretRef to the user.
+// The password is sent only when it differs from the one the operator last
+// applied (tracked as a bcrypt digest in status), so a password the user
+// changes in the Admin UI is never overwritten by a resync — only by a change
+// of the Secret's value. It goes through /user/update because LiteLLM rejects
+// a password on /user/new.
+//
+// Failures are reported on the InitialPasswordApplied condition rather than
+// returned, so they never mark the user itself as not synced. The returned
+// duration is a requeue delay for transient failures, or 0. A missing Secret
+// or a rejected password needs no short requeue: the Secret watch triggers a
+// reconcile when it is created or changed.
+func (r *LiteLLMUserReconciler) reconcileInitialPassword(
+	ctx context.Context,
+	user *litellmv1alpha1.LiteLLMUser,
+	apiClient litellm.Client,
+) time.Duration {
+	ref := user.Spec.InitialPasswordSecretRef
+	if ref == nil {
+		// Forget the digest so re-adding the field applies the password again.
+		user.Status.InitialPasswordDigest = ""
+		meta.RemoveStatusCondition(&user.Status.Conditions, ConditionInitialPasswordApplied)
+		return 0
+	}
+
+	setCondition := func(status metav1.ConditionStatus, reason, message string) {
+		meta.SetStatusCondition(&user.Status.Conditions, metav1.Condition{
+			Type:               ConditionInitialPasswordApplied,
+			Status:             status,
+			Reason:             reason,
+			Message:            message,
+			ObservedGeneration: user.Generation,
+		})
+	}
+
+	var secret corev1.Secret
+	if err := r.Get(ctx, types.NamespacedName{Name: ref.Name, Namespace: user.Namespace}, &secret); err != nil {
+		if apierrors.IsNotFound(err) {
+			emitEvent(r.Recorder, user, corev1.EventTypeWarning, EventReasonSecretNotFound,
+				"Initial password Secret %q not found", ref.Name)
+			setCondition(metav1.ConditionFalse, "SecretNotFound",
+				fmt.Sprintf("Secret %q not found", ref.Name))
+			return 0
+		}
+		setCondition(metav1.ConditionFalse, "SecretFetchFailed",
+			fmt.Sprintf("get Secret %q: %v", ref.Name, err))
+		return 30 * time.Second
+	}
+	password := string(secret.Data[ref.Key])
+	if password == "" {
+		emitEvent(r.Recorder, user, corev1.EventTypeWarning, EventReasonSecretKeyMissing,
+			"Initial password Secret %q has no non-empty key %q", ref.Name, ref.Key)
+		setCondition(metav1.ConditionFalse, "SecretKeyMissing",
+			fmt.Sprintf("Secret %q has no non-empty key %q", ref.Name, ref.Key))
+		return 0
+	}
+
+	if passwordMatchesDigest(user.Status.InitialPasswordDigest, password) {
+		setCondition(metav1.ConditionTrue, "Applied", "Initial password applied")
+		return 0
+	}
+
+	if err := apiClient.Users().SetPassword(ctx, user.Status.LiteLLMUserID, password); err != nil {
+		retry := 30 * time.Second
+		reason := "ApplyFailed"
+		if apiErr, ok := litellm.IsAPIError(err); ok && !apiErr.IsTransient() {
+			// Typically a password-policy or breached-password rejection;
+			// retrying the same value cannot succeed.
+			retry, reason = 0, "PasswordRejected"
+		}
+		emitEvent(r.Recorder, user, corev1.EventTypeWarning, EventReasonPasswordRejected,
+			"Failed to apply initial password from Secret %q: %v", ref.Name, err)
+		setCondition(metav1.ConditionFalse, reason, err.Error())
+		return retry
+	}
+
+	digest, err := passwordDigest(password)
+	if err != nil {
+		setCondition(metav1.ConditionFalse, "DigestFailed", err.Error())
+		return 30 * time.Second
+	}
+	// Persist the digest right away with a merge patch (no resourceVersion
+	// conflict) — if it were lost, the next resync would re-apply the password
+	// and overwrite one the user may have changed since.
+	base := user.DeepCopy()
+	user.Status.InitialPasswordDigest = digest
+	setCondition(metav1.ConditionTrue, "Applied", "Initial password applied")
+	if err := r.Status().Patch(ctx, user, client.MergeFrom(base)); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to record initial password digest")
+	}
+	logf.FromContext(ctx).Info("applied initial password", "userId", user.Status.LiteLLMUserID)
+	emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonPasswordApplied,
+		"Initial password from Secret %q applied to user %q", ref.Name, user.Status.LiteLLMUserID)
+	return 0
+}
+
+// passwordDigest returns a bcrypt digest of password. The password is
+// pre-hashed with SHA-256 so values beyond bcrypt's 72-byte limit are still
+// fully compared.
+func passwordDigest(password string) (string, error) {
+	digest, err := bcrypt.GenerateFromPassword(prehashPassword(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("compute password digest: %w", err)
+	}
+	return string(digest), nil
+}
+
+// passwordMatchesDigest reports whether password is the one digest was made from.
+func passwordMatchesDigest(digest, password string) bool {
+	if digest == "" {
+		return false
+	}
+	return bcrypt.CompareHashAndPassword([]byte(digest), prehashPassword(password)) == nil
+}
+
+func prehashPassword(password string) []byte {
+	sum := sha256.Sum256([]byte(password))
+	return []byte(hex.EncodeToString(sum[:]))
 }
 
 // adoptExistingUser handles a failed /user/new. It adopts the user only when
@@ -296,10 +428,36 @@ func (r *LiteLLMUserReconciler) handleDeletion(ctx context.Context, user *litell
 	return ctrl.Result{}, r.Update(ctx, user)
 }
 
+// findUsersForSecret enqueues every LiteLLMUser in the namespace of the
+// changed Secret whose initialPasswordSecretRef points at it, so a new
+// password is applied as soon as the Secret changes.
+func (r *LiteLLMUserReconciler) findUsersForSecret(ctx context.Context, obj client.Object) []reconcile.Request {
+	secret, ok := obj.(*corev1.Secret)
+	if !ok {
+		return nil
+	}
+	var users litellmv1alpha1.LiteLLMUserList
+	if err := r.List(ctx, &users, client.InNamespace(secret.Namespace)); err != nil {
+		logf.FromContext(ctx).Error(err, "failed to list LiteLLMUsers for Secret", "secret", secret.Name)
+		return nil
+	}
+	var out []reconcile.Request
+	for _, u := range users.Items {
+		if ref := u.Spec.InitialPasswordSecretRef; ref != nil && ref.Name == secret.Name {
+			out = append(out, reconcile.Request{NamespacedName: types.NamespacedName{
+				Name:      u.Name,
+				Namespace: u.Namespace,
+			}})
+		}
+	}
+	return out
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *LiteLLMUserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&litellmv1alpha1.LiteLLMUser{}).
+		Watches(&corev1.Secret{}, handler.EnqueueRequestsFromMapFunc(r.findUsersForSecret)).
 		Named("litellmuser").
 		Complete(r)
 }
