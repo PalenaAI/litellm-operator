@@ -23,6 +23,36 @@ To uninstall:
 operator-sdk cleanup litellm-operator
 ```
 
+### Controller scheduling with a Subscription
+
+When you install from a CatalogSource, configure scheduling on your
+`Subscription`, not in the operator bundle. OLM adds
+`spec.config.tolerations` to the controller Pod, so each cluster can declare
+the taints it intends the controller to tolerate.
+
+For example, add this to the Subscription that installs LiteLLM Operator:
+
+```yaml
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: litellm-operator
+  namespace: operators
+spec:
+  # channel, name, source, and sourceNamespace are omitted here; keep the
+  # values from your existing Subscription.
+  config:
+    tolerations:
+      - key: kubernetes.io/arch
+        operator: Equal
+        value: arm64
+        effect: NoSchedule
+```
+
+Use the taint(s) that match your cluster policy. This controls the operator
+controller only; configure LiteLLM proxy and migration Job placement separately
+with `LiteLLMInstance.spec.podScheduling`.
+
 ## Helm Chart
 
 For vanilla Kubernetes, k3s, RKE2, and other clusters without OLM:
