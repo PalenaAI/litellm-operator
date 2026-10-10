@@ -108,6 +108,11 @@ jobs:
       - name: Bundle CSV exists
         run: test -f bundle/manifests/litellm-operator.clusterserviceversion.yaml
 
+      - name: Generate and validate file-based catalog
+        run: |
+          digest=$(printf '0%.0s' {1..64})
+          make catalog-validate CATALOG_BUNDLE_IMG="ghcr.io/palenaai/litellm-operator-bundle@sha256:${digest}"
+
   security:
     name: Security scanning
     runs-on: ubuntu-latest

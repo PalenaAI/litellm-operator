@@ -23,6 +23,41 @@ To uninstall:
 operator-sdk cleanup litellm-operator
 ```
 
+### OLM v1 catalog (GitOps)
+
+Each release publishes a versioned file-based catalog (FBC) at
+`ghcr.io/palenaai/litellm-operator-catalog:vX.Y.Z`. It contains only OLM
+package/channel metadata and a SHA256-pinned reference to the public bundle.
+Maintainers must mark this GHCR package public once so the cluster's `catalogd`
+can pull it without registry credentials.
+
+```yaml
+apiVersion: olm.operatorframework.io/v1
+kind: ClusterCatalog
+metadata:
+  name: litellm-operator
+spec:
+  source:
+    type: Image
+    image:
+      ref: ghcr.io/palenaai/litellm-operator-catalog:vX.Y.Z
+---
+apiVersion: olm.operatorframework.io/v1
+kind: ClusterExtension
+metadata:
+  name: litellm-operator
+spec:
+  namespace: litellm-operator-system
+  source:
+    sourceType: Catalog
+    catalog:
+      packageName: litellm-operator
+      version: X.Y.Z
+      selector:
+        matchLabels:
+          olm.operatorframework.io/metadata.name: litellm-operator
+```
+
 ## Helm Chart
 
 For vanilla Kubernetes, k3s, RKE2, and other clusters without OLM:

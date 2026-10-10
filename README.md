@@ -718,6 +718,24 @@ make deploy        # Deploy operator
 operator-sdk run bundle ghcr.io/palenaai/litellm-operator-bundle:latest
 ```
 
+For OLM v1 and GitOps, every release also publishes a file-based catalog (FBC)
+at `ghcr.io/palenaai/litellm-operator-catalog:vX.Y.Z`. The catalog contains
+only package/channel metadata and a SHA256-pinned reference to the public
+bundle; it contains no cluster credentials or Secrets. Maintainers must set the
+GHCR package to public visibility once so `catalogd` can pull it anonymously.
+
+```yaml
+apiVersion: olm.operatorframework.io/v1
+kind: ClusterCatalog
+metadata:
+  name: litellm-operator
+spec:
+  source:
+    type: Image
+    image:
+      ref: ghcr.io/palenaai/litellm-operator-catalog:vX.Y.Z
+```
+
 ### Helm
 
 ```sh
