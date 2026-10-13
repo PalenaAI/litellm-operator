@@ -85,6 +85,7 @@ jobs:
             echo "VERSION=${GITHUB_REF_NAME#v}"
             echo "IMAGE=${REGISTRY}/${repo_lc}"
             echo "BUNDLE=${REGISTRY}/${repo_lc}-bundle"
+            echo "CATALOG=${REGISTRY}/${repo_lc}-catalog"
             echo "OWNER_LC=${owner_lc}"
           } >> "$GITHUB_OUTPUT"
 
@@ -155,6 +156,35 @@ jobs:
       - name: Sign bundle image (cosign keyless)
         env:
           IMG_REF: ${{ steps.vars.outputs.BUNDLE }}@${{ steps.build-bundle.outputs.digest }}
+        run: cosign sign --yes "$IMG_REF"
+
+      - name: Generate and validate file-based catalog
+        env:
+          BUNDLE_REF: ${{ steps.vars.outputs.BUNDLE }}@${{ steps.build-bundle.outputs.digest }}
+        run: make catalog-validate CATALOG_BUNDLE_IMG="$BUNDLE_REF"
+
+      - name: Build and push file-based catalog image
+        id: build-catalog
+        uses: docker/build-push-action@48aba3b46d1b1fec4febb7c5d0c644b249a11355 # v6.10.0
+        with:
+          context: .
+          file: ./catalog.Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          tags: |
+            ${{ steps.vars.outputs.CATALOG }}:${{ github.ref_name }}
+            ${{ steps.vars.outputs.CATALOG }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=Apache-2.0
+
+      - name: Sign file-based catalog image (cosign keyless)
+        env:
+          IMG_REF: ${{ steps.vars.outputs.CATALOG }}@${{ steps.build-catalog.outputs.digest }}
         run: cosign sign --yes "$IMG_REF"
 
       - name: Package and push Helm chart to GHCR (OCI)
