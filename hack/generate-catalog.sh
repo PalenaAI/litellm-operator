@@ -102,10 +102,29 @@ if [ "$bundle_package" != "$package" ]; then
   exit 1
 fi
 
+# The bundle's own version, from its olm.package property (the CSV's
+# spec.version), not parsed out of the bundle name.
+bundle_version="$(awk '
+  $0 == "- type: olm.package" { in_package = 1; next }
+  in_package && /^- type:/ { exit }
+  in_package && $1 == "version:" { print $2; exit }
+' "$output_dir/bundle.yaml")"
+if ! printf '%s\n' "$bundle_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+  echo "rendered bundle does not contain a semver olm.package version: '$bundle_version'" >&2
+  exit 1
+fi
+
+# Each release publishes its own catalog holding only that release's bundle,
+# so the channel entry must link back to the versions a cluster may already
+# run. Without an upgrade edge, OLM v1's default CatalogProvided policy finds
+# no successor for an installed older version and refuses to upgrade.
+# skipRange covers every earlier version, and OLM v1 does not need the
+# installed bundle to be present in the catalog to match it.
 cat > "$output_dir/channel.yaml" <<EOF
 ---
 entries:
   - name: $bundle_name
+    skipRange: '<$bundle_version'
 name: $channel
 package: $package
 schema: olm.channel

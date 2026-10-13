@@ -158,6 +158,25 @@ jobs:
           IMG_REF: ${{ steps.vars.outputs.BUNDLE }}@${{ steps.build-bundle.outputs.digest }}
         run: cosign sign --yes "$IMG_REF"
 
+      - name: Package and push Helm chart to GHCR (OCI)
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          OWNER_LC: ${{ steps.vars.outputs.OWNER_LC }}
+          VERSION: ${{ steps.vars.outputs.VERSION }}
+        run: |
+          helm package deploy/charts/litellm-operator \
+            --version "${VERSION}" \
+            --app-version "${VERSION}" \
+            --destination /tmp/helm
+          echo "${GHCR_TOKEN}" | helm registry login \
+            "${REGISTRY}" --username "${GHCR_USER}" --password-stdin
+          helm push "/tmp/helm/litellm-operator-${VERSION}.tgz" \
+            "oci://${REGISTRY}/${OWNER_LC}/charts"
+
+      # The catalog comes after the Helm chart so a catalog failure cannot
+      # leave a release with images but no chart. It still precedes the
+      # GitHub release, so a failed catalog never yields a published release.
       - name: Generate and validate file-based catalog
         env:
           BUNDLE_REF: ${{ steps.vars.outputs.BUNDLE }}@${{ steps.build-bundle.outputs.digest }}
@@ -186,22 +205,6 @@ jobs:
         env:
           IMG_REF: ${{ steps.vars.outputs.CATALOG }}@${{ steps.build-catalog.outputs.digest }}
         run: cosign sign --yes "$IMG_REF"
-
-      - name: Package and push Helm chart to GHCR (OCI)
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
-          OWNER_LC: ${{ steps.vars.outputs.OWNER_LC }}
-          VERSION: ${{ steps.vars.outputs.VERSION }}
-        run: |
-          helm package deploy/charts/litellm-operator \
-            --version "${VERSION}" \
-            --app-version "${VERSION}" \
-            --destination /tmp/helm
-          echo "${GHCR_TOKEN}" | helm registry login \
-            "${REGISTRY}" --username "${GHCR_USER}" --password-stdin
-          helm push "/tmp/helm/litellm-operator-${VERSION}.tgz" \
-            "oci://${REGISTRY}/${OWNER_LC}/charts"
 
       - name: Install Trivy
         env:

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **OLM v1 file-based catalog** ([#50](https://github.com/PalenaAI/litellm-operator/pull/50), thanks @vitaliytv). Every release now also publishes a signed, multi-arch `ghcr.io/palenaai/litellm-operator-catalog:vX.Y.Z` image, so OLM v1 clusters can install the operator declaratively with a `ClusterCatalog` and `ClusterExtension` (GitOps) instead of `operator-sdk run bundle`. The catalog holds only package/channel metadata and a digest-pinned reference to the public bundle image. Its channel entry carries `skipRange: "<X.Y.Z"`, so a cluster can upgrade from any earlier release under OLM v1's default `CatalogProvided` policy; without that edge each per-release catalog would offer no successor and upgrades would be refused. `make catalog-build` now builds this file-based catalog, replacing the deprecated `opm index add` flow. The GHCR package has to be made public once after the first release so `catalogd` can pull it anonymously.
+
+### Security
+
+- **The `opm` download is checksum-verified.** `make opm` pins the SHA-256 of each platform's `opm` binary in the Makefile and refuses a binary that does not match, instead of running whatever the download returned. The release workflow runs `opm` with `packages: write` and `id-token: write` to build the catalog, so a substituted binary must fail the build.
+
 ### Fixed
 
 - **A `generic_guardrail_api` guardrail could not rewrite streamed responses.** LiteLLM reads `streaming_transform_mode`, `streaming_sampling_rate` and `streaming_end_of_stream_only` only from the guardrail's top-level `litellm_params`, but `spec.params` were written solely under `additional_provider_specific_params`. LiteLLM therefore kept its default `block_only` mode and dropped every rewrite of a streamed response: a pseudonymizing guardrail restored real names in plain responses but streamed the pseudonyms to the client. These three keys are now also written at the top level; they stay nested too, for guardrail services that read them.

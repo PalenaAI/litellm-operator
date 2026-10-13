@@ -93,10 +93,9 @@ litellm-operator/
 │   └── tests/
 │       └── scorecard/
 │           └── config.yaml
-├── catalog/                             # File-Based Catalog for OLM
-│   └── litellm-operator/
-│       ├── catalog.yaml
-│       └── operator.yaml
+├── catalog/configs/                     # Generated FBC (gitignored) — see hack/generate-catalog.sh
+├── catalog.Dockerfile                   # FBC catalog image (opm base, digest-pinned)
+├── hack/generate-catalog.sh             # Renders bundle/ into FBC; adds skipRange upgrade edge
 ├── config/
 │   ├── crd/bases/                       # Generated CRD YAMLs
 │   ├── rbac/                            # RBAC manifests
@@ -326,11 +325,14 @@ make bundle IMG=ghcr.io/palenaai/litellm-operator:v0.1.0
 make bundle-build bundle-push BUNDLE_IMG=ghcr.io/palenaai/litellm-operator-bundle:v0.1.0
 ```
 
-### Build and push OLM catalog
+### Build and push OLM catalog (file-based, OLM v1)
 
 ```bash
-make catalog-build catalog-push CATALOG_IMG=ghcr.io/palenaai/litellm-operator-catalog:v0.1.0
+make catalog-validate CATALOG_BUNDLE_IMG=ghcr.io/palenaai/litellm-operator-bundle@sha256:<digest>
+make catalog-build catalog-push CATALOG_BUNDLE_IMG=...@sha256:<digest> CATALOG_IMG=ghcr.io/palenaai/litellm-operator-catalog:v0.1.0
 ```
+
+The release workflow does this automatically after the Helm chart push. Each release's catalog holds only that bundle; its channel entry carries `skipRange: '<X.Y.Z'` so OLM v1's default `CatalogProvided` policy can upgrade from any older release — do not drop it. The bundle image must be digest-pinned. `make opm` verifies the downloaded binary against SHA-256s pinned in the Makefile (`OPM_SHA256_<os>_<arch>`); bumping `OPM_VERSION` means updating those checksums and the opm digest in `catalog.Dockerfile` together.
 
 ### Install on a cluster (Makefile / direct)
 
@@ -544,7 +546,7 @@ Follow the phased plan in `docs/IMPLEMENTATION-PLAN.md`:
 #### Operator infrastructure
 
 - OLM bundle (CSV, CRD manifests, scorecard)
-- File-Based Catalog for OLM
+- File-Based Catalog for OLM v1, published per release as `ghcr.io/palenaai/litellm-operator-catalog` (signed, with `skipRange` upgrade edges)
 - Helm chart (`deploy/charts/litellm-operator/`)
 - Interface-based LiteLLM API client with full mock for testing
 

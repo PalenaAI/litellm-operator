@@ -328,17 +328,32 @@ bundle-build: ## Build the bundle image.
 bundle-push: ## Push the bundle image.
 	$(MAKE) docker-push IMG=$(BUNDLE_IMG)
 
+# opm release and the SHA-256 of each binary we may download, copied from the
+# release's checksums.txt. Pinned here rather than fetched alongside the binary:
+# the release workflow runs opm with packages:write and id-token:write, so a
+# swapped binary must fail the build, not just a corrupted one. Keep
+# OPM_VERSION in sync with the opm base image pinned in catalog.Dockerfile.
+OPM_VERSION ?= v1.55.0
+OPM_SHA256_linux_amd64 = eed05ce8d6c21bb4acf4683f270ea7fd69ecf492cb58459c5689575c80800921
+OPM_SHA256_linux_arm64 = 4048b965d25a96bdaca5c2ca4e45418ba286391f960708e774760c7abfa509ad
+OPM_SHA256_darwin_amd64 = 69d13eab1faf88031ce3cdcc91aa0a430e1e15f3f96294660a0e29cba17751eb
+OPM_SHA256_darwin_arm64 = 7b8f4e904888f4551289793d0a5c43dfb37985ee1ad6d1b6db2d1859e60d3f37
+
 .PHONY: opm
 OPM = $(LOCALBIN)/opm
-opm: ## Download opm locally if necessary.
+opm: ## Download opm locally if necessary (checksum-verified).
 ifeq (,$(wildcard $(OPM)))
 ifeq (,$(shell which opm 2>/dev/null))
 	@{ \
 	set -e ;\
 	mkdir -p $(dir $(OPM)) ;\
-	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/v1.55.0/$${OS}-$${ARCH}-opm ;\
-	chmod +x $(OPM) ;\
+	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) ;\
+	expected="$(OPM_SHA256_$(shell go env GOOS)_$(shell go env GOARCH))" ;\
+	if [ -z "$$expected" ]; then echo "no pinned opm $(OPM_VERSION) checksum for $${OS}-$${ARCH}" >&2; exit 1; fi ;\
+	curl -sSfLo $(OPM).download https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$${OS}-$${ARCH}-opm ;\
+	if command -v sha256sum >/dev/null 2>&1; then actual=$$(sha256sum $(OPM).download | cut -d' ' -f1); else actual=$$(shasum -a 256 $(OPM).download | cut -d' ' -f1); fi ;\
+	if [ "$$actual" != "$$expected" ]; then rm -f $(OPM).download; echo "opm checksum mismatch for $${OS}-$${ARCH}: got $$actual, want $$expected" >&2; exit 1; fi ;\
+	chmod +x $(OPM).download && mv $(OPM).download $(OPM) ;\
 	}
 else
 OPM = $(shell which opm)

@@ -58,6 +58,17 @@ spec:
           olm.operatorframework.io/metadata.name: litellm-operator
 ```
 
+#### Upgrading
+
+Each release's catalog holds only that release, so to upgrade, point the
+`ClusterCatalog` at the new tag and set the `ClusterExtension`'s `version` to
+match (or omit `version` to take the newest version the catalog serves). Every
+bundle's channel entry carries `skipRange: "<X.Y.Z"`, which tells OLM it may
+replace any earlier version. That keeps OLM v1's default `CatalogProvided`
+upgrade policy working even though the older bundle is not in the new catalog,
+so you do not need `upgradeConstraintPolicy: SelfCertified`, which would also
+permit downgrades.
+
 ## Helm Chart
 
 For vanilla Kubernetes, k3s, RKE2, and other clusters without OLM:
