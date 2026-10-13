@@ -1494,6 +1494,50 @@ func TestGenerateProxyConfig_GuardrailsGenericAPI(t *testing.T) {
 	}
 }
 
+func TestGenerateProxyConfig_GuardrailsGenericAPIStreamingSettings(t *testing.T) {
+	// LiteLLM reads streaming_* only from the top-level litellm_params. Nested
+	// alone, streaming_transform_mode stayed "block_only" and a guardrail's
+	// rewrites of a streamed response (e.g. restoring pseudonymized names) were
+	// dropped. They stay nested too, for the guardrail service.
+	instance := newTestInstance()
+	guardrails := []litellmv1alpha1.LiteLLMGuardrail{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "pseudo", Namespace: "default"},
+			Spec: litellmv1alpha1.LiteLLMGuardrailSpec{
+				InstanceRef:   litellmv1alpha1.InstanceRef{Name: "test-instance"},
+				GuardrailName: "pseudo",
+				Provider:      "generic_guardrail_api",
+				Mode:          "post_call",
+				APIBase:       "http://pseudo:8080",
+				Params: map[string]apiextensionsv1.JSON{
+					"streaming_transform_mode": {Raw: []byte(`"incremental_diff"`)},
+					"streaming_sampling_rate":  {Raw: []byte(`3`)},
+					"language":                 {Raw: []byte(`"en"`)},
+				},
+			},
+		},
+	}
+
+	entries, _ := GenerateProxyConfig(instance, guardrails)["guardrails"].([]map[string]interface{})
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 guardrail entry, got %d", len(entries))
+	}
+	params, _ := entries[0]["litellm_params"].(map[string]interface{})
+	if params["streaming_transform_mode"] != "incremental_diff" {
+		t.Errorf("streaming_transform_mode must be top-level, got %v", params["streaming_transform_mode"])
+	}
+	if params["streaming_sampling_rate"] != float64(3) {
+		t.Errorf("streaming_sampling_rate must be top-level, got %v (%T)", params["streaming_sampling_rate"], params["streaming_sampling_rate"])
+	}
+	if _, flat := params["language"]; flat {
+		t.Error("other params stay nested only")
+	}
+	extra, _ := params["additional_provider_specific_params"].(map[string]interface{})
+	if extra["streaming_transform_mode"] != "incremental_diff" || extra["language"] != "en" {
+		t.Errorf("nested params = %v, want them kept", extra)
+	}
+}
+
 func TestGenerateProxyConfig_GuardrailsFilterByInstance(t *testing.T) {
 	instance := newTestInstance() // name: test-instance
 	guardrails := []litellmv1alpha1.LiteLLMGuardrail{

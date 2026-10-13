@@ -201,7 +201,7 @@ guardrails:
 Notes:
 
 - Unlike `custom_guardrail`, **no Python class and no custom proxy image are required** — your guardrail is a separate Deployment/Service.
-- `params` values are arbitrary JSON and are nested under `additional_provider_specific_params`; they are **not** merged flat into `litellm_params`.
+- `params` values are arbitrary JSON and are nested under `additional_provider_specific_params`; they are **not** merged flat into `litellm_params`. The exception is LiteLLM's own streaming settings, `streaming_transform_mode`, `streaming_sampling_rate` and `streaming_end_of_stream_only`: they are also written at the top level, which is the only place LiteLLM reads them. Set `streaming_transform_mode: incremental_diff` when your service rewrites responses (for example to restore pseudonymized text); with LiteLLM's default `block_only`, rewrites of streamed responses are dropped.
 - `unreachableFallback` is only valid for `generic_guardrail_api`; setting it on another provider fails validation.
 - The Generic Guardrail API is a **BETA** LiteLLM feature — the request/response contract may change in future LiteLLM releases.
 

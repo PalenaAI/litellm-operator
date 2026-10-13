@@ -99,6 +99,9 @@ type LiteLLMGuardrailSpec struct {
 	// For provider == "generic_guardrail_api", these are nested under
 	// `additional_provider_specific_params` instead of being merged at the
 	// top level, since that is where the generic guardrail API reads them.
+	// The streaming settings LiteLLM itself reads (`streaming_transform_mode`,
+	// `streaming_sampling_rate`, `streaming_end_of_stream_only`) are also
+	// written at the top level.
 	//
 	// Values are arbitrary JSON (strings, numbers, bools, or nested
 	// objects/arrays), so structured provider config — e.g. Presidio's

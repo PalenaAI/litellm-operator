@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A `generic_guardrail_api` guardrail could not rewrite streamed responses.** LiteLLM reads `streaming_transform_mode`, `streaming_sampling_rate` and `streaming_end_of_stream_only` only from the guardrail's top-level `litellm_params`, but `spec.params` were written solely under `additional_provider_specific_params`. LiteLLM therefore kept its default `block_only` mode and dropped every rewrite of a streamed response: a pseudonymizing guardrail restored real names in plain responses but streamed the pseudonyms to the client. These three keys are now also written at the top level; they stay nested too, for guardrail services that read them.
+
 ## [0.27.0] - 2026-10-08
 
 ### Added

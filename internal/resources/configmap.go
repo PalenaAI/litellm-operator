@@ -606,6 +606,15 @@ func GuardrailEnvVarName(guardrailName string) string {
 	return strings.ToUpper("GUARDRAIL_" + sanitized + "_API_KEY")
 }
 
+// genericGuardrailStreamingKeys are the generic_guardrail_api settings LiteLLM
+// itself reads (from the guardrail's top-level litellm_params) to decide how a
+// streamed response is checked and whether rewrites are applied mid-stream.
+var genericGuardrailStreamingKeys = []string{
+	"streaming_transform_mode",
+	"streaming_sampling_rate",
+	"streaming_end_of_stream_only",
+}
+
 // buildGuardrailsList serializes LiteLLMGuardrail CRs bound to this instance
 // into LiteLLM's `guardrails` list format:
 //
@@ -657,6 +666,16 @@ func buildGuardrailsList(instance *litellmv1alpha1.LiteLLMInstance, guardrails [
 			// top-level litellm_params, so nest them there.
 			if len(decodedParams) > 0 {
 				params["additional_provider_specific_params"] = decodedParams
+			}
+			// LiteLLM reads its own streaming settings only from the top level,
+			// never from the nested map, so they are written there too. Left
+			// nested as well: a guardrail service may read them to shape its
+			// streaming answers. Without this, streaming_transform_mode stayed at
+			// LiteLLM's "block_only" and streamed rewrites were dropped.
+			for _, k := range genericGuardrailStreamingKeys {
+				if v, ok := decodedParams[k]; ok {
+					params[k] = v
+				}
 			}
 		} else {
 			for k, v := range decodedParams {
