@@ -82,7 +82,7 @@ func (r *LiteLLMVirtualKeyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		emitEvent(r.Recorder, &vk, corev1.EventTypeWarning, EventReasonInstanceNotReady,
 			"Referenced LiteLLMInstance %q is not ready: %v", vk.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&vk.Status.Conditions, metav1.Condition{
-			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
+			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: instanceRefFailureReason(err), Message: err.Error(),
 		})
 		_ = r.Status().Update(ctx, &vk)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
@@ -438,7 +438,7 @@ func (r *LiteLLMVirtualKeyReconciler) handleDeletion(ctx context.Context, vk *li
 		return ctrl.Result{}, nil
 	}
 	if vk.Status.LiteLLMKeyToken != "" {
-		resolved, err := resolveInstance(ctx, r.Client, vk.Namespace, vk.Spec.InstanceRef)
+		resolved, err := resolveInstanceForCleanup(ctx, r.Client, vk.Namespace, vk.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Keys().Delete(ctx, vk.Status.LiteLLMKeyToken); err != nil {

@@ -74,7 +74,7 @@ func (r *LiteLLMTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		emitEvent(r.Recorder, &team, corev1.EventTypeWarning, EventReasonInstanceNotReady,
 			"Referenced LiteLLMInstance %q is not ready: %v", team.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&team.Status.Conditions, metav1.Condition{
-			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
+			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: instanceRefFailureReason(err), Message: err.Error(),
 		})
 		_ = r.Status().Update(ctx, &team)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
@@ -484,7 +484,7 @@ func (r *LiteLLMTeamReconciler) handleDeletion(ctx context.Context, team *litell
 		emitEvent(r.Recorder, team, corev1.EventTypeNormal, EventReasonDeleted,
 			"Team %q was adopted, not created, by the operator; left in place in LiteLLM", team.Spec.TeamAlias)
 	} else if team.Status.LiteLLMTeamID != "" {
-		resolved, err := resolveInstance(ctx, r.Client, team.Namespace, team.Spec.InstanceRef)
+		resolved, err := resolveInstanceForCleanup(ctx, r.Client, team.Namespace, team.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Teams().Delete(ctx, team.Status.LiteLLMTeamID); err != nil {

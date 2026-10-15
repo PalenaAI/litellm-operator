@@ -336,6 +336,6 @@ When the CR is deleted, the operator's finalizer lets the instance controller's 
 
 - API keys are only read from Secrets — never stored in the CR spec or written to ConfigMaps.
 - The operator's ServiceAccount needs `get` / `list` / `watch` permissions on Secrets in the namespaces it manages.
-- Guardrails are namespace-scoped: they can only reference LiteLLMInstances in the same namespace.
+- Guardrails are namespace-scoped: they can only reference LiteLLMInstances in the same namespace. `instanceRef.namespace` is rejected on a guardrail, because a guardrail changes the whole proxy's config; `spec.allowedNamespaces` on the instance does not apply to it.
 - Rotating a provider API key is a Secret update — the instance controller's Watch on the Secret (via the guardrail Watch chain) rolls the Deployment with the new value.
 - **Per-key/per-team guardrail assignment requires a LiteLLM Enterprise license.** Declaring a guardrail CR and rendering it into the config works on open-source LiteLLM, but opting a specific key or team in via `spec.guardrails` will cause the downstream controller to report `EnterpriseLicenseRequired` unless a license is active. See [Enterprise License](../guide/enterprise-license) for activation.

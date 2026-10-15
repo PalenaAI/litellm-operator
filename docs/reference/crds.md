@@ -32,7 +32,7 @@ LiteLLMInstance
 └── LiteLLMVirtualKey   (instanceRef → LiteLLMInstance, teamRef → LiteLLMTeam, userRef → LiteLLMUser) — guardrails: [lg-name, ...]
 ```
 
-All secondary CRDs reference a `LiteLLMInstance` in the same namespace via `spec.instanceRef`. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`. Models can reference a `LiteLLMCredential` via `spec.litellmParams.credentialRef` to reuse shared provider credentials instead of inlining API keys. Teams and virtual keys can opt in to specific `LiteLLMGuardrail` resources by name via `spec.guardrails` (enterprise feature). The operator resolves these references to find the LiteLLM API endpoint, master key, and organization ID.
+All secondary CRDs reference a `LiteLLMInstance` via `spec.instanceRef`, in their own namespace unless `instanceRef.namespace` says otherwise; an instance must opt in to references from other namespaces with `spec.allowedNamespaces`. Every other reference (`teamRef`, `userRef`, `organizationRef`, `credentialRef`) stays in the referencing resource's namespace. Teams can optionally reference a `LiteLLMOrganization` via `spec.organizationRef`. Models can reference a `LiteLLMCredential` via `spec.litellmParams.credentialRef` to reuse shared provider credentials instead of inlining API keys. Teams and virtual keys can opt in to specific `LiteLLMGuardrail` resources by name via `spec.guardrails` (enterprise feature). The operator resolves these references to find the LiteLLM API endpoint, master key, and organization ID.
 
 ## Common Types
 
@@ -50,11 +50,23 @@ secretRef:
 
 ### InstanceRef
 
-References a `LiteLLMInstance` in the same namespace.
+References a `LiteLLMInstance`, by default in the same namespace.
 
 ```yaml
 instanceRef:
   name: my-gateway   # LiteLLMInstance name
+  namespace: llm     # Optional; defaults to the resource's own namespace
+```
+
+An instance in another namespace must allow the reference through its [`spec.allowedNamespaces`](litellminstance#allowednamespaces); otherwise the resource reports `Synced=False` with reason `RefNotPermitted` and nothing is created in LiteLLM. `LiteLLMGuardrail` cannot set `namespace`: a guardrail changes the whole proxy's config, so it must live beside its instance.
+
+### TeamRef / UserRef
+
+Reference a `LiteLLMTeam` or `LiteLLMUser` in the same namespace as the referencing resource.
+
+```yaml
+teamRef:
+  name: engineering
 ```
 
 ## Quick Reference

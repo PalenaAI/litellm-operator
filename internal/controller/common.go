@@ -27,6 +27,8 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
@@ -181,25 +183,81 @@ type ResolvedInstance struct {
 	Instance *litellmv1alpha1.LiteLLMInstance
 }
 
-// resolveInstance fetches a LiteLLMInstance and resolves its endpoint and master key.
+// +kubebuilder:rbac:groups=core,resources=namespaces,verbs=get;list;watch
+
+// errInstanceRefNotPermitted is returned by resolveInstance when the
+// referenced instance lives in another namespace and its spec.allowedNamespaces
+// does not admit the referencing resource's namespace.
+var errInstanceRefNotPermitted = errors.New("instance does not allow references from this namespace")
+
+// ReasonRefNotPermitted is the condition reason set on a resource whose
+// instanceRef points at an instance that does not allow its namespace.
+const ReasonRefNotPermitted = "RefNotPermitted"
+
+// instanceRefFailureReason returns the condition reason for an error from
+// resolveInstance: RefNotPermitted when the instance refused the reference,
+// otherwise InstanceNotReady.
+func instanceRefFailureReason(err error) string {
+	if errors.Is(err, errInstanceRefNotPermitted) {
+		return ReasonRefNotPermitted
+	}
+	return "InstanceNotReady"
+}
+
+// resolveInstance fetches the LiteLLMInstance that ref points at from a
+// resource in the given namespace and resolves its endpoint and master key.
+// It refuses an instance in another namespace unless the instance allows it.
 func resolveInstance(
 	ctx context.Context,
 	c client.Client,
 	namespace string,
 	ref litellmv1alpha1.InstanceRef,
 ) (*ResolvedInstance, error) {
+	return resolveInstanceRef(ctx, c, namespace, ref, true)
+}
+
+// resolveInstanceForCleanup is resolveInstance without the allowedNamespaces
+// check, for finalizers: a resource that created something in LiteLLM while
+// its namespace was allowed must still be able to remove it after the
+// instance stops allowing it, or the object would leak.
+func resolveInstanceForCleanup(
+	ctx context.Context,
+	c client.Client,
+	namespace string,
+	ref litellmv1alpha1.InstanceRef,
+) (*ResolvedInstance, error) {
+	return resolveInstanceRef(ctx, c, namespace, ref, false)
+}
+
+func resolveInstanceRef(
+	ctx context.Context,
+	c client.Client,
+	namespace string,
+	ref litellmv1alpha1.InstanceRef,
+	checkAllowed bool,
+) (*ResolvedInstance, error) {
 	var instance litellmv1alpha1.LiteLLMInstance
 	if err := c.Get(ctx, types.NamespacedName{
-		Name: ref.Name, Namespace: namespace,
+		Name: ref.Name, Namespace: ref.NamespaceOr(namespace),
 	}, &instance); err != nil {
 		return nil, fmt.Errorf("fetch instance %q: %w", ref.Name, err)
+	}
+
+	if checkAllowed {
+		allowed, err := instanceAllowsNamespace(ctx, c, &instance, namespace)
+		if err != nil {
+			return nil, fmt.Errorf("check allowedNamespaces of instance %s/%s: %w", instance.Namespace, instance.Name, err)
+		}
+		if !allowed {
+			return nil, fmt.Errorf("instance %s/%s: %w %q", instance.Namespace, instance.Name, errInstanceRefNotPermitted, namespace)
+		}
 	}
 
 	if !instance.Status.Ready {
 		return nil, fmt.Errorf("instance %q is not ready", ref.Name)
 	}
 
-	masterKey, err := getSecretValue(ctx, c, namespace, masterKeyRef(&instance))
+	masterKey, err := getSecretValue(ctx, c, instance.Namespace, masterKeyRef(&instance))
 	if err != nil {
 		return nil, fmt.Errorf("get master key: %w", err)
 	}
@@ -210,6 +268,49 @@ func resolveInstance(
 		CACert:    operatorProxyCACert(ctx, c, &instance),
 		Instance:  &instance,
 	}, nil
+}
+
+// instanceAllowsNamespace reports whether resources in namespace may reference
+// instance. The instance's own namespace is always allowed; any other needs
+// spec.allowedNamespaces to admit it.
+func instanceAllowsNamespace(
+	ctx context.Context,
+	c client.Reader,
+	instance *litellmv1alpha1.LiteLLMInstance,
+	namespace string,
+) (bool, error) {
+	if namespace == instance.Namespace {
+		return true, nil
+	}
+	allowed := instance.Spec.AllowedNamespaces
+	if allowed == nil {
+		return false, nil
+	}
+	switch allowed.From {
+	case litellmv1alpha1.NamespacesFromAll:
+		return true, nil
+	case litellmv1alpha1.NamespacesFromSelector:
+		if allowed.Selector == nil {
+			return false, nil
+		}
+		selector, err := metav1.LabelSelectorAsSelector(allowed.Selector)
+		if err != nil {
+			return false, fmt.Errorf("parse selector: %w", err)
+		}
+		var ns corev1.Namespace
+		if err := c.Get(ctx, types.NamespacedName{Name: namespace}, &ns); err != nil {
+			return false, fmt.Errorf("fetch namespace %q: %w", namespace, err)
+		}
+		return selector.Matches(labels.Set(ns.Labels)), nil
+	default:
+		return false, nil
+	}
+}
+
+// referencesInstance reports whether a resource in namespace whose instanceRef
+// is ref points at instance.
+func referencesInstance(namespace string, ref litellmv1alpha1.InstanceRef, instance *litellmv1alpha1.LiteLLMInstance) bool {
+	return ref.Name == instance.Name && ref.NamespaceOr(namespace) == instance.Namespace
 }
 
 // masterKeyRef returns the Secret reference holding the admin master key,

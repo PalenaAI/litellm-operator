@@ -79,6 +79,13 @@ spec:
                   name:
                     description: Name of the LiteLLMInstance CR.
                     type: string
+                  namespace:
+                    description: |-
+                      Namespace of the LiteLLMInstance CR. Defaults to the namespace of the
+                      referencing resource. An instance in another namespace must allow the
+                      reference through its spec.allowedNamespaces.
+                    maxLength: 63
+                    type: string
                 required:
                 - name
                 type: object

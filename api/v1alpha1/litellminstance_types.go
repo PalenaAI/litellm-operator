@@ -268,6 +268,44 @@ type LiteLLMInstanceSpec struct {
 	// +listMapKey=mountPath
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Extra Volume Mounts"
 	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
+
+	// AllowedNamespaces controls which namespaces may reference this instance
+	// from instanceRef. Resources referencing an instance spend its budget, so
+	// by default only resources in the instance's own namespace may. Modelled
+	// on Gateway API's allowedRoutes.namespaces.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Allowed Namespaces"
+	AllowedNamespaces *AllowedNamespaces `json:"allowedNamespaces,omitempty"`
+}
+
+// NamespacesFrom selects which namespaces may reference an instance.
+// +kubebuilder:validation:Enum=Same;All;Selector
+type NamespacesFrom string
+
+const (
+	// NamespacesFromSame allows only the instance's own namespace.
+	NamespacesFromSame NamespacesFrom = "Same"
+	// NamespacesFromAll allows every namespace.
+	NamespacesFromAll NamespacesFrom = "All"
+	// NamespacesFromSelector allows namespaces whose labels match Selector.
+	NamespacesFromSelector NamespacesFrom = "Selector"
+)
+
+// AllowedNamespaces lists the namespaces whose resources may reference an
+// instance. The instance's own namespace is always allowed.
+// +kubebuilder:validation:XValidation:rule="self.from != 'Selector' || has(self.selector)",message="selector is required when from is Selector"
+// +kubebuilder:validation:XValidation:rule="self.from == 'Selector' || !has(self.selector)",message="selector is only allowed when from is Selector"
+type AllowedNamespaces struct {
+	// From selects the namespaces: Same (only the instance's own), All, or
+	// Selector (those matching selector).
+	// +kubebuilder:default=Same
+	// +optional
+	From NamespacesFrom `json:"from,omitempty"`
+
+	// Selector matches the labels of the namespaces allowed when From is
+	// Selector.
+	// +optional
+	Selector *metav1.LabelSelector `json:"selector,omitempty"`
 }
 
 // TLSSpec configures TLS for the LiteLLM proxy pod.

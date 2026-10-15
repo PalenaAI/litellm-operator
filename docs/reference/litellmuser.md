@@ -64,7 +64,7 @@ spec:
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `teamRef` | *InstanceRef | Reference to a `LiteLLMTeam` CR |
+| `teamRef` | *TeamRef | Reference to a `LiteLLMTeam` CR in the same namespace |
 | `teamId` | string | Direct team ID (for teams not managed by a CRD) |
 | `role` | string | Role within the team (default: `user`) |
 | `maxBudgetInTeam` | *float64 | Max budget within this team |

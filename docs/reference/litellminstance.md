@@ -932,6 +932,43 @@ Admin UI configuration. Controls UI availability, access restrictions, model per
 `defaultTeamDisabled: true` pairs well with the operator's `LiteLLMTeam` CRD — it enforces that all keys are team-scoped, making spend tracking and access control more predictable.
 :::
 
+### `allowedNamespaces`
+
+Which namespaces may reference this instance from `spec.instanceRef` (with `instanceRef.namespace` set). A resource that references an instance spends its money, so only the instance's own namespace may by default. The field follows Gateway API's `allowedRoutes.namespaces`.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `from` | string | `Same` | `Same` (only the instance's namespace), `All` (every namespace), or `Selector` (namespaces whose labels match `selector`) |
+| `selector` | *LabelSelector | — | Namespace label selector; required when `from` is `Selector`, not allowed otherwise |
+
+The instance's own namespace is always allowed. A resource in a namespace that is not allowed reports `Synced=False` with reason `RefNotPermitted`, and nothing is created in LiteLLM. Removing a namespace later stops its resources from syncing; deleting one of them still removes what it created from LiteLLM, and config sync no longer counts what they created as managed, so `unmanagedResourcePolicy: prune` deletes it. `teamRef`, `userRef` and the other references stay in the referencing resource's own namespace, so each tenant namespace holds its own teams and keys.
+
+```yaml
+# In namespace llm: one shared gateway
+spec:
+  allowedNamespaces:
+    from: Selector
+    selector:
+      matchLabels:
+        litellm.palena.ai/tenant: "true"
+---
+# In namespace my-app (labelled litellm.palena.ai/tenant=true)
+apiVersion: litellm.palena.ai/v1alpha1
+kind: LiteLLMVirtualKey
+metadata:
+  name: my-app
+  namespace: my-app
+spec:
+  instanceRef:
+    name: my-gateway
+    namespace: llm
+  keyAlias: my-app
+  maxBudget: "20"
+  budgetDuration: 30d
+```
+
+The key's Secret (`my-app-key`) is created in `my-app`, beside the workload that uses it. The operator needs `get`/`list`/`watch` on Namespaces to evaluate `selector`; the bundled RBAC grants it.
+
 ## Status Fields
 
 | Field | Type | Description |

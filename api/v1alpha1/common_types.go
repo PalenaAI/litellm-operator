@@ -80,9 +80,37 @@ type SecretRef struct {
 	Name string `json:"name"`
 }
 
-// InstanceRef references a LiteLLMInstance in the same namespace.
+// InstanceRef references a LiteLLMInstance, by default in the same namespace.
 type InstanceRef struct {
 	// Name of the LiteLLMInstance CR.
+	Name string `json:"name"`
+
+	// Namespace of the LiteLLMInstance CR. Defaults to the namespace of the
+	// referencing resource. An instance in another namespace must allow the
+	// reference through its spec.allowedNamespaces.
+	// +optional
+	// +kubebuilder:validation:MaxLength=63
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// NamespaceOr returns the namespace the reference points at, falling back to
+// the given namespace (the referencing resource's own) when none is set.
+func (r InstanceRef) NamespaceOr(defaultNamespace string) string {
+	if r.Namespace != "" {
+		return r.Namespace
+	}
+	return defaultNamespace
+}
+
+// TeamRef references a LiteLLMTeam CR in the same namespace.
+type TeamRef struct {
+	// Name of the LiteLLMTeam CR.
+	Name string `json:"name"`
+}
+
+// UserRef references a LiteLLMUser CR in the same namespace.
+type UserRef struct {
+	// Name of the LiteLLMUser CR.
 	Name string `json:"name"`
 }
 
