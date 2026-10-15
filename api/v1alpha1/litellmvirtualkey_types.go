@@ -33,12 +33,12 @@ type LiteLLMVirtualKeySpec struct {
 	// Reference to a LiteLLMTeam CR that this key belongs to.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Team Ref"
-	TeamRef *InstanceRef `json:"teamRef,omitempty"`
+	TeamRef *TeamRef `json:"teamRef,omitempty"`
 
 	// Reference to a LiteLLMUser CR that this key belongs to.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="User Ref"
-	UserRef *InstanceRef `json:"userRef,omitempty"`
+	UserRef *UserRef `json:"userRef,omitempty"`
 
 	// Models this key can access.
 	// +optional

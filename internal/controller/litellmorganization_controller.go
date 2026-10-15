@@ -72,7 +72,7 @@ func (r *LiteLLMOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.
 		emitEvent(r.Recorder, &org, corev1.EventTypeWarning, EventReasonInstanceNotReady,
 			"Referenced LiteLLMInstance %q is not ready: %v", org.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&org.Status.Conditions, metav1.Condition{
-			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
+			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: instanceRefFailureReason(err), Message: err.Error(),
 			ObservedGeneration: org.Generation,
 		})
 		_ = r.Status().Update(ctx, &org)
@@ -273,7 +273,7 @@ func (r *LiteLLMOrganizationReconciler) handleDeletion(ctx context.Context, org 
 		return ctrl.Result{}, nil
 	}
 	if org.Status.LiteLLMOrganizationID != "" {
-		resolved, err := resolveInstance(ctx, r.Client, org.Namespace, org.Spec.InstanceRef)
+		resolved, err := resolveInstanceForCleanup(ctx, r.Client, org.Namespace, org.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Organizations().Delete(ctx, org.Status.LiteLLMOrganizationID); err != nil {

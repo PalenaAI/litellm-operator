@@ -72,7 +72,7 @@ func (r *LiteLLMBudgetReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		emitEvent(r.Recorder, &budget, corev1.EventTypeWarning, EventReasonInstanceNotReady,
 			"Referenced LiteLLMInstance %q is not ready: %v", budget.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&budget.Status.Conditions, metav1.Condition{
-			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
+			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: instanceRefFailureReason(err), Message: err.Error(),
 			ObservedGeneration: budget.Generation,
 		})
 		_ = r.Status().Update(ctx, &budget)
@@ -193,7 +193,7 @@ func (r *LiteLLMBudgetReconciler) handleDeletion(ctx context.Context, budget *li
 		return ctrl.Result{}, nil
 	}
 	if budget.Status.LiteLLMBudgetID != "" {
-		resolved, err := resolveInstance(ctx, r.Client, budget.Namespace, budget.Spec.InstanceRef)
+		resolved, err := resolveInstanceForCleanup(ctx, r.Client, budget.Namespace, budget.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Budgets().Delete(ctx, budget.Status.LiteLLMBudgetID); err != nil {

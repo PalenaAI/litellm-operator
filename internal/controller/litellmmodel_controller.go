@@ -81,7 +81,7 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		meta.SetStatusCondition(&model.Status.Conditions, metav1.Condition{
 			Type:    ConditionSynced,
 			Status:  metav1.ConditionFalse,
-			Reason:  "InstanceNotReady",
+			Reason:  instanceRefFailureReason(err),
 			Message: err.Error(),
 		})
 		_ = r.Status().Update(ctx, &model)
@@ -442,7 +442,7 @@ func (r *LiteLLMModelReconciler) handleDeletion(
 	}
 
 	if model.Status.LiteLLMModelID != "" {
-		resolved, err := resolveInstance(ctx, r.Client, model.Namespace, model.Spec.InstanceRef)
+		resolved, err := resolveInstanceForCleanup(ctx, r.Client, model.Namespace, model.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Models().Delete(ctx, model.Status.LiteLLMModelID); err != nil {

@@ -31,10 +31,10 @@ spec:
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `instanceRef` | InstanceRef | Yes | — | Reference to the LiteLLMInstance |
+| `instanceRef` | InstanceRef | Yes | — | Reference to the LiteLLMInstance; set `namespace` to use an instance in another namespace that [allows it](litellminstance#allowednamespaces) |
 | `keyAlias` | string | Yes | — | Human-readable key alias |
-| `teamRef` | *InstanceRef | No | — | Reference to a `LiteLLMTeam` CR |
-| `userRef` | *InstanceRef | No | — | Reference to a `LiteLLMUser` CR |
+| `teamRef` | *TeamRef | No | — | Reference to a `LiteLLMTeam` CR in the same namespace |
+| `userRef` | *UserRef | No | — | Reference to a `LiteLLMUser` CR in the same namespace |
 | `models` | []string | No | — | Models this key can access |
 | `maxBudget` | *string | No | — | Maximum budget in USD |
 | `budgetDuration` | string | No | — | Budget reset period (e.g., `30d`) |
