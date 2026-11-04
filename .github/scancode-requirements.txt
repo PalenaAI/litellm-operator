@@ -17,10 +17,11 @@ beartype==0.22.9 \
     --hash=sha256:8f82b54aa723a2848a56008d18875f91c1db02c32ef6a62319a002e3e25a975f \
     --hash=sha256:d16c9bbc61ea14637596c5f6fbff2ee99cbe3573e46a716401734ef50c3060c2
     # via spdx-tools
-beautifulsoup4==4.15.0 \
+beautifulsoup4[chardet]==4.15.0 \
     --hash=sha256:288e3ca7d54b06f2ac191970bc275c1939cb46d450b255bf6718b04aa37ab4f7 \
     --hash=sha256:d6f88de62e1d4e38ecb1077eb9724cd0eff29d2a08ca16a401e9b9e93f117cf9
     # via
+    #   beautifulsoup4
     #   commoncode
     #   scancode-toolkit
 binaryornot==0.6.0 \
@@ -33,9 +34,9 @@ boolean-py==5.0 \
     # via
     #   license-expression
     #   scancode-toolkit
-certifi==2026.7.22 \
-    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775 \
-    --hash=sha256:741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55
+certifi==2026.10.18 \
+    --hash=sha256:73191c47aaa79da394e8fee2dbc2ec827432cab56311122c9e47abf79e390f62 \
+    --hash=sha256:b9995d97b64d0431a5af837d8ca8cd6238104d1f319f04bd93ea43124d6c861e
     # via requests
 cffi==2.1.1 \
     --hash=sha256:046bfc24911b37851ee1b51aab8bffe713d89c68c6a057b09484ce9fd5f69b4e \
@@ -494,7 +495,7 @@ dparse2==0.7.0 \
     --hash=sha256:2b935161700cdad4f27fa7ada85900756739be65ba3ef614ac4436e7ba929102 \
     --hash=sha256:6bf6872aeaffedcac67ad0abb516630bad045dbdb58505b58d8f796ee91f0a73
     # via scancode-toolkit
-extractcode==31.1.0 \
+extractcode[full]==31.1.0 \
     --hash=sha256:147fa97096db5f51e27a7c6205d5ca1e073c98a7877538b7ec775b94ba889ac1 \
     --hash=sha256:e62b75ecf0379beea79cd54d5f1341ac05ec39974e5695ad21d0abb86a0ab6a4
     # via scancode-toolkit
@@ -1086,7 +1087,7 @@ rdflib==7.6.0 \
     --hash=sha256:30c0a3ebf4c0e09215f066be7246794b6492e054e782d7ac2a34c9f70a15e0dd \
     --hash=sha256:6c831288d5e4a5a7ece85d0ccde9877d512a3d0f02d7c06455d00d6d0ea379df
     # via spdx-tools
-requests==2.34.2 \
+requests[use-chardet-on-py3]==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0 \
     --hash=sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed
     # via
@@ -1137,7 +1138,7 @@ toml==0.10.2 \
     --hash=sha256:806143ae5bfb6a3c6e736a764057db0e6a0e05e338b5630894a5f779cabb4f9b \
     --hash=sha256:b3bda1d108d5dd99f4a20d24d9c348e91c4db7ab1b749200bded2f839ccbe68f
     # via dparse2
-typecode==30.2.0 \
+typecode[full]==30.2.0 \
     --hash=sha256:42b9477d7d05ba5668768dae46c2d2700d503b6e3791d2cd8003b5d10d0ea330 \
     --hash=sha256:5e59d65ea899b30926f66c32f43d811aa200e8ce1aa84f95b109cdabb4af2acd
     # via
