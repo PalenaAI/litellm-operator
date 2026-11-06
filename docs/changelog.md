@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Cross-namespace `instanceRef`** ([#49](https://github.com/PalenaAI/litellm-operator/issues/49)). `instanceRef.namespace` lets a resource reference a `LiteLLMInstance` in another namespace, so one shared gateway can serve tenants that each keep their `LiteLLMVirtualKey` (and its key Secret) in their own namespace, with no Secret mirroring. The instance opts in with `spec.allowedNamespaces` (`from: Same | All | Selector`, after Gateway API's `allowedRoutes.namespaces`); the default stays same-namespace only, since a resource referencing an instance spends its money. A reference that is not allowed reports `Synced=False` with reason `RefNotPermitted` and creates nothing in LiteLLM. Config sync now considers resources in every allowed namespace, so `prune` no longer deletes what they created. Finalizers skip the check, so a resource whose namespace is no longer allowed can still remove its key. `LiteLLMGuardrail` rejects `instanceRef.namespace`, since a guardrail changes the whole proxy's config. The operator now needs `get`/`list`/`watch` on Namespaces.
+
+### Changed
+
+- **`teamRef` and `userRef` have their own types**, `TeamRef` and `UserRef`, instead of reusing `InstanceRef`, so they do not pick up `instanceRef`'s new `namespace` field. They still take only `name`, so existing manifests are unchanged.
+
 ## [0.28.0] - 2026-10-13
 
 ### Added
