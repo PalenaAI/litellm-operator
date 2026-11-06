@@ -66,7 +66,7 @@ func (r *LiteLLMBudgetReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 	}
 
-	resolved, err := resolveInstance(ctx, r.Client, budget.Namespace, budget.Spec.InstanceRef)
+	resolved, err := resolveInstance(ctx, r.Client, budget.Namespace, kindBudget, budget.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
 		emitEvent(r.Recorder, &budget, corev1.EventTypeWarning, EventReasonInstanceNotReady,

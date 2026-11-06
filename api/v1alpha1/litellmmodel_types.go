@@ -21,6 +21,8 @@ import (
 )
 
 // LiteLLMModelSpec defines the desired state of LiteLLMModel.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.instanceRef.__namespace__)",message="a model changes what the whole proxy does for every tenant, so it must live in its instance's namespace: instanceRef.namespace is not supported"
 type LiteLLMModelSpec struct {
 	// Reference to the LiteLLMInstance.
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Instance Ref"

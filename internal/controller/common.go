@@ -191,8 +191,25 @@ type ResolvedInstance struct {
 var errInstanceRefNotPermitted = errors.New("instance does not allow references from this namespace")
 
 // ReasonRefNotPermitted is the condition reason set on a resource whose
-// instanceRef points at an instance that does not allow its namespace.
+// instanceRef points at an instance that does not allow its namespace or kind.
 const ReasonRefNotPermitted = "RefNotPermitted"
+
+// Kinds of resource that reference an instance, as checked against
+// spec.allowedNamespaces.kinds.
+const (
+	kindVirtualKey   = string(litellmv1alpha1.AllowedKindVirtualKey)
+	kindTeam         = string(litellmv1alpha1.AllowedKindTeam)
+	kindUser         = string(litellmv1alpha1.AllowedKindUser)
+	kindOrganization = string(litellmv1alpha1.AllowedKindOrganization)
+	kindBudget       = string(litellmv1alpha1.AllowedKindBudget)
+	kindCustomer     = string(litellmv1alpha1.AllowedKindCustomer)
+	// LiteLLMModel and LiteLLMCredential can never be listed in kinds, so the
+	// check always refuses them from another namespace. Their CEL rule rejects
+	// instanceRef.namespace too, but helm upgrade does not update CRDs, so a
+	// cluster may be running this operator without that rule.
+	kindModel      = "LiteLLMModel"
+	kindCredential = "LiteLLMCredential"
+)
 
 // instanceRefFailureReason returns the condition reason for an error from
 // resolveInstance: RefNotPermitted when the instance refused the reference,
@@ -205,34 +222,42 @@ func instanceRefFailureReason(err error) string {
 }
 
 // resolveInstance fetches the LiteLLMInstance that ref points at from a
-// resource in the given namespace and resolves its endpoint and master key.
-// It refuses an instance in another namespace unless the instance allows it.
+// resource of the given kind in the given namespace and resolves its endpoint
+// and master key. It refuses an instance in another namespace unless the
+// instance allows both that namespace and that kind.
 func resolveInstance(
 	ctx context.Context,
 	c client.Client,
 	namespace string,
+	kind string,
 	ref litellmv1alpha1.InstanceRef,
 ) (*ResolvedInstance, error) {
-	return resolveInstanceRef(ctx, c, namespace, ref, true)
+	return resolveInstanceRef(ctx, c, namespace, kind, ref, true)
 }
 
 // resolveInstanceForCleanup is resolveInstance without the allowedNamespaces
 // check, for finalizers: a resource that created something in LiteLLM while
 // its namespace was allowed must still be able to remove it after the
 // instance stops allowing it, or the object would leak.
+//
+// What gets deleted is whatever ID the resource's status names, so this relies
+// on status being writable only by the operator. The generated editor roles
+// grant just get on the status subresource; anyone granted more could point
+// status at another tenant's object and delete it through the finalizer.
 func resolveInstanceForCleanup(
 	ctx context.Context,
 	c client.Client,
 	namespace string,
 	ref litellmv1alpha1.InstanceRef,
 ) (*ResolvedInstance, error) {
-	return resolveInstanceRef(ctx, c, namespace, ref, false)
+	return resolveInstanceRef(ctx, c, namespace, "", ref, false)
 }
 
 func resolveInstanceRef(
 	ctx context.Context,
 	c client.Client,
 	namespace string,
+	kind string,
 	ref litellmv1alpha1.InstanceRef,
 	checkAllowed bool,
 ) (*ResolvedInstance, error) {
@@ -250,6 +275,10 @@ func resolveInstanceRef(
 		}
 		if !allowed {
 			return nil, fmt.Errorf("instance %s/%s: %w %q", instance.Namespace, instance.Name, errInstanceRefNotPermitted, namespace)
+		}
+		if !instanceAllowsKind(&instance, namespace, kind) {
+			return nil, fmt.Errorf("instance %s/%s: %w %q: kind %s is not admitted by spec.allowedNamespaces.kinds",
+				instance.Namespace, instance.Name, errInstanceRefNotPermitted, namespace, kind)
 		}
 	}
 
@@ -305,6 +334,13 @@ func instanceAllowsNamespace(
 	default:
 		return false, nil
 	}
+}
+
+// instanceAllowsKind reports whether a resource of the given kind in namespace
+// may reference instance, given that the namespace itself is allowed. Kinds
+// only restrict other namespaces: the instance's own may use every kind.
+func instanceAllowsKind(instance *litellmv1alpha1.LiteLLMInstance, namespace, kind string) bool {
+	return namespace == instance.Namespace || instance.Spec.AllowedNamespaces.AllowsKind(kind)
 }
 
 // referencesInstance reports whether a resource in namespace whose instanceRef

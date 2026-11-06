@@ -143,6 +143,10 @@ Progress is reported on the `InitialPasswordApplied` condition, separate from `S
 | `PasswordRejected` | LiteLLM rejected the value (e.g. password policy); not retried until the Secret changes |
 | `ApplyFailed` / `SecretFetchFailed` | Transient failure; retried after 30s |
 
+## Referencing an Instance in Another Namespace
+
+A `LiteLLMUser` can reference an instance in another namespace only if the instance lists `LiteLLMUser` in [`spec.allowedNamespaces.kinds`](litellminstance#allowednamespaces). That amounts to admin-level access to the proxy: such a user can be a `proxy_admin` with a password, and `userId` can name an existing user, which is then adopted and has its password reset.
+
 ## Adopting Existing Users
 
 If `userId` already exists in LiteLLM (created by SSO, the Admin UI, or before the operator was installed), `/user/new` returns 409. The operator then confirms through `/user/info` that the user exists under `userId` and adopts it: the id is recorded, the CR is annotated `litellm.palena.ai/adopted: "true"`, and the user is updated to match the spec.

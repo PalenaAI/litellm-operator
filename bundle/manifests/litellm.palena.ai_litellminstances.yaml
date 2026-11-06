@@ -129,9 +129,9 @@ spec:
               allowedNamespaces:
                 description: |-
                   AllowedNamespaces controls which namespaces may reference this instance
-                  from instanceRef. Resources referencing an instance spend its budget, so
-                  by default only resources in the instance's own namespace may. Modelled
-                  on Gateway API's allowedRoutes.namespaces.
+                  from instanceRef, and with which kinds of resource. Resources referencing
+                  an instance spend its budget, so by default only resources in the
+                  instance's own namespace may. Modelled on Gateway API's allowedRoutes.
                 properties:
                   from:
                     default: Same
@@ -143,6 +143,32 @@ spec:
                     - All
                     - Selector
                     type: string
+                  kinds:
+                    description: |-
+                      Kinds lists the kinds of resource that may reference this instance from
+                      an allowed namespace. Omitted means LiteLLMVirtualKey only. Setting it
+                      replaces that default, so include LiteLLMVirtualKey if keys should still
+                      be admitted. LiteLLMUser and LiteLLMTeam amount to admin-level access to
+                      the proxy: they can create proxy admins and take over existing users and
+                      teams. LiteLLMModel, LiteLLMCredential and LiteLLMGuardrail cannot be
+                      listed.
+                    items:
+                      description: |-
+                        AllowedNamespaceKind names a kind of resource that may reference an instance
+                        from another namespace. LiteLLMModel, LiteLLMCredential and LiteLLMGuardrail
+                        are deliberately absent: each changes what the whole proxy does for every
+                        tenant, so they must live in the instance's own namespace.
+                      enum:
+                      - LiteLLMVirtualKey
+                      - LiteLLMTeam
+                      - LiteLLMUser
+                      - LiteLLMOrganization
+                      - LiteLLMBudget
+                      - LiteLLMCustomer
+                      type: string
+                    minItems: 1
+                    type: array
+                    x-kubernetes-list-type: set
                   selector:
                     description: |-
                       Selector matches the labels of the namespaces allowed when From is

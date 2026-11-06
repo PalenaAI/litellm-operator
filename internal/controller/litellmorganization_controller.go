@@ -66,7 +66,7 @@ func (r *LiteLLMOrganizationReconciler) Reconcile(ctx context.Context, req ctrl.
 		}
 	}
 
-	resolved, err := resolveInstance(ctx, r.Client, org.Namespace, org.Spec.InstanceRef)
+	resolved, err := resolveInstance(ctx, r.Client, org.Namespace, kindOrganization, org.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
 		emitEvent(r.Recorder, &org, corev1.EventTypeWarning, EventReasonInstanceNotReady,

@@ -67,14 +67,30 @@ type configSyncer struct {
 	allowedNamespaces map[string]bool
 }
 
-// manages reports whether a CR in namespace whose instanceRef is ref belongs
-// to this instance's sync: it must reference the instance, from a namespace
-// the instance allows. CRs in namespaces it no longer allows are left out, as
-// though they did not exist, so they are not remediated (and a prune policy
-// treats what they created as unmanaged).
-func (s *configSyncer) manages(ctx context.Context, namespace string, ref litellmv1alpha1.InstanceRef) bool {
+// syncScope is how one sync cycle treats a CR.
+type syncScope int
+
+const (
+	// syncScopeOutside CRs are left out as though they did not exist: they
+	// reference another instance, or come from a namespace this instance no
+	// longer allows. A prune policy treats what the latter created as unmanaged.
+	syncScopeOutside syncScope = iota
+	// syncScopeProtected CRs come from an allowed namespace but their kind is
+	// not admitted by spec.allowedNamespaces.kinds. They are not remediated, but
+	// what they created is never pruned: setting kinds replaces its default, so
+	// listing only LiteLLMTeam would otherwise delete every tenant's keys, and a
+	// deleted key's material cannot be recovered. Deleting the CR still removes
+	// the object.
+	syncScopeProtected
+	// syncScopeManaged CRs are fully part of the sync.
+	syncScopeManaged
+)
+
+// scope reports how this sync treats a CR of the given kind in namespace whose
+// instanceRef is ref.
+func (s *configSyncer) scope(ctx context.Context, namespace string, ref litellmv1alpha1.InstanceRef, kind string) syncScope {
 	if !referencesInstance(namespace, ref, s.instance) {
-		return false
+		return syncScopeOutside
 	}
 	if s.allowedNamespaces == nil {
 		s.allowedNamespaces = make(map[string]bool)
@@ -84,14 +100,20 @@ func (s *configSyncer) manages(ctx context.Context, namespace string, ref litell
 		var err error
 		allowed, err = instanceAllowsNamespace(ctx, s.kClient, s.instance, namespace)
 		if err != nil {
-			// Unknown is not a revocation: keep the CR managed, so a transient
+			// Unknown is not a revocation: keep the CR in scope, so a transient
 			// lookup failure never prunes its objects.
 			logf.FromContext(ctx).Error(err, "failed to check allowedNamespaces", "namespace", namespace)
 			allowed = true
 		}
 		s.allowedNamespaces[namespace] = allowed
 	}
-	return allowed
+	if !allowed {
+		return syncScopeOutside
+	}
+	if !instanceAllowsKind(s.instance, namespace, kind) {
+		return syncScopeProtected
+	}
+	return syncScopeManaged
 }
 
 // sync runs a full config sync cycle across all resource types.
@@ -121,9 +143,15 @@ func (s *configSyncer) syncModels(ctx context.Context, result *syncResult) {
 	}
 
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMModel)
+	protectedIDs := make(map[string]bool)
 	for i := range crdList.Items {
 		m := &crdList.Items[i]
-		if !s.manages(ctx, m.Namespace, m.Spec.InstanceRef) || !m.DeletionTimestamp.IsZero() {
+		scope := s.scope(ctx, m.Namespace, m.Spec.InstanceRef, kindModel)
+		if scope == syncScopeOutside || !m.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if scope == syncScopeProtected {
+			protectedIDs[m.Status.LiteLLMModelID] = true
 			continue
 		}
 		if m.Status.LiteLLMModelID != "" {
@@ -146,7 +174,7 @@ func (s *configSyncer) syncModels(ctx context.Context, result *syncResult) {
 			if s.isModelDrifted(crd, &apiModel) {
 				s.handleDrift(ctx, crd, "model", crd.Spec.ModelName, result)
 			}
-		} else {
+		} else if !protectedIDs[apiModel.ModelID] {
 			result.UnmanagedModels++
 			s.handleUnmanaged(ctx, "model", apiModel.ModelName, result, func() error {
 				return s.apiClient.Models().Delete(ctx, apiModel.ModelID)
@@ -190,9 +218,15 @@ func (s *configSyncer) syncTeams(ctx context.Context, result *syncResult) {
 	}
 
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMTeam)
+	protectedIDs := make(map[string]bool)
 	for i := range crdList.Items {
 		t := &crdList.Items[i]
-		if !s.manages(ctx, t.Namespace, t.Spec.InstanceRef) || !t.DeletionTimestamp.IsZero() {
+		scope := s.scope(ctx, t.Namespace, t.Spec.InstanceRef, kindTeam)
+		if scope == syncScopeOutside || !t.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if scope == syncScopeProtected {
+			protectedIDs[t.Status.LiteLLMTeamID] = true
 			continue
 		}
 		if t.Status.LiteLLMTeamID != "" {
@@ -215,7 +249,7 @@ func (s *configSyncer) syncTeams(ctx context.Context, result *syncResult) {
 			if s.isTeamDrifted(crd, &apiTeam) {
 				s.handleDrift(ctx, crd, "team", crd.Spec.TeamAlias, result)
 			}
-		} else {
+		} else if !protectedIDs[apiTeam.TeamID] {
 			result.UnmanagedTeams++
 			teamID := apiTeam.TeamID
 			s.handleUnmanaged(ctx, "team", apiTeam.TeamAlias, result, func() error {
@@ -254,9 +288,15 @@ func (s *configSyncer) syncUsers(ctx context.Context, result *syncResult) {
 	}
 
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMUser)
+	protectedIDs := make(map[string]bool)
 	for i := range crdList.Items {
 		u := &crdList.Items[i]
-		if !s.manages(ctx, u.Namespace, u.Spec.InstanceRef) || !u.DeletionTimestamp.IsZero() {
+		scope := s.scope(ctx, u.Namespace, u.Spec.InstanceRef, kindUser)
+		if scope == syncScopeOutside || !u.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if scope == syncScopeProtected {
+			protectedIDs[u.Status.LiteLLMUserID] = true
 			continue
 		}
 		if u.Status.LiteLLMUserID != "" {
@@ -279,7 +319,7 @@ func (s *configSyncer) syncUsers(ctx context.Context, result *syncResult) {
 			if s.isUserDrifted(crd, &apiUser) {
 				s.handleDrift(ctx, crd, "user", crd.Spec.UserID, result)
 			}
-		} else {
+		} else if !protectedIDs[apiUser.UserID] {
 			result.UnmanagedUsers++
 			userID := apiUser.UserID
 			s.handleUnmanaged(ctx, "user", apiUser.UserEmail, result, func() error {
@@ -324,9 +364,15 @@ func (s *configSyncer) syncKeys(ctx context.Context, result *syncResult) {
 	}
 
 	managedTokens := make(map[string]*litellmv1alpha1.LiteLLMVirtualKey)
+	protectedTokens := make(map[string]bool)
 	for i := range crdList.Items {
 		k := &crdList.Items[i]
-		if !s.manages(ctx, k.Namespace, k.Spec.InstanceRef) || !k.DeletionTimestamp.IsZero() {
+		scope := s.scope(ctx, k.Namespace, k.Spec.InstanceRef, kindVirtualKey)
+		if scope == syncScopeOutside || !k.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if scope == syncScopeProtected {
+			protectedTokens[k.Status.LiteLLMKeyToken] = true
 			continue
 		}
 		if k.Status.LiteLLMKeyToken != "" {
@@ -349,7 +395,7 @@ func (s *configSyncer) syncKeys(ctx context.Context, result *syncResult) {
 			if s.isKeyDrifted(crd, &apiKey) {
 				s.handleDrift(ctx, crd, "key", crd.Spec.KeyAlias, result)
 			}
-		} else {
+		} else if !protectedTokens[apiKey.Token] {
 			result.UnmanagedKeys++
 			token := apiKey.Token
 			s.handleUnmanaged(ctx, "key", apiKey.KeyAlias, result, func() error {
@@ -388,9 +434,15 @@ func (s *configSyncer) syncOrganizations(ctx context.Context, result *syncResult
 	}
 
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMOrganization)
+	protectedIDs := make(map[string]bool)
 	for i := range crdList.Items {
 		o := &crdList.Items[i]
-		if !s.manages(ctx, o.Namespace, o.Spec.InstanceRef) || !o.DeletionTimestamp.IsZero() {
+		scope := s.scope(ctx, o.Namespace, o.Spec.InstanceRef, kindOrganization)
+		if scope == syncScopeOutside || !o.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if scope == syncScopeProtected {
+			protectedIDs[o.Status.LiteLLMOrganizationID] = true
 			continue
 		}
 		if o.Status.LiteLLMOrganizationID != "" {
@@ -413,7 +465,7 @@ func (s *configSyncer) syncOrganizations(ctx context.Context, result *syncResult
 			if s.isOrganizationDrifted(crd, &apiOrg) {
 				s.handleDrift(ctx, crd, "organization", crd.Spec.OrganizationAlias, result)
 			}
-		} else {
+		} else if !protectedIDs[apiOrg.OrganizationID] {
 			result.UnmanagedOrganizations++
 			orgID := apiOrg.OrganizationID
 			s.handleUnmanaged(ctx, "organization", apiOrg.OrganizationAlias, result, func() error {
@@ -453,9 +505,19 @@ func (s *configSyncer) syncCustomers(ctx context.Context, result *syncResult) {
 
 	// Customers use spec.customerId as the API identifier (no generated ID).
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMCustomer)
+	protectedIDs := make(map[string]bool)
 	for i := range crdList.Items {
 		c := &crdList.Items[i]
-		if !s.manages(ctx, c.Namespace, c.Spec.InstanceRef) || !c.DeletionTimestamp.IsZero() {
+		scope := s.scope(ctx, c.Namespace, c.Spec.InstanceRef, kindCustomer)
+		if scope == syncScopeOutside || !c.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if scope == syncScopeProtected {
+			// spec.customerId is written by the user, unlike a status ID, so only
+			// a customer the operator has synced may claim protection.
+			if c.Status.Synced {
+				protectedIDs[c.Spec.CustomerID] = true
+			}
 			continue
 		}
 		if c.Status.Synced {
@@ -478,7 +540,7 @@ func (s *configSyncer) syncCustomers(ctx context.Context, result *syncResult) {
 			if s.isCustomerDrifted(crd, &apiCust) {
 				s.handleDrift(ctx, crd, "customer", crd.Spec.CustomerID, result)
 			}
-		} else {
+		} else if !protectedIDs[apiCust.UserID] {
 			result.UnmanagedCustomers++
 			custID := apiCust.UserID
 			s.handleUnmanaged(ctx, "customer", apiCust.Alias, result, func() error {

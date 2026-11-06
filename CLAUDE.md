@@ -284,6 +284,12 @@ When a `LiteLLMVirtualKey` is created, the operator calls `POST /key/generate` a
 
 The Secret is reconciled on every pass, not only at mint time: `spec.keySecretTemplate.annotations` / `.labels` are merged onto it (operator labels win on conflict; entries added by other controllers are preserved), and both `keySecretName` and `keySecretTemplate` are excluded from the sync hash so Kubernetes-side edits never trigger a `POST /key/update`. LiteLLM stores only a hash of the key, so if the Secret is deleted the material is unrecoverable: the operator deletes the orphaned key, mints a replacement and emits a `KeySecretMissing` warning event. Absence is confirmed with an uncached read (`APIReader`) so a stale informer cache cannot rotate a working key.
 
+### 6. Cross-Namespace `instanceRef`
+
+`instanceRef.namespace` is opt-in per instance via `spec.allowedNamespaces` (`from` + `selector`) and per kind via `allowedNamespaces.kinds`, which defaults to `LiteLLMVirtualKey` alone. Kinds are a security boundary, not a convenience: many same-namespace behaviours assume a trusted author (`LiteLLMUser` adoption and `proxy_admin`, `LiteLLMTeam.spec.teamId` adoption, credential create-falls-back-to-update), so a new CRD or adoption path must be weighed against tenants reaching it. `LiteLLMModel`, `LiteLLMCredential` and `LiteLLMGuardrail` change the whole proxy, so they have a CEL rule rejecting `instanceRef.namespace` and are also refused at runtime (`helm upgrade` does not update CRDs, so the rule may be absent). Always pass the real kind to `resolveInstance`.
+
+Config sync has three scopes (`syncScope`): a revoked namespace is `Outside` (prune deletes its objects, the documented off switch), an unlisted kind is `Protected` (neither remediated nor pruned, because `kinds` replaces its default and pruning would irrecoverably delete keys), otherwise `Managed`. Only operator-written state may claim protection: customers are keyed by user-written `spec.customerId`, so they need `status.synced`. Finalizers use `resolveInstanceForCleanup`, which skips these checks and trusts status IDs.
+
 ## Common Tasks
 
 ### Scaffold a new CRD

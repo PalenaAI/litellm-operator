@@ -79,7 +79,7 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	resolved, err := resolveInstance(ctx, r.Client, cred.Namespace, cred.Spec.InstanceRef)
+	resolved, err := resolveInstance(ctx, r.Client, cred.Namespace, kindCredential, cred.Spec.InstanceRef)
 	if err != nil {
 		reason := instanceRefFailureReason(err)
 		if apierrors.IsNotFound(errors.Unwrap(err)) {

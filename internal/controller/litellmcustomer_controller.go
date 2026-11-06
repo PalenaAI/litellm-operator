@@ -66,7 +66,7 @@ func (r *LiteLLMCustomerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
-	resolved, err := resolveInstance(ctx, r.Client, customer.Namespace, customer.Spec.InstanceRef)
+	resolved, err := resolveInstance(ctx, r.Client, customer.Namespace, kindCustomer, customer.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
 		emitEvent(r.Recorder, &customer, corev1.EventTypeWarning, EventReasonInstanceNotReady,

@@ -77,7 +77,7 @@ func (r *LiteLLMUserReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	resolved, err := resolveInstance(ctx, r.Client, user.Namespace, user.Spec.InstanceRef)
+	resolved, err := resolveInstance(ctx, r.Client, user.Namespace, kindUser, user.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
 		emitEvent(r.Recorder, &user, corev1.EventTypeWarning, EventReasonInstanceNotReady,

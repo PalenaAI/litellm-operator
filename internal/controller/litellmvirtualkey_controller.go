@@ -76,7 +76,7 @@ func (r *LiteLLMVirtualKeyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 	}
 
-	resolved, err := resolveInstance(ctx, r.Client, vk.Namespace, vk.Spec.InstanceRef)
+	resolved, err := resolveInstance(ctx, r.Client, vk.Namespace, kindVirtualKey, vk.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
 		emitEvent(r.Recorder, &vk, corev1.EventTypeWarning, EventReasonInstanceNotReady,

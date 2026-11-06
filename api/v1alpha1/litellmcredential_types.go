@@ -27,6 +27,8 @@ import (
 // the proxy's `credential_list` config section. Multiple LiteLLMModel CRs
 // can reference the same credential by name instead of each embedding its
 // own API key, which reduces Secret sprawl and simplifies key rotation.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.instanceRef.__namespace__)",message="a credential changes what the whole proxy does for every tenant, so it must live in its instance's namespace: instanceRef.namespace is not supported"
 type LiteLLMCredentialSpec struct {
 	// Reference to the LiteLLMInstance this credential belongs to.
 	InstanceRef InstanceRef `json:"instanceRef"`

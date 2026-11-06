@@ -42,6 +42,8 @@ spec:
 | `modelInfo` | *ModelInfo | No | Optional model metadata |
 | `tags` | []string | No | Tags for tag-based routing (requires `enableTagFiltering` on the instance) |
 
+`instanceRef.namespace` is rejected on a model. A model changes what the whole proxy does for every tenant, so it must live in its instance's namespace; `spec.allowedNamespaces` on the instance does not apply to it.
+
 ### `litellmParams`
 
 | Field | Type | Required | Description |

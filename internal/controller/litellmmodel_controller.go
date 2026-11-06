@@ -73,7 +73,7 @@ func (r *LiteLLMModelReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	}
 
 	// Resolve instance
-	resolved, err := resolveInstance(ctx, r.Client, model.Namespace, model.Spec.InstanceRef)
+	resolved, err := resolveInstance(ctx, r.Client, model.Namespace, kindModel, model.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
 		emitEvent(r.Recorder, &model, corev1.EventTypeWarning, EventReasonInstanceNotReady,

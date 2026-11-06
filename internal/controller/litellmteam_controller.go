@@ -68,7 +68,7 @@ func (r *LiteLLMTeamReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		}
 	}
 
-	resolved, err := resolveInstance(ctx, r.Client, team.Namespace, team.Spec.InstanceRef)
+	resolved, err := resolveInstance(ctx, r.Client, team.Namespace, kindTeam, team.Spec.InstanceRef)
 	if err != nil {
 		log.Error(err, "failed to resolve instance")
 		emitEvent(r.Recorder, &team, corev1.EventTypeWarning, EventReasonInstanceNotReady,

@@ -934,14 +934,34 @@ Admin UI configuration. Controls UI availability, access restrictions, model per
 
 ### `allowedNamespaces`
 
-Which namespaces may reference this instance from `spec.instanceRef` (with `instanceRef.namespace` set). A resource that references an instance spends its money, so only the instance's own namespace may by default. The field follows Gateway API's `allowedRoutes.namespaces`.
+Which namespaces may reference this instance from `spec.instanceRef` (with `instanceRef.namespace` set), and with which kinds of resource. Only the instance's own namespace may by default. The field follows Gateway API's `allowedRoutes`.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `from` | string | `Same` | `Same` (only the instance's namespace), `All` (every namespace), or `Selector` (namespaces whose labels match `selector`) |
 | `selector` | *LabelSelector | — | Namespace label selector; required when `from` is `Selector`, not allowed otherwise |
+| `kinds` | []string | `[LiteLLMVirtualKey]` | Kinds of resource that may reference the instance from an allowed namespace. Setting it replaces the default, so include `LiteLLMVirtualKey` if keys should still be admitted |
 
-The instance's own namespace is always allowed. A resource in a namespace that is not allowed reports `Synced=False` with reason `RefNotPermitted`, and nothing is created in LiteLLM. Removing a namespace later stops its resources from syncing; deleting one of them still removes what it created from LiteLLM, and config sync no longer counts what they created as managed, so `unmanagedResourcePolicy: prune` deletes it. `teamRef`, `userRef` and the other references stay in the referencing resource's own namespace, so each tenant namespace holds its own teams and keys.
+The instance's own namespace is always allowed, for every kind. A reference from a namespace or kind that is not allowed reports `Synced=False` with reason `RefNotPermitted`, and nothing is created in LiteLLM. `teamRef`, `userRef` and the other references stay in the referencing resource's own namespace, so a `LiteLLMVirtualKey` with a `teamRef` needs a team in its own namespace, which means listing `LiteLLMTeam` too.
+
+::: danger Choose `kinds` by what a tenant may do to the whole proxy
+A `LiteLLMVirtualKey` only spends: it cannot affect other tenants' objects, which is why it is the one kind admitted by default. The others reach further, so list them only for namespaces you trust accordingly:
+
+| Kind | What listing it grants |
+| --- | --- |
+| `LiteLLMUser` | **Admin-level.** Can create a `proxy_admin` user with an initial password and log in to the Admin UI. Can also set `userId` to an existing user, including an admin, adopting it, updating it to the CR's spec and resetting its password |
+| `LiteLLMTeam` | **Admin-level.** Can set `teamId` to another tenant's team, adopting it and bringing its models, budget and members to the CR's spec |
+| `LiteLLMOrganization`, `LiteLLMBudget`, `LiteLLMCustomer` | Create and manage objects shared across the whole proxy, not scoped to the tenant |
+
+`LiteLLMModel`, `LiteLLMCredential` and `LiteLLMGuardrail` cannot be listed, and reject `instanceRef.namespace`. Each changes what the proxy does for every tenant: a model registered under an existing name joins that model's load balancing, so it would receive other tenants' prompts.
+:::
+
+**Taking access away.** Changing `allowedNamespaces` stops the affected resources from syncing, but does not by itself revoke what they already created. A key minted earlier keeps working until its CR is deleted, which removes it from LiteLLM even though the reference is no longer allowed. Config sync then depends on what changed:
+
+| Change | `unmanagedResourcePolicy: prune` | Other policies |
+| --- | --- | --- |
+| A namespace is no longer allowed | What its resources created counts as unmanaged and **is deleted** | Left in place, counted as unmanaged |
+| A kind is no longer listed | Left in place and not counted as unmanaged, so editing `kinds` can never delete keys | Left in place, not counted as unmanaged |
 
 ```yaml
 # In namespace llm: one shared gateway
@@ -951,6 +971,7 @@ spec:
     selector:
       matchLabels:
         litellm.palena.ai/tenant: "true"
+    # kinds defaults to [LiteLLMVirtualKey]
 ---
 # In namespace my-app (labelled litellm.palena.ai/tenant=true)
 apiVersion: litellm.palena.ai/v1alpha1

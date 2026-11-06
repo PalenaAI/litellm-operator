@@ -31,7 +31,7 @@ spec:
 
 | Field | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `instanceRef` | InstanceRef | Yes | — | Reference to the LiteLLMInstance; set `namespace` to use an instance in another namespace that [allows it](litellminstance#allowednamespaces) |
+| `instanceRef` | InstanceRef | Yes | — | Reference to the LiteLLMInstance; set `namespace` to use an instance in another namespace that [allows it](litellminstance#allowednamespaces). A key's `teamRef` and `userRef` stay in its own namespace, so using them across namespaces also needs those kinds listed in `allowedNamespaces.kinds` |
 | `keyAlias` | string | Yes | — | Human-readable key alias |
 | `teamRef` | *TeamRef | No | — | Reference to a `LiteLLMTeam` CR in the same namespace |
 | `userRef` | *UserRef | No | — | Reference to a `LiteLLMUser` CR in the same namespace |

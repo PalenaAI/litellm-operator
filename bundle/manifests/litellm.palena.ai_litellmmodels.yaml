@@ -354,6 +354,11 @@ spec:
             - litellmParams
             - modelName
             type: object
+            x-kubernetes-validations:
+            - message: 'a model changes what the whole proxy does for every tenant,
+                so it must live in its instance''s namespace: instanceRef.namespace
+                is not supported'
+              rule: '!has(self.instanceRef.__namespace__)'
           status:
             description: LiteLLMModelStatus defines the observed state of LiteLLMModel.
             properties:

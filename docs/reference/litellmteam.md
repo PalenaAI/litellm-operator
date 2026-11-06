@@ -186,6 +186,10 @@ spec:
   models: [gpt-4o]
 ```
 
+::: warning
+Adoption takes the team over, so a `LiteLLMTeam` in another namespace can only reference an instance that lists `LiteLLMTeam` in [`spec.allowedNamespaces.kinds`](litellminstance#allowednamespaces). Listing it lets that namespace adopt any team on the proxy by id.
+:::
+
 The first time it reconciles the CR, the operator looks up `teamId`:
 
 | `/team/info` result | What happens |

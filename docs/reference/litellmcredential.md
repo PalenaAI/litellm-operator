@@ -105,6 +105,8 @@ spec:
 | `apiVersion` | string | No | API version (e.g., `"2024-02-01"` for Azure OpenAI) |
 | `params` | map[string]JSON | No | Additional provider-specific parameters merged into `credential_values`. Values are **arbitrary JSON** (strings, numbers, bools, or nested objects/arrays) — e.g. a Vertex AI service-account JSON object. Reserved keys (`api_key`, `api_base`, `api_version`) are ignored |
 
+`instanceRef.namespace` is rejected on a credential. Credentials are shared across the proxy by name, so one in another namespace could overwrite a credential other models rely on. It must live in its instance's namespace; `spec.allowedNamespaces` on the instance does not apply to it.
+
 ## Status Fields
 
 | Field | Type | Description |

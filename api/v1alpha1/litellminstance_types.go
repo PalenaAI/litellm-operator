@@ -270,9 +270,9 @@ type LiteLLMInstanceSpec struct {
 	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 
 	// AllowedNamespaces controls which namespaces may reference this instance
-	// from instanceRef. Resources referencing an instance spend its budget, so
-	// by default only resources in the instance's own namespace may. Modelled
-	// on Gateway API's allowedRoutes.namespaces.
+	// from instanceRef, and with which kinds of resource. Resources referencing
+	// an instance spend its budget, so by default only resources in the
+	// instance's own namespace may. Modelled on Gateway API's allowedRoutes.
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Allowed Namespaces"
 	AllowedNamespaces *AllowedNamespaces `json:"allowedNamespaces,omitempty"`
@@ -291,8 +291,33 @@ const (
 	NamespacesFromSelector NamespacesFrom = "Selector"
 )
 
+// AllowedNamespaceKind names a kind of resource that may reference an instance
+// from another namespace. LiteLLMModel, LiteLLMCredential and LiteLLMGuardrail
+// are deliberately absent: each changes what the whole proxy does for every
+// tenant, so they must live in the instance's own namespace.
+// +kubebuilder:validation:Enum=LiteLLMVirtualKey;LiteLLMTeam;LiteLLMUser;LiteLLMOrganization;LiteLLMBudget;LiteLLMCustomer
+type AllowedNamespaceKind string
+
+const (
+	// AllowedKindVirtualKey admits LiteLLMVirtualKey. It is the default.
+	AllowedKindVirtualKey AllowedNamespaceKind = "LiteLLMVirtualKey"
+	// AllowedKindTeam admits LiteLLMTeam, which can adopt an existing team by
+	// spec.teamId and bring it to the CR's spec.
+	AllowedKindTeam AllowedNamespaceKind = "LiteLLMTeam"
+	// AllowedKindUser admits LiteLLMUser, which can create proxy admins and
+	// adopt an existing user by spec.userId, including resetting its password.
+	AllowedKindUser AllowedNamespaceKind = "LiteLLMUser"
+	// AllowedKindOrganization admits LiteLLMOrganization.
+	AllowedKindOrganization AllowedNamespaceKind = "LiteLLMOrganization"
+	// AllowedKindBudget admits LiteLLMBudget.
+	AllowedKindBudget AllowedNamespaceKind = "LiteLLMBudget"
+	// AllowedKindCustomer admits LiteLLMCustomer.
+	AllowedKindCustomer AllowedNamespaceKind = "LiteLLMCustomer"
+)
+
 // AllowedNamespaces lists the namespaces whose resources may reference an
-// instance. The instance's own namespace is always allowed.
+// instance, and the kinds of resource they may do that with. The instance's
+// own namespace is always allowed, for every kind.
 // +kubebuilder:validation:XValidation:rule="self.from != 'Selector' || has(self.selector)",message="selector is required when from is Selector"
 // +kubebuilder:validation:XValidation:rule="self.from == 'Selector' || !has(self.selector)",message="selector is only allowed when from is Selector"
 type AllowedNamespaces struct {
@@ -306,6 +331,35 @@ type AllowedNamespaces struct {
 	// Selector.
 	// +optional
 	Selector *metav1.LabelSelector `json:"selector,omitempty"`
+
+	// Kinds lists the kinds of resource that may reference this instance from
+	// an allowed namespace. Omitted means LiteLLMVirtualKey only. Setting it
+	// replaces that default, so include LiteLLMVirtualKey if keys should still
+	// be admitted. LiteLLMUser and LiteLLMTeam amount to admin-level access to
+	// the proxy: they can create proxy admins and take over existing users and
+	// teams. LiteLLMModel, LiteLLMCredential and LiteLLMGuardrail cannot be
+	// listed.
+	// +optional
+	// +listType=set
+	// +kubebuilder:validation:MinItems=1
+	Kinds []AllowedNamespaceKind `json:"kinds,omitempty"`
+}
+
+// AllowsKind reports whether a resource of the given kind may reference the
+// instance from an allowed namespace.
+func (a *AllowedNamespaces) AllowsKind(kind string) bool {
+	if a == nil {
+		return false
+	}
+	if len(a.Kinds) == 0 {
+		return kind == string(AllowedKindVirtualKey)
+	}
+	for _, k := range a.Kinds {
+		if string(k) == kind {
+			return true
+		}
+	}
+	return false
 }
 
 // TLSSpec configures TLS for the LiteLLM proxy pod.
