@@ -121,7 +121,7 @@ type LiteLLMUserSpec struct {
 type UserTeamMembership struct {
 	// Reference to a LiteLLMTeam CR.
 	// +optional
-	TeamRef *InstanceRef `json:"teamRef,omitempty"`
+	TeamRef *TeamRef `json:"teamRef,omitempty"`
 
 	// Direct team ID (used when team is not managed by a CRD).
 	// +optional

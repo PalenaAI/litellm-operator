@@ -81,7 +81,7 @@ func (r *LiteLLMCredentialReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	resolved, err := resolveInstance(ctx, r.Client, cred.Namespace, cred.Spec.InstanceRef)
 	if err != nil {
-		reason := "InstanceNotReady"
+		reason := instanceRefFailureReason(err)
 		if apierrors.IsNotFound(errors.Unwrap(err)) {
 			reason = "InstanceNotFound"
 		}
@@ -320,7 +320,7 @@ func (r *LiteLLMCredentialReconciler) handleDeletion(ctx context.Context, cred *
 	// blocking CR deletion forever, and consistent with how the other API-
 	// backed controllers handle this case.
 	if cred.Status.Configured {
-		resolved, err := resolveInstance(ctx, r.Client, cred.Namespace, cred.Spec.InstanceRef)
+		resolved, err := resolveInstanceForCleanup(ctx, r.Client, cred.Namespace, cred.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if derr := apiClient.Credentials().Delete(ctx, cred.Spec.CredentialName); derr != nil {

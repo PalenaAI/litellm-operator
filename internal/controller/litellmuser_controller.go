@@ -83,7 +83,7 @@ func (r *LiteLLMUserReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 		emitEvent(r.Recorder, &user, corev1.EventTypeWarning, EventReasonInstanceNotReady,
 			"Referenced LiteLLMInstance %q is not ready: %v", user.Spec.InstanceRef.Name, err)
 		meta.SetStatusCondition(&user.Status.Conditions, metav1.Condition{
-			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: "InstanceNotReady", Message: err.Error(),
+			Type: ConditionSynced, Status: metav1.ConditionFalse, Reason: instanceRefFailureReason(err), Message: err.Error(),
 		})
 		_ = r.Status().Update(ctx, &user)
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
@@ -451,7 +451,7 @@ func (r *LiteLLMUserReconciler) handleDeletion(ctx context.Context, user *litell
 		emitEvent(r.Recorder, user, corev1.EventTypeNormal, EventReasonDeleted,
 			"User %q was adopted, not created, by the operator; left in place in LiteLLM", user.Spec.UserEmail)
 	} else if user.Status.LiteLLMUserID != "" {
-		resolved, err := resolveInstance(ctx, r.Client, user.Namespace, user.Spec.InstanceRef)
+		resolved, err := resolveInstanceForCleanup(ctx, r.Client, user.Namespace, user.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Users().Delete(ctx, user.Status.LiteLLMUserID); err != nil {

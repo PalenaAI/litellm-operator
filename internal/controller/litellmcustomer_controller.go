@@ -74,7 +74,7 @@ func (r *LiteLLMCustomerReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		meta.SetStatusCondition(&customer.Status.Conditions, metav1.Condition{
 			Type:               ConditionSynced,
 			Status:             metav1.ConditionFalse,
-			Reason:             "InstanceNotReady",
+			Reason:             instanceRefFailureReason(err),
 			Message:            err.Error(),
 			ObservedGeneration: customer.Generation,
 		})
@@ -222,7 +222,7 @@ func (r *LiteLLMCustomerReconciler) handleDeletion(
 		return ctrl.Result{}, nil
 	}
 	if customer.Status.Synced {
-		resolved, err := resolveInstance(ctx, r.Client, customer.Namespace, customer.Spec.InstanceRef)
+		resolved, err := resolveInstanceForCleanup(ctx, r.Client, customer.Namespace, customer.Spec.InstanceRef)
 		if err == nil {
 			apiClient := r.LiteLLMClientFactory(resolved.Endpoint, resolved.MasterKey, litellm.WithCACert(resolved.CACert))
 			if err := apiClient.Customers().Delete(ctx, customer.Spec.CustomerID); err != nil {

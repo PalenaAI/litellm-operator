@@ -31,8 +31,11 @@ import (
 // API key env vars into the Deployment. The instance controller observes
 // LiteLLMGuardrail CRs via a Watch and rewrites the ConfigMap + Deployment
 // whenever they change.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.instanceRef.__namespace__)",message="a guardrail changes the whole proxy's config, so it must live in its instance's namespace: instanceRef.namespace is not supported"
 type LiteLLMGuardrailSpec struct {
-	// Reference to the LiteLLMInstance this guardrail belongs to.
+	// Reference to the LiteLLMInstance this guardrail belongs to. It must be
+	// in the guardrail's own namespace.
 	InstanceRef InstanceRef `json:"instanceRef"`
 
 	// Unique name for this guardrail. Used both as the `guardrail_name` in

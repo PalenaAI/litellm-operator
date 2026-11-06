@@ -62,6 +62,36 @@ type configSyncer struct {
 	recorder  record.EventRecorder
 	instance  *litellmv1alpha1.LiteLLMInstance
 	config    *litellmv1alpha1.ConfigSyncSpec
+
+	// allowedNamespaces caches instanceAllowsNamespace for one sync cycle.
+	allowedNamespaces map[string]bool
+}
+
+// manages reports whether a CR in namespace whose instanceRef is ref belongs
+// to this instance's sync: it must reference the instance, from a namespace
+// the instance allows. CRs in namespaces it no longer allows are left out, as
+// though they did not exist, so they are not remediated (and a prune policy
+// treats what they created as unmanaged).
+func (s *configSyncer) manages(ctx context.Context, namespace string, ref litellmv1alpha1.InstanceRef) bool {
+	if !referencesInstance(namespace, ref, s.instance) {
+		return false
+	}
+	if s.allowedNamespaces == nil {
+		s.allowedNamespaces = make(map[string]bool)
+	}
+	allowed, seen := s.allowedNamespaces[namespace]
+	if !seen {
+		var err error
+		allowed, err = instanceAllowsNamespace(ctx, s.kClient, s.instance, namespace)
+		if err != nil {
+			// Unknown is not a revocation: keep the CR managed, so a transient
+			// lookup failure never prunes its objects.
+			logf.FromContext(ctx).Error(err, "failed to check allowedNamespaces", "namespace", namespace)
+			allowed = true
+		}
+		s.allowedNamespaces[namespace] = allowed
+	}
+	return allowed
 }
 
 // sync runs a full config sync cycle across all resource types.
@@ -84,7 +114,7 @@ func (s *configSyncer) syncModels(ctx context.Context, result *syncResult) {
 	log := logf.FromContext(ctx).WithValues("resource", "models")
 
 	var crdList litellmv1alpha1.LiteLLMModelList
-	if err := s.kClient.List(ctx, &crdList, client.InNamespace(s.instance.Namespace)); err != nil {
+	if err := s.kClient.List(ctx, &crdList); err != nil {
 		log.Error(err, "failed to list model CRDs")
 		result.addError(fmt.Sprintf("list model CRDs: %v", err))
 		return
@@ -93,7 +123,7 @@ func (s *configSyncer) syncModels(ctx context.Context, result *syncResult) {
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMModel)
 	for i := range crdList.Items {
 		m := &crdList.Items[i]
-		if m.Spec.InstanceRef.Name != s.instance.Name || !m.DeletionTimestamp.IsZero() {
+		if !s.manages(ctx, m.Namespace, m.Spec.InstanceRef) || !m.DeletionTimestamp.IsZero() {
 			continue
 		}
 		if m.Status.LiteLLMModelID != "" {
@@ -153,7 +183,7 @@ func (s *configSyncer) syncTeams(ctx context.Context, result *syncResult) {
 	log := logf.FromContext(ctx).WithValues("resource", "teams")
 
 	var crdList litellmv1alpha1.LiteLLMTeamList
-	if err := s.kClient.List(ctx, &crdList, client.InNamespace(s.instance.Namespace)); err != nil {
+	if err := s.kClient.List(ctx, &crdList); err != nil {
 		log.Error(err, "failed to list team CRDs")
 		result.addError(fmt.Sprintf("list team CRDs: %v", err))
 		return
@@ -162,7 +192,7 @@ func (s *configSyncer) syncTeams(ctx context.Context, result *syncResult) {
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMTeam)
 	for i := range crdList.Items {
 		t := &crdList.Items[i]
-		if t.Spec.InstanceRef.Name != s.instance.Name || !t.DeletionTimestamp.IsZero() {
+		if !s.manages(ctx, t.Namespace, t.Spec.InstanceRef) || !t.DeletionTimestamp.IsZero() {
 			continue
 		}
 		if t.Status.LiteLLMTeamID != "" {
@@ -217,7 +247,7 @@ func (s *configSyncer) syncUsers(ctx context.Context, result *syncResult) {
 	log := logf.FromContext(ctx).WithValues("resource", "users")
 
 	var crdList litellmv1alpha1.LiteLLMUserList
-	if err := s.kClient.List(ctx, &crdList, client.InNamespace(s.instance.Namespace)); err != nil {
+	if err := s.kClient.List(ctx, &crdList); err != nil {
 		log.Error(err, "failed to list user CRDs")
 		result.addError(fmt.Sprintf("list user CRDs: %v", err))
 		return
@@ -226,7 +256,7 @@ func (s *configSyncer) syncUsers(ctx context.Context, result *syncResult) {
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMUser)
 	for i := range crdList.Items {
 		u := &crdList.Items[i]
-		if u.Spec.InstanceRef.Name != s.instance.Name || !u.DeletionTimestamp.IsZero() {
+		if !s.manages(ctx, u.Namespace, u.Spec.InstanceRef) || !u.DeletionTimestamp.IsZero() {
 			continue
 		}
 		if u.Status.LiteLLMUserID != "" {
@@ -287,7 +317,7 @@ func (s *configSyncer) syncKeys(ctx context.Context, result *syncResult) {
 	log := logf.FromContext(ctx).WithValues("resource", "keys")
 
 	var crdList litellmv1alpha1.LiteLLMVirtualKeyList
-	if err := s.kClient.List(ctx, &crdList, client.InNamespace(s.instance.Namespace)); err != nil {
+	if err := s.kClient.List(ctx, &crdList); err != nil {
 		log.Error(err, "failed to list virtual key CRDs")
 		result.addError(fmt.Sprintf("list key CRDs: %v", err))
 		return
@@ -296,7 +326,7 @@ func (s *configSyncer) syncKeys(ctx context.Context, result *syncResult) {
 	managedTokens := make(map[string]*litellmv1alpha1.LiteLLMVirtualKey)
 	for i := range crdList.Items {
 		k := &crdList.Items[i]
-		if k.Spec.InstanceRef.Name != s.instance.Name || !k.DeletionTimestamp.IsZero() {
+		if !s.manages(ctx, k.Namespace, k.Spec.InstanceRef) || !k.DeletionTimestamp.IsZero() {
 			continue
 		}
 		if k.Status.LiteLLMKeyToken != "" {
@@ -351,7 +381,7 @@ func (s *configSyncer) syncOrganizations(ctx context.Context, result *syncResult
 	log := logf.FromContext(ctx).WithValues("resource", "organizations")
 
 	var crdList litellmv1alpha1.LiteLLMOrganizationList
-	if err := s.kClient.List(ctx, &crdList, client.InNamespace(s.instance.Namespace)); err != nil {
+	if err := s.kClient.List(ctx, &crdList); err != nil {
 		log.Error(err, "failed to list organization CRDs")
 		result.addError(fmt.Sprintf("list organization CRDs: %v", err))
 		return
@@ -360,7 +390,7 @@ func (s *configSyncer) syncOrganizations(ctx context.Context, result *syncResult
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMOrganization)
 	for i := range crdList.Items {
 		o := &crdList.Items[i]
-		if o.Spec.InstanceRef.Name != s.instance.Name || !o.DeletionTimestamp.IsZero() {
+		if !s.manages(ctx, o.Namespace, o.Spec.InstanceRef) || !o.DeletionTimestamp.IsZero() {
 			continue
 		}
 		if o.Status.LiteLLMOrganizationID != "" {
@@ -415,7 +445,7 @@ func (s *configSyncer) syncCustomers(ctx context.Context, result *syncResult) {
 	log := logf.FromContext(ctx).WithValues("resource", "customers")
 
 	var crdList litellmv1alpha1.LiteLLMCustomerList
-	if err := s.kClient.List(ctx, &crdList, client.InNamespace(s.instance.Namespace)); err != nil {
+	if err := s.kClient.List(ctx, &crdList); err != nil {
 		log.Error(err, "failed to list customer CRDs")
 		result.addError(fmt.Sprintf("list customer CRDs: %v", err))
 		return
@@ -425,7 +455,7 @@ func (s *configSyncer) syncCustomers(ctx context.Context, result *syncResult) {
 	managedIDs := make(map[string]*litellmv1alpha1.LiteLLMCustomer)
 	for i := range crdList.Items {
 		c := &crdList.Items[i]
-		if c.Spec.InstanceRef.Name != s.instance.Name || !c.DeletionTimestamp.IsZero() {
+		if !s.manages(ctx, c.Namespace, c.Spec.InstanceRef) || !c.DeletionTimestamp.IsZero() {
 			continue
 		}
 		if c.Status.Synced {

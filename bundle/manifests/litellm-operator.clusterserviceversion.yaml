@@ -755,6 +755,13 @@ spec:
           Controls UI availability, access restrictions, model persistence, and personal key creation.
         displayName: Admin UI
         path: adminUI
+      - description: |-
+          AllowedNamespaces controls which namespaces may reference this instance
+          from instanceRef. Resources referencing an instance spend its budget, so
+          by default only resources in the instance's own namespace may. Modelled
+          on Gateway API's allowedRoutes.namespaces.
+        displayName: Allowed Namespaces
+        path: allowedNamespaces
       - description: Autoscaling configuration.
         displayName: Autoscaling
         path: autoscaling
@@ -1329,6 +1336,7 @@ spec:
         - apiGroups:
           - ""
           resources:
+          - namespaces
           - pods
           verbs:
           - get
