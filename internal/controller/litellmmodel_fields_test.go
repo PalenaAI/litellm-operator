@@ -135,6 +135,7 @@ var _ = Describe("LiteLLMModel Controller — extended field passthrough", func(
 						MaxTokens:                    intptr(5),
 						MaxTokensReasoning:           intptr(128),
 						MaxTokensNonReasoning:        intptr(1),
+						SupportsMaxTokens:            boolptr(false),
 						ReasoningEffort:              "none",
 						Voice:                        "alloy",
 						Model:                        "openai/gpt-4o-mini",
@@ -187,6 +188,7 @@ var _ = Describe("LiteLLMModel Controller — extended field passthrough", func(
 		Expect(mi.HealthCheckMaxTokens).To(Equal(intptr(5)))
 		Expect(mi.HealthCheckMaxTokensReasoning).To(Equal(intptr(128)))
 		Expect(mi.HealthCheckMaxTokensNonReasoning).To(Equal(intptr(1)))
+		Expect(mi.HealthCheckSupportsMaxTokens).To(Equal(boolptr(false)))
 		Expect(mi.HealthCheckReasoningEffort).To(Equal("none"))
 		Expect(mi.HealthCheckVoice).To(Equal("alloy"))
 		Expect(mi.HealthCheckModel).To(Equal("openai/gpt-4o-mini"))

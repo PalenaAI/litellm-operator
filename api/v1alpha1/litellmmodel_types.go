@@ -279,6 +279,17 @@ type ModelHealthCheck struct {
 	// +optional
 	MaxTokensNonReasoning *int `json:"maxTokensNonReasoning,omitempty"`
 
+	// SupportsMaxTokens controls whether the health-check request includes
+	// max_tokens. Set it to false when the probe fails with "Unsupported
+	// parameter: 'max_tokens'". LiteLLM translates max_tokens to
+	// max_completion_tokens only for models it recognizes, so this happens with
+	// a custom deployment name or an OpenAI-compatible alias for a model that
+	// requires max_completion_tokens. When false, the max token overrides above
+	// are ignored. Unset, LiteLLM decides from the model's mode. Requires LiteLLM
+	// v1.86.0 or later.
+	// +optional
+	SupportsMaxTokens *bool `json:"supportsMaxTokens,omitempty"`
+
 	// ReasoningEffort sets the reasoning effort used for health-check requests
 	// against reasoning models (e.g. "none", "low", "medium", "high").
 	// +optional

@@ -94,6 +94,7 @@ type ModelInfoReq struct {
 	HealthCheckMaxTokens             *int   `json:"health_check_max_tokens,omitempty"`
 	HealthCheckMaxTokensReasoning    *int   `json:"health_check_max_tokens_reasoning,omitempty"`
 	HealthCheckMaxTokensNonReasoning *int   `json:"health_check_max_tokens_non_reasoning,omitempty"`
+	HealthCheckSupportsMaxTokens     *bool  `json:"health_check_supports_max_tokens,omitempty"`
 	HealthCheckReasoningEffort       string `json:"health_check_reasoning_effort,omitempty"`
 	HealthCheckVoice                 string `json:"health_check_voice,omitempty"`
 	HealthCheckModel                 string `json:"health_check_model,omitempty"`

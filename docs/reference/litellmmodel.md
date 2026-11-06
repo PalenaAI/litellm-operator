@@ -129,9 +129,34 @@ Tunes or disables LiteLLM's health checks for this single deployment. All fields
 | `maxTokens` | *int | `max_tokens` used for the health-check request |
 | `maxTokensReasoning` | *int | Health-check `max_tokens` for reasoning models |
 | `maxTokensNonReasoning` | *int | Health-check `max_tokens` for non-reasoning models |
+| `supportsMaxTokens` | *bool | Set to `false` to leave `max_tokens` out of the health-check request (see below). Requires LiteLLM v1.86.0 or later |
 | `reasoningEffort` | string | Reasoning effort for reasoning-model probes (e.g. `none`, `low`, `medium`, `high`) |
 | `voice` | string | Voice for text-to-speech model probes (e.g. `alloy`) |
 | `model` | string | Override the model used for the probe (for wildcard routes, e.g. `openai/gpt-4o-mini`) |
+
+#### Fixing `Unsupported parameter: 'max_tokens'` in health checks
+
+Newer OpenAI models reject `max_tokens` and require `max_completion_tokens`. LiteLLM translates between them only for models it recognizes, so a health check can fail with this error when `litellmParams.model` is a custom Azure deployment name or an OpenAI-compatible alias, even though the model itself is fine:
+
+```text
+OpenAIException - Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.
+```
+
+Set `supportsMaxTokens: false` to leave the parameter out of the probe:
+
+```yaml
+spec:
+  modelName: gpt-6-luna
+  litellmParams:
+    model: azure/my-gpt-6-luna-deployment
+  modelInfo:
+    healthCheck:
+      supportsMaxTokens: false
+```
+
+`maxTokens`, `maxTokensReasoning` and `maxTokensNonReasoning` are ignored when this is `false`. Setting `maxTokens` alone does not fix this error, because the request still sends `max_tokens`.
+
+This only changes the health check. A client that sends `max_tokens` to the same deployment can still get this error from the provider.
 
 #### Disabling health checks for a model
 

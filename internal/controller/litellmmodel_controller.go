@@ -230,6 +230,7 @@ func (r *LiteLLMModelReconciler) reconcileModel(
 			req.ModelInfo.HealthCheckMaxTokens = hc.MaxTokens
 			req.ModelInfo.HealthCheckMaxTokensReasoning = hc.MaxTokensReasoning
 			req.ModelInfo.HealthCheckMaxTokensNonReasoning = hc.MaxTokensNonReasoning
+			req.ModelInfo.HealthCheckSupportsMaxTokens = hc.SupportsMaxTokens
 			req.ModelInfo.HealthCheckReasoningEffort = hc.ReasoningEffort
 			req.ModelInfo.HealthCheckVoice = hc.Voice
 			req.ModelInfo.HealthCheckModel = hc.Model
