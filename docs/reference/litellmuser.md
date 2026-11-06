@@ -50,6 +50,7 @@ spec:
 | `modelTpmLimit` | map[string]int | No | — | Per-model tokens-per-minute caps (model name → TPM) |
 | `objectPermission` | *ObjectPermission | No | — | Grant access to MCP servers, vector stores, agents, access groups |
 | `initialPasswordSecretRef` | *SecretKeyRef | No | — | Secret key holding an initial Admin UI login password (see [Initial Password](#initial-password)) |
+| `autoCreateKey` | *bool | No | `false` | Also mint a personal virtual key when the user is created (see [Personal Keys](#personal-keys)) |
 
 ### User Roles
 
@@ -142,6 +143,14 @@ Progress is reported on the `InitialPasswordApplied` condition, separate from `S
 | `SecretNotFound` / `SecretKeyMissing` | The Secret or key does not exist or is empty; applied as soon as it appears |
 | `PasswordRejected` | LiteLLM rejected the value (e.g. password policy); not retried until the Secret changes |
 | `ApplyFailed` / `SecretFetchFailed` | Transient failure; retried after 30s |
+
+## Personal Keys
+
+Left to itself, LiteLLM's `/user/new` also mints a personal virtual key for each new user. That key has no alias and no team, has no budget or model restriction unless the user sets them, and is not managed by any `LiteLLMVirtualKey` CR. The operator therefore asks LiteLLM not to create one, and users get keys only through `LiteLLMVirtualKey` CRs.
+
+Set `autoCreateKey: true` to get LiteLLM's behaviour back. The operator does not store the key in a Secret or manage it afterwards.
+
+The field applies only when the user is created. Changing it later neither creates nor removes a key, and users created by earlier operator versions keep any personal key they already have; remove those through the Admin UI or `POST /key/delete` if you don't want them.
 
 ## Referencing an Instance in Another Namespace
 

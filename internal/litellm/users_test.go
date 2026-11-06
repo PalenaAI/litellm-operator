@@ -26,6 +26,36 @@ import (
 	"testing"
 )
 
+func TestUserAutoCreateKey_SentOnCreateNeverOnUpdate(t *testing.T) {
+	bodies := map[string]map[string]any{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		data, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(data, &body)
+		bodies[r.URL.Path] = body
+		_, _ = w.Write([]byte(`{"user_id":"u1"}`))
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "sk-master")
+	autoCreateKey := false
+	req := UserCreateRequest{UserID: "u1", AutoCreateKey: &autoCreateKey}
+	if _, err := c.Users().Create(context.Background(), req); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if err := c.Users().Update(context.Background(), req); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	// An explicit false must survive omitempty: LiteLLM's default is true.
+	if got, ok := bodies["/user/new"]["auto_create_key"]; !ok || got != false {
+		t.Errorf("/user/new auto_create_key = %v (present=%v), want false", got, ok)
+	}
+	if got, ok := bodies["/user/update"]["auto_create_key"]; ok {
+		t.Errorf("/user/update sent auto_create_key = %v, want it absent", got)
+	}
+}
+
 func TestUserSetPassword_SendsOnlyUserIDAndPassword(t *testing.T) {
 	var gotPath string
 	var gotBody map[string]any

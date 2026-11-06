@@ -50,6 +50,9 @@ type UserCreateRequest struct {
 	ObjectPermission *ObjectPermission `json:"object_permission,omitempty"`
 	Metadata         map[string]string `json:"metadata,omitempty"`
 	Blocked          *bool             `json:"blocked,omitempty"`
+	// AutoCreateKey is only meaningful on /user/new, where LiteLLM defaults it
+	// to true. Update never sends it.
+	AutoCreateKey *bool `json:"auto_create_key,omitempty"`
 }
 
 // UserTeam defines team membership for a user.
@@ -84,6 +87,7 @@ func (s *userService) Create(ctx context.Context, req UserCreateRequest) (*UserC
 }
 
 func (s *userService) Update(ctx context.Context, req UserCreateRequest) error {
+	req.AutoCreateKey = nil
 	return s.client.do(ctx, http.MethodPost, "/user/update", req, nil)
 }
 

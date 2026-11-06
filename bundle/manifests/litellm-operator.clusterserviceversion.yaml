@@ -1114,6 +1114,15 @@ spec:
         version: v1alpha1
       specDescriptors:
       - description: |-
+          AutoCreateKey controls whether LiteLLM also mints a personal virtual key
+          when it creates this user. Defaults to false: such a key has no alias, no
+          team and, unless the user sets them, no budget or model restriction, and
+          no LiteLLMVirtualKey CR manages it. Declare keys with LiteLLMVirtualKey
+          instead. It applies only when the user is created, so changing it later
+          neither creates nor removes a key.
+        displayName: Auto Create Key
+        path: autoCreateKey
+      - description: |-
           Blocked disables all requests from this user when true. Useful for
           incident response without deleting the user.
         displayName: Blocked

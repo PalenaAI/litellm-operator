@@ -135,6 +135,12 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, fmt.Errorf("resolve team refs: %w", err)
 	}
 
+	// LiteLLM mints a personal key unless told not to. The operator discards the
+	// /user/new response's key, so it would be an unmanaged key nothing can use.
+	// The false default lives here, not in a CRD default, because defaulting
+	// would change the sync hash of every existing LiteLLMUser.
+	autoCreateKey := user.Spec.AutoCreateKey != nil && *user.Spec.AutoCreateKey
+
 	req := litellm.UserCreateRequest{
 		UserID:           user.Spec.UserID,
 		UserEmail:        user.Spec.UserEmail,
@@ -151,6 +157,7 @@ func (r *LiteLLMUserReconciler) reconcileUser(
 		ObjectPermission: mapObjectPermission(user.Spec.ObjectPermission),
 		Metadata:         user.Spec.Metadata,
 		Blocked:          user.Spec.Blocked,
+		AutoCreateKey:    &autoCreateKey,
 	}
 
 	if user.Status.LiteLLMUserID == "" {

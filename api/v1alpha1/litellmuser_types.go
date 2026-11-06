@@ -115,6 +115,16 @@ type LiteLLMUserSpec struct {
 	// +optional
 	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Initial Password Secret"
 	InitialPasswordSecretRef *SecretKeyRef `json:"initialPasswordSecretRef,omitempty"`
+
+	// AutoCreateKey controls whether LiteLLM also mints a personal virtual key
+	// when it creates this user. Defaults to false: such a key has no alias, no
+	// team and, unless the user sets them, no budget or model restriction, and
+	// no LiteLLMVirtualKey CR manages it. Declare keys with LiteLLMVirtualKey
+	// instead. It applies only when the user is created, so changing it later
+	// neither creates nor removes a key.
+	// +optional
+	// +operator-sdk:csv:customresourcedefinitions:type=spec,displayName="Auto Create Key"
+	AutoCreateKey *bool `json:"autoCreateKey,omitempty"`
 }
 
 // UserTeamMembership defines a user's team membership.

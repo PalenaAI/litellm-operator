@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`LiteLLMUser` no longer mints a personal virtual key** ([#40](https://github.com/PalenaAI/litellm-operator/issues/40)). LiteLLM's `/user/new` defaults to `auto_create_key: true`, so every user got a key with no alias and no team, with no budget or model restriction unless the user set them, and with no CR managing it. The operator discarded the key from the response, so it could not be used or tracked from Kubernetes either. The operator now sends `auto_create_key: false` unless the new **`spec.autoCreateKey: true`** is set. **Upgrade note:** this applies only to users created from now on. Existing users keep any personal key they already have, and those keys are not removed; delete them through the Admin UI or `POST /key/delete` if you don't want them.
 - **`teamRef` and `userRef` have their own types**, `TeamRef` and `UserRef`, instead of reusing `InstanceRef`, so they do not pick up `instanceRef`'s new `namespace` field. They still take only `name`, so existing manifests are unchanged.
 
 ## [0.28.0] - 2026-10-13
