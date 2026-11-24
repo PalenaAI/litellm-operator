@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Go 1.26.10 and `golang.org/x/net` v0.62.0** in the operator image, fixing vulnerabilities in `crypto/x509`, `crypto/tls`, `net/http` and `x/net/http2`, including man-in-the-middle via untrusted intermediate certificates (CVE-2026-111943) and several HTTP/2 and HTTP denial-of-service issues. The Dockerfile's pinned builder image moves with it, since that is what compiles the shipped binary.
-- **Build and docs tooling:** `certifi` 2026.10.23 in the release licence scan (GHSA-6q48-6c7w-9gw2, compromised emSign root CAs) and `vite` 6.4.5 in the docs site. Neither is part of the operator image.
+- **Go 1.26.11 and `golang.org/x/net` v0.62.0** in the operator image, fixing vulnerabilities in `crypto/x509`, `crypto/tls`, `net/http` and `x/net/http2`, including man-in-the-middle via untrusted intermediate certificates (CVE-2026-111943), an HTTP/1 server crash from a `MaxBytesReader` header race (GO-2026-6859), and several HTTP/2 and HTTP denial-of-service issues. The Dockerfile's pinned builder image moves with it, since that is what compiles the shipped binary.
+- **OpenTelemetry Go v1.47.0** (GHSA-q7gw-24fr-5p69): `AttributeValueLengthLimit` could be bypassed with attribute values made of U+FFFD runes. The operator only pulls OpenTelemetry in indirectly, through the Kubernetes libraries, and does not configure a trace exporter.
+- **Build and docs tooling:** `certifi` 2026.10.23 (GHSA-6q48-6c7w-9gw2, compromised emSign root CAs) and `soupsieve` 4.1.3 (GHSA-6655-6qjp-jx7x, GHSA-mmhr-3c5m-f64f, GHSA-7g44-g9rc-x53w, GHSA-4j63-6c4x-wfg4: denial of service through crafted CSS selectors) in the release licence scan, and `vite` 6.4.5 in the docs site. None of them is part of the operator image.
 
 ### Changed
 
