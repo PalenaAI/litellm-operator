@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-11-24
+
 ### Added
 
 - **`LiteLLMModel.spec.modelInfo.healthCheck.supportsMaxTokens`** ([#53](https://github.com/PalenaAI/litellm-operator/issues/53)), rendered as `health_check_supports_max_tokens`. Setting it to `false` leaves `max_tokens` out of LiteLLM's health-check request, which fixes `Unsupported parameter: 'max_tokens'` on models that require `max_completion_tokens` when LiteLLM cannot recognize them, such as a custom Azure deployment name or an OpenAI-compatible alias. Requires LiteLLM v1.86.0 or later.
